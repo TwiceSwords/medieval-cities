@@ -57,21 +57,36 @@
   #victory .v1{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:min(16vw,140px);letter-spacing:.12em;color:#f3dc8e;text-shadow:0 0 30px rgba(240,200,90,.55),0 6px 0 #6b4f1c,0 10px 20px #000;transform:scale(.8);transition:transform .6s cubic-bezier(.2,1.6,.4,1)}
   #victory.show .v1{transform:scale(1)}
   #victory .v2{margin-top:8px;font-size:min(5vw,34px);font-weight:700;letter-spacing:.2em;text-transform:uppercase;text-shadow:0 3px 10px #000}
+  #camp{position:fixed;right:12px;top:118px;background:rgba(10,12,8,.88);color:#c9cdbd;padding:10px 12px;border-radius:8px;font-size:13px;border:1px solid #6b5d36;user-select:none;display:none;width:300px;max-height:calc(100vh - 330px);overflow:auto}
+  #camp .t{color:#e2d6a6;font-weight:700;margin-bottom:4px;font-size:14px}#camp .k{color:#8f9682;font-size:12px;margin:3px 0}#camp .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  #camp .sub{color:#c8b98a;font-size:12px;margin-top:8px;border-top:1px solid rgba(255,255,255,.08);padding-top:6px}
+  #camp .grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:5px 0}#camp .grid button{padding:4px;font-size:12px}
+  #camp .blist{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}#camp .bld{background:#262317;border:1px solid #4d4329;border-radius:5px;padding:2px 2px 2px 7px;font-size:12px;display:inline-flex;gap:4px;align-items:center}#camp .bld button{padding:0 5px;font-size:11px}
+  #facs{position:fixed;bottom:14px;right:12px;display:none;user-select:none}
+  #facs .frow{background:rgba(10,12,8,.82);color:#c9cdbd;padding:6px 12px;border-radius:8px;font-size:13px;border:1px solid rgba(255,255,255,.07);margin-top:5px;opacity:.75}
+  #facs .frow.cur{opacity:1;border-color:var(--fc);box-shadow:0 0 8px var(--fc)}#facs .frow.dead{opacity:.35;text-decoration:line-through}#facs .fsw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid #000}#facs .k{color:#8f9682}
+  #lobby{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(14,15,10,.96);border:1px solid #6b5d36;border-radius:12px;padding:18px 22px;color:#d6d9c8;font-size:14px;display:none;min-width:560px}
+  #lobby .lt{font-family:Georgia,serif;font-size:22px;color:#f0e2a8;margin-bottom:6px}#lobby .lsub{color:#8f9682;font-size:13px;margin:8px 0}
+  #lobby .lrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)}#lobby .lrow.off{opacity:.45}#lobby .lnm{width:190px;font-weight:700}
+  #lobby .lk{display:flex;gap:4px}#lobby .lk button{padding:3px 8px;font-size:12px}#lobby .lsw{display:flex;gap:3px}#lobby .sw{width:20px;height:20px;padding:0;border-radius:4px;border:2px solid #222}#lobby .sw.on{border-color:#fff4cf;box-shadow:0 0 6px #fff4cf}#lobby .sw:disabled{opacity:.25}
+  #lobby #lstart{margin-top:8px;font-size:15px;padding:7px 18px}
+  #modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45)}#modal .mbox{background:#17160f;border:1px solid #6b5d36;border-radius:10px;padding:16px 20px;color:#d6d9c8;max-width:420px;font-size:14px;line-height:1.5}
+  #modal .t{font-family:Georgia,serif;font-size:19px;color:#f0e2a8;margin-bottom:6px}#modal .row{display:flex;gap:8px;margin-top:12px}
   #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#8f9682;font-size:14px}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v0.5</div>
+  <div class="t">Medieval Cities · v0.6</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
-  <div class="k">Right-click: move / attack enemy · Tab: next unit</div>
-  <div class="k">Turn passes automatically · End turn / Space: end it early · hold ⟲ Reset 2 s: new game</div>
+  <div class="k">Right-click: move / attack / found a city · Tab: next unit</div>
+  <div class="k">End turn / Space: end your turn · hold ⟲ Reset 2 s: new campaign</div>
 </div>
 <div id="top"><span id="turn"></span><button id="endturn" title="Space">End turn</button></div>
-<div id="dm"></div>
+<div id="dm"></div><div id="camp"></div><div id="facs"></div><div id="lobby"></div><div id="modal"></div>
 <div id="savebar"><button id="bdm">🧙 Dungeon Master: Off</button><button id="bsave" title="Ctrl+S">💾 Save file</button><button id="bload">📂 Load file</button><input type="file" id="fload" accept=".json,application/json" hidden><button id="breset" title="Hold for 2 seconds">⟲ Reset (hold)</button><span class="k">autosaves in this browser</span></div>
 <div id="toast"></div>
 <div id="cards"></div>
@@ -83,7 +98,7 @@
 <script>
 (() => {
   // ---------- Board settings ----------
-  const COLS = 22, ROWS = 22;     // board size in hexes (pointy-top: rows run straight left-right)
+  let COLS = 22, ROWS = 22;     // board size in hexes (pointy-top: rows run straight left-right)
   const S = 80;                   // hex radius (center to corner), px — tiles are 4x the area of before
   const U = 40;                   // unit-sized UI (rings, bars) stays the same size
   const SQ = 0.68;                // vertical squash for the angled (isometric-style) view
@@ -106,10 +121,15 @@
 
   // ---------- Board canvas size ----------
   const PAD = 24;
-  const minX = -SQ3 / 2 * S, maxX = SQ3 * S * (COLS - 0.5) + SQ3 / 2 * S;
-  const minY = -S * SQ, maxY = 1.5 * S * (ROWS - 1) * SQ + S * SQ + SKIRT;
-  const BW = Math.ceil(maxX - minX + PAD * 2), BH = Math.ceil(maxY - minY + PAD * 2);
-  const OX = -minX + PAD, OY = -minY + PAD;
+  let minX, maxX, minY, maxY, BW, BH, OX, OY;
+  function setDims(c, r) {                          // battle map 22x22, campaign map taller
+    COLS = c; ROWS = r;
+    minX = -SQ3 / 2 * S; maxX = SQ3 * S * (COLS - 0.5) + SQ3 / 2 * S;
+    minY = -S * SQ; maxY = 1.5 * S * (ROWS - 1) * SQ + S * SQ + SKIRT;
+    BW = Math.ceil(maxX - minX + PAD * 2); BH = Math.ceil(maxY - minY + PAD * 2);
+    OX = -minX + PAD; OY = -minY + PAD;
+  }
+  setDims(22, 22);
 
   const hexPath = (c, r, ctx) => {
     const m = center(c, r), p = corners(m.x + OX, m.y + OY);
@@ -741,9 +761,9 @@
   }
 
   // ---------- Units & game state ----------
-  const TEAM = { blue: [52, 86, 146], red: [152, 30, 42] };
+  const TEAM = { blue: [52, 86, 146], red: [152, 30, 42] }, BASE_TEAM = { ...TEAM };
   const poss = n => n.endsWith('s') ? n + "'" : n + "'s";
-  const teamName = t => game.dm ? (t === 'blue' ? 'Heroes' : 'Dungeon Master') : (t === 'blue' ? 'Blue' : 'Red');
+  const teamName = t => { const f = typeof faction === 'function' && faction(ownerOfTeam(t)); if (f) return f.name; return game.dm ? (t === 'blue' ? 'Heroes' : 'Dungeon Master') : (t === 'blue' ? 'Blue' : 'Red'); };
   // Campaign army marker: a war banner on a pole
   function buildFlag(team) {
     const m = { v: [], f: [] }, GOLD = [196,160,72], WOOD = [92,64,40], STONE = [110,106,96];
@@ -807,13 +827,13 @@
     lancer:      { name: 'Lancer',       maxHp: 18, dmg: 3, move: 4, h: 20.5, mounted: true, charge: 6, build: buildLancer },
     horsearcher: { name: 'Horse archer', maxHp: 9,  dmg: 2, move: 4, h: 20.5, mounted: true, ranged: 'arc', range: 5, build: buildHorseArcher },
     trebuchet:   { name: 'Trebuchet',    maxHp: 6,  dmg: 20, move: 1, h: 16, ranged: 'mark', range: 8, noMoveShoot: true, build: buildTrebuchet },
-    army:        { name: 'Army', army: true, maxHp: 1, staMax: 0, manaMax: 0, dmg: 0, move: 4, build: buildFlag },
+    army:        { name: 'Army', army: true, maxHp: 1, staMax: 0, manaMax: 0, dmg: 0, move: 2, build: buildFlag },
     ballista:    { name: 'Ballista',     maxHp: 6,  dmg: 12, move: 1, h: 9, ranged: 'pierce', range: 8, noMoveShoot: true, build: buildBallista },
   };
   const T = u => UNIT_TYPES[u.type] || UNIT_TYPES.swordsman;
 
   const meshCache = {};
-  const meshFor = (type, team, v = '') => meshCache[type + team + v] || (meshCache[type + team + v] = UNIT_TYPES[type].build(TEAM[team], v || undefined));
+  const meshFor = (type, team, v = '') => { const k = type + (TEAM[team] || TEAM.blue).join() + v; return meshCache[k] || (meshCache[k] = UNIT_TYPES[type].build(TEAM[team] || TEAM.blue, v || undefined)); };
   const START = [
     { id: 'b1', col: 7, row: 8, team: 'blue' }, { id: 'b2', col: 7, row: 11, team: 'blue' }, { id: 'b3', col: 7, row: 14, team: 'blue' },
     { id: 'r1', col: 14, row: 8, team: 'red' }, { id: 'r2', col: 14, row: 11, team: 'red' }, { id: 'r3', col: 14, row: 14, team: 'red' },
@@ -836,13 +856,9 @@
       path: null, segT: 0, atk: null, flash: 0, dying: null };
   }
   const troop = type => ({ type, hp: typeMax(type), maxHp: typeMax(type), mana: typeStat(type, 'manaMax'), manaMax: typeStat(type, 'manaMax') });
-  function freshState(seq) {                     // a new campaign: two cities, one army each with 3 swordsmen
-    return { seq, turn: 'blue', round: 1, last: null, dm: !!game.dm, battle: false, types: game.types, points: { blue: 0, red: 0 }, view: 'campaign', campaign: null,
-      cities: [{ id: 'city-blue', team: 'blue', col: 2, row: 2, name: 'Northwatch' }, { id: 'city-red', team: 'red', col: 19, row: 19, name: 'Southreach' }],
-      units: [
-        { id: 'army-blue-1', type: 'army', team: 'blue', col: 4, row: 3, hp: 1, maxHp: 1, face: 0.9, moved: false, attacked: false, troops: [troop('swordsman'), troop('swordsman'), troop('swordsman')] },
-        { id: 'army-red-1', type: 'army', team: 'red', col: 17, row: 18, hp: 1, maxHp: 1, face: -2.2, moved: false, attacked: false, troops: [troop('swordsman'), troop('swordsman'), troop('swordsman')] },
-      ] };
+  function freshState(seq) {                     // a new campaign starts in the lobby
+    return { seq, turn: 'f0', round: 1, last: null, dm: !!game.dm, battle: false, types: game.types, points: {}, view: 'lobby', campaign: null,
+      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [] };
   }
   function freshBattleState(seq) {
     return { seq, turn: 'blue', round: 1, last: null, dm: !!game.dm, battle: false,
@@ -850,7 +866,7 @@
   }
   function exportState(last) {
     return { seq: game.seq, turn: game.turn, round: game.round, dm: !!game.dm, battle: !!game.battle, types: game.types, last: last || null,
-      view: game.view, cities: game.cities, campaign: game.campaign,
+      view: game.view, cities: game.cities, campaign: game.campaign, factions: game.factions, roads: game.roads, terrain: game.terrain, sides: game.sides, pending: game.pending, cwinner: game.cwinner,
       ...(game.water && game.water.length ? { water: game.water } : {}), units: units.filter(u => u.dying === null && u.hp > 0).map(u => ({ id: u.id, type: u.type, team: u.team, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, sta: u.sta, staMax: u.staMax, mana: u.mana, manaMax: u.manaMax,
         face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked,
         ...(u.stun ? { stun: u.stun } : {}), ...(u.stunActive ? { stunActive: true } : {}), ...(u.mark ? { mark: u.mark } : {}),
@@ -869,8 +885,12 @@
     const prevView = game.view;
     game = { seq: st.seq, turn: st.turn, round: st.round, dm: !!st.dm, battle: !!st.battle, types: (st.types && typeof st.types === 'object') ? st.types : {},
       points: { blue: 0, red: 0, ...(st.points && typeof st.points === 'object' ? st.points : {}) }, water: Array.isArray(st.water) ? st.water : [],
-      view: st.view === 'campaign' ? 'campaign' : 'battle', cities: Array.isArray(st.cities) ? st.cities : [], campaign: st.campaign || null };
-    if (prevView !== game.view) setTimeout(centerOnUnits, 0);
+      view: ['campaign', 'lobby'].includes(st.view) ? st.view : 'battle', cities: Array.isArray(st.cities) ? st.cities : [], campaign: st.campaign || null,
+      factions: Array.isArray(st.factions) ? st.factions : [], roads: Array.isArray(st.roads) ? st.roads : [], terrain: typeof st.terrain === 'string' ? st.terrain : null,
+      sides: st.sides || null, pending: st.pending || null, cwinner: st.cwinner || null };
+    syncTeams(); ensureLayers();
+    if (prevView !== game.view) { setTimeout(centerOnUnits, 0); selCity = null; placingArmy = null; }
+    if (selCity) selCity = game.cities.find(c => c.id === selCity.id) || null;
     updateSeat();
     if (selUnit && !units.includes(selUnit)) { selUnit = null; sel = null; }
     if (selUnit) sel = [selUnit.col, selUnit.row];
@@ -878,6 +898,8 @@
   }
 
   function centerOnUnits() {                    // after switching maps, frame all units on screen
+    if (game.view === 'campaign') { const me = viewer(), mine = [...game.cities.filter(c => c.owner === me), ...units.filter(u => u.team === me)];
+      const h = mine[0] || units[0]; if (!h) return; z = 0.42; const m = center(h.col, h.row); off.x = innerWidth / 2 - (m.x + OX) * z; off.y = innerHeight / 2 - (m.y + OY) * z; return; }
     if (!units.length) return;
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     for (const u of units) { const m = center(u.col, u.row); x0 = Math.min(x0, m.x); x1 = Math.max(x1, m.x); y0 = Math.min(y0, m.y); y1 = Math.max(y1, m.y); }
@@ -886,42 +908,435 @@
     const cx = (x0 + x1) / 2 + OX, cy = (y0 + y1) / 2 + OY - 20;
     off.x = innerWidth / 2 - cx * z; off.y = innerHeight / 2 - cy * z;
   }
-  // ---------- Campaign <-> battle ----------
-  const BATTLE_ROWS = [11, 8, 14, 5, 17, 2, 20];
-  function startBattle(att, def) {
+  // ===================== CAMPAIGN WORLD (Medieval Cities) =====================
+  const CCOLS = 20, CROWS = 52;                       // the campaign map: much taller than wide
+  const PALETTE = [
+    { key: 'blue', name: 'Blue', col: [52, 86, 146] }, { key: 'red', name: 'Red', col: [152, 30, 42] },
+    { key: 'green', name: 'Green', col: [44, 118, 56] }, { key: 'gold', name: 'Gold', col: [176, 136, 32] },
+    { key: 'purple', name: 'Purple', col: [104, 52, 148] }, { key: 'orange', name: 'Orange', col: [190, 92, 26] },
+    { key: 'teal', name: 'Teal', col: [26, 126, 128] }, { key: 'white', name: 'White', col: [178, 178, 172] }, { key: 'black', name: 'Black', col: [46, 46, 52] }];
+  const CITY_NAMES = ['Northwatch', 'Southreach', 'Ironhold', 'Greywater', 'Ashford', 'Highmoor', 'Stonebridge', 'Wolfden', 'Saltmere', 'Dunmore',
+    'Ravenscar', 'Goldcrest', 'Frostgate', 'Oakheart', 'Redcliff', 'Whitehaven', 'Blackfen', 'Sunspire'];
+  const TERRAIN = { g: { name: 'Grassland', col: [64, 88, 44] }, f: { name: 'Forest', col: [36, 60, 32] }, d: { name: 'Desert', col: [178, 152, 98] },
+    s: { name: 'Snow', col: [208, 214, 222] }, x: { name: 'Dead lands', col: [92, 86, 74] }, w: { name: 'Water', col: [38, 72, 108] } };
+  const faction = id => (game.factions || []).find(f => f.id === id) || null;
+  const ownerOfTeam = t => game.view === 'battle' && game.sides && (t === 'blue' || t === 'red') ? game.sides[t] : t;
+  const terrainAt = h => game.terrain && game.view === 'campaign' ? game.terrain[h[1] * CCOLS + h[0]] : 'g';
+  const isWater = h => terrainAt(h) === 'w';
+  const cityAt = h => h && (game.cities || []).find(c => c.col === h[0] && c.row === h[1]) || null;
+  const roadSet = () => new Set(game.roads || []);
+  const hasRoad = h => (game.roads || []).includes(key(...h));
+  function nbIn(c, r, cols, rows) { const [q, rr] = toAx(c, r); return DIRS.map(([dq, dr]) => fromAx(q + dq, rr + dr)).filter(([a, b]) => a >= 0 && a < cols && b >= 0 && b < rows); }
+  function genWorld(sd) {
+    let s = (sd >>> 0) || 1; const R = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const vn = g => { const w = Math.ceil(CCOLS / g) + 3, h = Math.ceil(CROWS / g) + 3, a = Array.from({ length: w * h }, R);
+      return (x, y) => { x /= g; y /= g; const xi = x | 0, yi = y | 0, xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+        const A = a[yi * w + xi], B = a[yi * w + xi + 1], C = a[(yi + 1) * w + xi], D = a[(yi + 1) * w + xi + 1]; return A + (B - A) * u + (C - A) * v + (A - B - C + D) * u * v; }; };
+    const e1 = vn(6), e2 = vn(2.5), mo = vn(5), lat = vn(8);
+    const T = new Array(CCOLS * CROWS);
+    for (let r = 0; r < CROWS; r++) for (let c = 0; c < CCOLS; c++) {
+      const x = c + 0.5 * (r & 1), y = r * 0.866;
+      const e = 0.68 * e1(x, y) + 0.32 * e2(x, y), m = mo(x, y), t = r / (CROWS - 1) + (lat(x, y) - 0.5) * 0.16;
+      let k;
+      if (e < 0.3) k = 'w';                                       // lakes and inland seas
+      else if (t < 0.09) k = m > 0.64 ? 's' : 'x';               // far north: dead lands with snow
+      else if (t < 0.18) k = m > 0.42 ? 's' : 'x';
+      else if (t < 0.3) k = m > 0.6 ? 'f' : 's';                 // snowy north with pine forests
+      else if (t > 0.85) k = m > 0.74 ? 'g' : 'd';               // deep south: desert
+      else if (t > 0.72) k = m < 0.42 ? 'd' : m > 0.66 ? 'f' : 'g';
+      else k = m > 0.6 ? 'f' : 'g';                               // the middle: grassland and forest
+      T[r * CCOLS + c] = k;
+    }
+    // keep only the biggest land mass so every city can reach every other
+    const seen = new Uint8Array(T.length); let best = [];
+    for (let i = 0; i < T.length; i++) if (T[i] !== 'w' && !seen[i]) {
+      const comp = [i]; seen[i] = 1;
+      for (let j = 0; j < comp.length; j++) { const c = comp[j] % CCOLS, r = (comp[j] / CCOLS) | 0;
+        for (const [a, b] of nbIn(c, r, CCOLS, CROWS)) { const k = b * CCOLS + a; if (!seen[k] && T[k] !== 'w') { seen[k] = 1; comp.push(k); } } }
+      if (comp.length > best.length) best = comp;
+    }
+    const keep = new Set(best); for (let i = 0; i < T.length; i++) if (T[i] !== 'w' && !keep.has(i)) T[i] = 'w';
+    // 10 city spots, at least 6 tiles apart (5 empty tiles between): a couple at the edge, a couple central, the rest anywhere
+    const land = []; for (let i = 0; i < T.length; i++) { const c = i % CCOLS, r = (i / CCOLS) | 0; if (T[i] !== 'w' && nbIn(c, r, CCOLS, CROWS).filter(([a, b]) => T[b * CCOLS + a] !== 'w').length >= 4) land.push([c, r]); }
+    const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const edge = h => h[0] <= 1 || h[0] >= CCOLS - 2 || h[1] <= 1 || h[1] >= CROWS - 2, mid = [CCOLS >> 1, CROWS >> 1];
+    const spots = [], far = h => spots.every(p => hexDist(p, h) >= 6);
+    for (const [pool, n] of [[shuffle(land.filter(edge)), 2], [shuffle(land.filter(h => hexDist(h, mid) <= 7)), 2], [shuffle(land.slice()), 10]])
+      { let got = 0; for (const h of pool) { if (spots.length >= 10 || got >= n) break; if (far(h)) { spots.push(h); got++; } } }
+    return { terrain: T.join(''), spots, ok: spots.length === 10, R };
+  }
+  // ---------- campaign board layers: terrain painted at half resolution ----------
+  function hexAtCanvas(px, py) {
+    const bx = px - OX, by = (py - OY) / SQ;
+    const qf = (SQ3 / 3 * bx - 1 / 3 * by) / S, rf = (2 / 3 * by) / S, sf = -qf - rf;
+    let q = Math.round(qf), r = Math.round(rf), s2 = Math.round(sf);
+    const dq = Math.abs(q - qf), dr = Math.abs(r - rf), ds = Math.abs(s2 - sf);
+    if (dq > dr && dq > ds) q = -r - s2; else if (dr > ds) r = -q - s2;
+    const col = q + (r - (r & 1)) / 2, row = r;
+    return (col >= 0 && col < COLS && row >= 0 && row < ROWS) ? [col, row] : null;
+  }
+  function buildCampaignLayers(terr) {
+    const sc = 0.5, cw = Math.ceil(BW * sc), ch = Math.ceil(BH * sc);
+    boardCv = document.createElement('canvas'); boardCv.width = cw; boardCv.height = ch;
+    const b = boardCv.getContext('2d'); b.scale(sc, sc);
+    const tAt = (c, r) => terr[r * CCOLS + c];
+    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {           // earth / shore skirt
+      const m = center(c, r), p = corners(m.x + OX, m.y + OY);
+      b.beginPath(); b.moveTo(p[0][0], p[0][1]); for (let i = 1; i <= 2; i++) b.lineTo(p[i][0], p[i][1]); for (let i = 2; i >= 0; i--) b.lineTo(p[i][0], p[i][1] + SKIRT); b.closePath();
+      b.fillStyle = tAt(c, r) === 'w' ? '#14263a' : '#221b12'; b.fill();
+    }
+    // low-res colour map, smoothed when scaled up -> soft borders between regions
+    const ls = 12, lw = Math.ceil(BW / ls), lh = Math.ceil(BH / ls), low = document.createElement('canvas'); low.width = lw; low.height = lh;
+    const lg = low.getContext('2d'), img = lg.createImageData(lw, lh), d = img.data, nz = makeNoise(140);
+    for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) {
+      const h = hexAtCanvas(x * ls + ls / 2, y * ls + ls / 2), i = (y * lw + x) * 4; if (!h) { d[i + 3] = 0; continue; }
+      const k = tAt(h[0], h[1]), base = TERRAIN[k].col, n = 0.82 + 0.36 * nz(x * ls, y * ls / SQ) + (rnd() - 0.5) * 0.06;
+      d[i] = base[0] * n; d[i + 1] = base[1] * n; d[i + 2] = base[2] * n; d[i + 3] = 255;
+    }
+    lg.putImageData(img, 0, 0);
+    b.save(); b.beginPath(); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) hexPath(c, r, b); b.clip();
+    b.imageSmoothingEnabled = true; b.imageSmoothingQuality = 'high'; b.drawImage(low, 0, 0, lw * ls, lh * ls);
+    // decorations per tile
+    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+      const k = tAt(c, r), m = center(c, r), cx = m.x + OX, cy = m.y + OY, spot = () => { const a = rnd() * 7, rr = Math.sqrt(rnd()) * S * 0.7; return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * SQ]; };
+      if (k === 'f' || (k === 's' && rnd() < 0.35)) {               // trees (pines in the snow)
+        const n = k === 'f' ? 7 : 2, pts = Array.from({ length: n }, spot).sort((a, b2) => a[1] - b2[1]);
+        for (const [x, y] of pts) { const hh = 22 + rnd() * 12;
+          b.fillStyle = 'rgba(0,0,0,0.25)'; b.beginPath(); b.ellipse(x + 3, y + 2, 9, 4, 0, 0, 7); b.fill();
+          b.fillStyle = '#3a2a1a'; b.fillRect(x - 1.5, y - 6, 3, 6);
+          b.fillStyle = k === 's' ? '#2c4a3a' : (rnd() < 0.5 ? '#1f3a1e' : '#284a24'); b.beginPath(); b.moveTo(x, y - hh); b.lineTo(x + 9, y - 4); b.lineTo(x - 9, y - 4); b.closePath(); b.fill();
+          if (k === 's') { b.fillStyle = 'rgba(235,240,245,0.85)'; b.beginPath(); b.moveTo(x, y - hh); b.lineTo(x + 4, y - hh * 0.62); b.lineTo(x - 4, y - hh * 0.62); b.closePath(); b.fill(); } }
+      } else if (k === 'w') {                                        // waves
+        b.strokeStyle = 'rgba(150,190,220,0.35)'; b.lineWidth = 2;
+        for (let i = 0; i < 3; i++) { const [x, y] = spot(); b.beginPath(); b.moveTo(x - 10, y); b.quadraticCurveTo(x - 5, y - 4, x, y); b.quadraticCurveTo(x + 5, y + 4, x + 10, y); b.stroke(); }
+      } else if (k === 'd') {                                        // dunes
+        b.strokeStyle = 'rgba(120,96,56,0.35)'; b.lineWidth = 2;
+        for (let i = 0; i < 3; i++) { const [x, y] = spot(); b.beginPath(); b.moveTo(x - 18, y); b.quadraticCurveTo(x, y - 8, x + 18, y); b.stroke(); }
+      } else if (k === 'x') {                                        // dead lands: cracks and bare dead trees
+        b.strokeStyle = 'rgba(30,26,22,0.5)'; b.lineWidth = 1.5;
+        for (let i = 0; i < 3; i++) { let [x, y] = spot(); b.beginPath(); b.moveTo(x, y); for (let j = 0; j < 4; j++) { x += (rnd() - 0.5) * 18; y += (rnd() - 0.5) * 9; b.lineTo(x, y); } b.stroke(); }
+        if (rnd() < 0.6) { const [x, y] = spot(); b.strokeStyle = '#2a221c'; b.lineWidth = 2.5; b.beginPath(); b.moveTo(x, y); b.lineTo(x, y - 20); b.moveTo(x, y - 12); b.lineTo(x + 7, y - 18); b.moveTo(x, y - 15); b.lineTo(x - 6, y - 22); b.stroke(); }
+      } else if (k === 's') {                                        // snow sparkle
+        b.fillStyle = 'rgba(255,255,255,0.55)'; for (let i = 0; i < 8; i++) { const [x, y] = spot(); b.fillRect(x, y, 2, 2); }
+      } else {                                                       // grass tufts
+        b.strokeStyle = 'rgba(30,44,20,0.5)'; b.lineWidth = 1.2;
+        for (let i = 0; i < 6; i++) { const [x, y] = spot(); b.beginPath(); b.moveTo(x, y); b.lineTo(x - 2, y - 6); b.moveTo(x, y); b.lineTo(x + 2, y - 6); b.stroke(); }
+      }
+    }
+    const vg = b.createRadialGradient(BW / 2, BH / 2, Math.min(BW, BH) * 0.3, BW / 2, BH / 2, Math.max(BW, BH) * 0.65);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.3)'); b.fillStyle = vg; b.fillRect(0, 0, BW, BH);
+    b.restore();
+    gridCv = document.createElement('canvas'); gridCv.width = cw; gridCv.height = ch;
+    const gc = gridCv.getContext('2d'); gc.scale(sc, sc);
+    gc.beginPath(); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) hexPath(c, r, gc);
+    gc.lineJoin = 'round'; gc.strokeStyle = 'rgba(8,12,5,0.55)'; gc.lineWidth = 2.4; gc.stroke();
+  }
+  let layerKey = null, layersReady = false; const layerCache = {};
+  function ensureLayers() {
+    if (!layersReady) return;
+    const camp = game.view === 'campaign' && game.terrain && game.terrain.length === CCOLS * CROWS;
+    let h = 0; if (camp) for (let i = 0; i < game.terrain.length; i++) h = (h * 31 + game.terrain.charCodeAt(i)) | 0;
+    const want = camp ? 'c' + h : 'battle';
+    if (camp) setDims(CCOLS, CROWS); else setDims(22, 22);
+    if (layerKey === want) return;
+    if (!layerCache[want]) { if (camp) { for (const k of Object.keys(layerCache)) if (k !== 'battle') delete layerCache[k]; buildCampaignLayers(game.terrain); } else buildLayers(); layerCache[want] = { boardCv, gridCv }; }
+    ({ boardCv, gridCv } = layerCache[want]); layerKey = want;
+  }
+  // ===================== CAMPAIGN RULES =====================
+  const FOOT = ['swordsman', 'spearman', 'halberdier', 'swordmaster'], ARCH = ['archer', 'crossbow'], MOUNT = ['horseman', 'lancer', 'horsearcher'],
+        SIEGE = ['trebuchet', 'ballista'], HEROES = ['knight', 'ranger', 'mage', 'assassin', 'warrior'];
+  const unitCost = t => HEROES.includes(t) ? 20 : MOUNT.includes(t) ? 18 : SIEGE.includes(t) ? 15 : 10;
+  const BUILDINGS = {
+    tradepost: { name: 'Trade post', cost: 20, text: '+1 point per turn (+1 more per city it is road-connected to)' },
+    garrison:  { name: 'Garrison', cost: 10, text: '+1 swordsman defender, +1 defender of each unit type this city can recruit' },
+    heroes:    { name: "Heroes' hall", cost: 20, text: 'Recruit any hero (base stats, no cards)', units: HEROES },
+  };
+  for (const t of [...FOOT, ...ARCH, ...MOUNT, ...SIEGE]) BUILDINGS[t] = { name: `${UNIT_TYPES[t].name} ${MOUNT.includes(t) ? 'stables' : ARCH.includes(t) ? 'range' : SIEGE.includes(t) ? 'workshop' : 'barracks'}`, cost: 10, text: `Recruit ${UNIT_TYPES[t].name}s here (${unitCost(t)} pts each)`, units: [t] };
+  const CITY_SLOTS = 6, FOUND_COST = 20, ROAD_COST = 5, DESTROY_COST = 10, MAX_TROOPS = 7;
+  const recruitable = city => [...new Set((city.buildings || []).flatMap(b => (BUILDINGS[b] && BUILDINGS[b].units) || []))];
+  const cityValue = city => FOUND_COST + (city.buildings || []).reduce((s, b) => s + (BUILDINGS[b] ? BUILDINGS[b].cost : 0), 0);
+  function garrisonOf(city) {                       // every city: 1 swordsman; a Garrison adds 1 more + 1 of each recruitable (non-hero) type
+    const g = ['swordsman'];
+    if ((city.buildings || []).includes('garrison')) { g.push('swordsman'); for (const t of recruitable(city)) if (!HEROES.includes(t)) g.push(t); }
+    return g;
+  }
+  // road network: road tiles and city tiles form nodes; returns a map tileKey -> component id
+  function roadComponents() {
+    const nodes = new Set(game.roads || []); for (const c of game.cities || []) if (c.owner) nodes.add(key(c.col, c.row));
+    const comp = new Map(); let id = 0;
+    for (const k of nodes) if (!comp.has(k)) { const st = [k]; comp.set(k, id);
+      while (st.length) { const [c, r] = st.pop().split(',').map(Number); for (const n of nbIn(c, r, CCOLS, CROWS)) { const nk = key(...n); if (nodes.has(nk) && !comp.has(nk)) { comp.set(nk, id); st.push(nk); } } }
+      id++; }
+    return comp;
+  }
+  const connectedCities = (city, comp = roadComponents()) => { const me = comp.get(key(city.col, city.row));
+    return (game.cities || []).filter(o => o !== city && o.owner && comp.get(key(o.col, o.row)) === me && hasRoadLink(o, comp) && hasRoadLink(city, comp)); };
+  const hasRoadLink = (city, comp) => nbIn(city.col, city.row, CCOLS, CROWS).some(n => (game.roads || []).includes(key(...n)));   // a city counts once a road touches it
+  function incomeOf(fid) {                          // passive 1 + 1 per city + trade posts + road connections
+    const comp = roadComponents(); let pts = 1; const lines = [['Passive', 1]];
+    for (const c of game.cities || []) if (c.owner === fid) {
+      const tp = (c.buildings || []).includes('tradepost'), links = connectedCities(c, comp).length;
+      const v = 1 + (tp ? 1 : 0) + links * (1 + (tp ? 1 : 0)); pts += v; lines.push([c.name, v]);
+    }
+    return { pts, lines };
+  }
+  // who may see what: buildings are visible to the owner and to anyone with a road-connected city
+  function seesCity(city, fid = viewer()) {
+    if (!city.owner || city.owner === fid) return true;
+    const comp = roadComponents(); return (game.cities || []).some(o => o.owner === fid && connectedCities(o, comp).includes(city));
+  }
+  const seesArmy = (u, fid = viewer()) => u.team === fid;
+  const aliveFactions = () => (game.factions || []).filter(f => f.alive);
+  function checkDefeats() {
+    for (const f of game.factions || []) if (f.alive && !(game.cities || []).some(c => c.owner === f.id) && !units.some(u => u.troops && u.team === f.id && u.dying === null)) {
+      f.alive = false; toast(`${f.name} has been defeated`);
+    }
+    const al = aliveFactions(); if (al.length === 1 && !game.cwinner) game.cwinner = al[0].id;
+  }
+  // ---------- lobby ----------
+  function defaultFactions() {
+    return [0, 1, 2, 3, 4].map(i => ({ id: 'f' + i, name: PALETTE[i].name, col: PALETTE[i].col, color: PALETTE[i].key, kind: i === 0 ? 'human' : 'ai' }));
+  }
+  function startCampaign() {
+    const setup = game.factions.filter(f => f.kind !== 'off');
+    if (setup.length < 2) { toast('You need at least 2 factions'); return; }
+    let w = null; for (let i = 0; i < 40 && !(w && w.ok); i++) w = genWorld((Math.random() * 4e9) >>> 0);
+    const R = w.R, names = CITY_NAMES.slice(); for (let i = names.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [names[i], names[j]] = [names[j], names[i]]; }
+    const spots = w.spots.slice(); for (let i = spots.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }
+    const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai', alive: true, style: ['aggressive', 'builder', 'balanced'][(R() * 3) | 0] }));
+    const cities = spots.map((h, i) => ({ id: 'city' + i, col: h[0], row: h[1], name: names[i], owner: i < factions.length ? factions[i].id : null, buildings: [], acted: false }));
+    const T = w.terrain, armies = [];
+    factions.forEach((f, i) => { const c = cities[i];
+      const n = nbIn(c.col, c.row, CCOLS, CROWS).find(([a, b]) => T[b * CCOLS + a] !== 'w');
+      armies.push({ id: `army-${f.id}-1`, type: 'army', team: f.id, col: n[0], row: n[1], hp: 1, maxHp: 1, face: 0, moved: false, attacked: false, troops: [troop('swordsman')] }); });
+    const points = {}; for (const f of factions) points[f.id] = 0;
+    const st = { ...exportState(null), seq: game.seq + 1, view: 'campaign', turn: factions[0].id, round: 1, factions, cities, roads: [], terrain: T, points, units: armies,
+      sides: null, campaign: null, cwinner: null, pending: null, battle: false };
+    st.last = { type: 'start', seq: st.seq };
+    floats = []; selUnit = null; sel = null; selCity = null; applyState(st); publish(st.last);
+    startOfFactionTurn(factions[0].id, true); commit({ type: 'income' });
+  }
+  // ---------- turns ----------
+  function startOfFactionTurn(fid, quiet) {
+    const f = faction(fid); if (!f) return;
+    const inc = incomeOf(fid); game.points = { ...game.points, [fid]: (game.points[fid] || 0) + inc.pts };
+    for (const c of game.cities) if (c.owner === fid) c.acted = false;
+    if (!quiet && fid === viewer()) toast(`${f.name}: +${inc.pts} points`);
+  }
+  function campaignEndTurn() {                      // next living faction; a full lap = a new round
+    const order = game.factions.map(f => f.id), i0 = order.indexOf(game.turn);
+    for (let k = 1; k <= order.length; k++) { const nf = faction(order[(i0 + k) % order.length]);
+      if (nf.alive) { if ((i0 + k) >= order.length) game.round += 1; game.turn = nf.id; break; } }
+    for (const u of units) { u.moved = false; u.attacked = false; }
+    selUnit = null; sel = null; selCity = null; armed = null; placingArmy = null; aiState = null;
+    startOfFactionTurn(game.turn);
+  }
+  // ---------- battles from the campaign ----------
+  const BATTLE_ROWS2 = [11, 8, 14, 5, 17, 2, 20];
+  function troopStrength(list) { return list.reduce((s, t) => { const ty = UNIT_TYPES[t.type] || UNIT_TYPES.swordsman; return s + (t.hp || ty.maxHp) * (ty.dmg + (t.dmgBought || 0)) * (ty.ranged ? 1.2 : 1) * (ty.mounted ? 1.25 : 1); }, 0); }
+  function engage(att, target) {                    // att: army; target: enemy army or city (owned by someone else)
+    const city = target.troops ? cityAt([target.col, target.row]) : target;
+    const defArmy = target.troops ? target : units.find(u => u.troops && u.col === city.col && u.row === city.row && u.dying === null) || null;
+    const defFid = target.troops ? target.team : city.owner;
+    const garrison = city && city.owner === defFid ? garrisonOf(city).map(t => ({ ...troop(t), garrison: true })) : [];
+    const defTroops = [...(defArmy ? defArmy.troops.slice(0, MAX_TROOPS) : []), ...garrison];
     att.moved = true; att.attacked = true;
-    const armies = units.map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1,
-      face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, troops: u.troops }));
-    game.campaign = { round: game.round, turn: game.turn, armies, att: att.id, def: def.id };
-    const battleUnits = [];
-    for (const army of [att, def]) army.troops.slice(0, BATTLE_ROWS.length).forEach((t, i) => {
-      const left = army.team === 'blue';
-      battleUnits.push(runtimeUnit({ ...t, id: `${army.id}.${i}`, team: army.team, col: left ? 7 : 14, row: BATTLE_ROWS[i],
-        face: left ? Math.PI / 2 : -Math.PI / 2, moved: false, attacked: false }));
-    });
-    units = battleUnits; selUnit = null; sel = null; floats = [];
-    game.view = 'battle'; game.turn = att.team; game.round = 1; game.battle = true;
-    centerOnUnits(); commit({ type: 'battle' });
-    toast(`Battle! ${teamName(att.team)} army attacks ${teamName(def.team)} army`);
+    const fa = faction(att.team), fd = faction(defFid);
+    if (fa.ai && (!fd || fd.ai)) { autoResolve(att, defArmy, city, defTroops); return; }
+    const armies = units.map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1, face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, troops: u.troops }));
+    game.campaign = { round: game.round, turn: game.turn, armies, att: att.id, def: defArmy ? defArmy.id : null, city: city ? city.id : null, points: game.points };
+    game.sides = { blue: att.team, red: defFid };
+    game.points = { ...game.points, blue: game.points[att.team] || 0, red: game.points[defFid] || 0 };
+    syncTeams();
+    const bu = [];
+    att.troops.slice(0, MAX_TROOPS).forEach((t, i) => bu.push(runtimeUnit({ ...t, id: `${att.id}.${i}`, team: 'blue', col: 7, row: BATTLE_ROWS2[i], face: Math.PI / 2, moved: false, attacked: false })));
+    defTroops.forEach((t, i) => bu.push(runtimeUnit({ ...t, id: `${t.garrison ? 'g' : (defArmy ? defArmy.id : 'g')}.${i}`, team: 'red', col: i < 7 ? 14 : 16, row: BATTLE_ROWS2[i % 7], face: -Math.PI / 2, moved: false, attacked: false })));
+    units = bu; selUnit = null; sel = null; selCity = null; floats = [];
+    game.view = 'battle'; game.turn = 'blue'; game.round = 1; game.battle = true;
+    ensureLayers(); centerOnUnits(); commit({ type: 'battle' });
+    toast(`Battle! ${fa.name} attacks ${city && !target.troops ? city.name : (fd ? fd.name : '')}`);
+  }
+  function survivorsOf(list) { return list.map(u => ({ type: u.type, hp: u.hp, maxHp: u.maxHp, mana: u.mana, manaMax: u.manaMax, ...(u.cards ? { cards: u.cards } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}) })); }
+  function finishEngagement(winFid, attArmy, defArmy, city, attSurv, defSurv) {
+    const c = game.campaign;
+    // attacker won: attacker keeps survivors (+ troops that sat out), defender army is gone, city is taken
+    if (winFid === attArmy.team) {
+      attArmy.troops = [...attSurv, ...attArmy.troops.slice(MAX_TROOPS)];
+      if (defArmy) defArmy.dead = true;
+      if (city && city.owner !== attArmy.team) { attArmy.col = city.col; attArmy.row = city.row;
+        game.pending = { type: 'capture', city: city.id, by: attArmy.team, army: attArmy.id }; }
+    } else {
+      attArmy.dead = true;
+      if (defArmy) defArmy.troops = [...defSurv, ...defArmy.troops.slice(MAX_TROOPS)];
+    }
   }
   function returnToCampaign() {
     const w = winner(), c = game.campaign;
     if (game.view !== 'battle' || !w || !c) return;
-    const survivors = units.filter(u => u.team === w && u.dying === null && u.hp > 0)
-      .map(u => ({ type: u.type, hp: u.hp, maxHp: u.maxHp, mana: u.mana, manaMax: u.manaMax, ...(u.cards ? { cards: u.cards } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}) }));   // heroes keep their cards and bought stats
-    const armies = c.armies.filter(a => !((a.id === c.att || a.id === c.def) && a.team !== w))
-      .map(a => (a.id === c.att || a.id === c.def) ? { ...a, troops: [...survivors, ...(a.troops || []).slice(BATTLE_ROWS.length)] } : a);   // troops that sat out (8th+) stay
-    units = armies.map(runtimeUnit); selUnit = null; sel = null; floats = [];
-    game.view = 'campaign'; game.round = c.round; game.turn = c.turn; game.campaign = null; game.battle = false;
-    centerOnUnits(); commit({ type: 'campaign' });
+    const winFid = game.sides[w];
+    const pts = { ...c.points, [game.sides.blue]: game.points.blue, [game.sides.red]: game.points.red };
+    const alive = units.filter(u => u.dying === null && u.hp > 0);
+    units = c.armies.map(runtimeUnit);
+    const att = units.find(u => u.id === c.att), def = c.def ? units.find(u => u.id === c.def) : null, city = c.city ? game.cities.find(x => x.id === c.city) : null;
+    finishEngagement(winFid, att, def, city, survivorsOf(alive.filter(u => u.team === 'blue')), survivorsOf(alive.filter(u => u.team === 'red' && !String(u.id).startsWith('g.'))));
+    units = units.filter(u => !u.dead && !(u.troops && !u.troops.length));            // an army that lost every troop is gone
+    selUnit = null; sel = null; selCity = null; floats = [];
+    game.view = 'campaign'; game.round = c.round; game.turn = c.turn; game.campaign = null; game.battle = false; game.sides = null; game.points = pts;
+    syncTeams(); checkDefeats(); ensureLayers(); centerOnUnits(); commit({ type: 'campaign' });
+    resolvePendingAI();
+  }
+  function autoResolve(att, defArmy, city, defTroops) {   // AI vs AI: no battle map, strengths with some luck
+    const sa = troopStrength(att.troops.slice(0, MAX_TROOPS)) * (0.75 + Math.random() * 0.5), sd = troopStrength(defTroops) * (0.75 + Math.random() * 0.5) * (city ? 1.15 : 1);
+    const attWins = sa > sd, ratio = Math.min(0.9, (attWins ? sd / sa : sa / Math.max(1, sd)) * 0.8);
+    const thin = list => { const keep = list.slice().sort((a, b) => troopStrength([b]) - troopStrength([a])); return keep.slice(0, Math.max(1, Math.round(keep.length * (1 - ratio)))); };
+    game.campaign = { armies: [] };
+    finishEngagement(attWins ? att.team : (defArmy ? defArmy.team : city.owner), att, defArmy, city,
+      attWins ? thin(att.troops.slice(0, MAX_TROOPS)) : [], attWins ? [] : (defArmy ? thin(defArmy.troops.slice(0, MAX_TROOPS)) : []));
+    game.campaign = null;
+    units = units.filter(u => !u.dead && !(u.troops && !u.troops.length));
+    checkDefeats(); commit({ type: 'ai' }); resolvePendingAI();
+  }
+  function resolvePendingAI() {                     // an AI that took a city keeps it
+    const p = game.pending; if (!p) return; const f = faction(p.by);
+    if (f && f.ai && iRunAI()) { captureCity(true); }
+  }
+  function captureCity(keep) {
+    const p = game.pending; if (!p) return; const city = game.cities.find(c => c.id === p.city); game.pending = null;
+    if (!city) return;
+    if (keep) { city.owner = p.by; city.acted = true; toast(`${faction(p.by).name} captured ${city.name}`); }
+    else { const gain = Math.floor(cityValue(city) / 2); game.points = { ...game.points, [p.by]: (game.points[p.by] || 0) + gain };
+      toast(`${city.name} was razed · +${gain} points`); city.owner = null; city.buildings = []; }
+    checkDefeats(); commit({ type: 'capture' });
+  }
+  function syncTeams() {
+    TEAM.blue = BASE_TEAM.blue; TEAM.red = BASE_TEAM.red;
+    for (const f of game.factions || []) TEAM[f.id] = f.col;
+    if (game.view === 'battle' && game.sides) { const a = faction(game.sides.blue), d = faction(game.sides.red); if (a) TEAM.blue = a.col; if (d) TEAM.red = d.col; }
+  }
+  // ===================== AI =====================
+  let aiState = null, aiBusyUntil = 0;
+  const iRunAI = () => mode === 'local' || p2p.role === 'host';
+  function aiTick() {
+    if (!iRunAI() || busy() || game.pending && !faction(game.pending.by)?.ai || Date.now() < aiBusyUntil) return;
+    if (game.view === 'campaign' && !game.cwinner) { const f = faction(game.turn); if (f && f.ai && f.alive) aiCampaignStep(f); }
+    else if (game.view === 'battle' && game.sides && !winner()) { const f = faction(game.sides[game.turn]); if (f && f.ai) aiBattleStep(); }
+  }
+  const aiGo = a => { a.rng = Math.floor(Math.random() * 4e9); aiBusyUntil = Date.now() + 260; play(a, () => commit(a)); };
+  // ---------- battle AI: every unit walks at the nearest enemy and hits it ----------
+  function aiBattleStep() {
+    const tk = game.turn + ':' + game.round + ':' + (game.campaign ? game.campaign.att : ''); if (!aiState || aiState.kind !== 'battle' || aiState.turn !== tk) aiState = { kind: 'battle', turn: tk, skip: new Set() };
+    const team = game.turn, foes = units.filter(o => o.team !== team && o.dying === null && o.hp > 0 && !o.invis);
+    const mine = units.filter(u => u.team === team && u.dying === null && u.hp > 0 && !unitDone(u) && !aiState.skip.has(u.id) && !isStunned(u));
+    if (!mine.length || !foes.length) { aiBusyUntil = Date.now() + 400; commit({ type: 'end' }); return; }
+    const u = mine[0], ty = T(u), here = [u.col, u.row]; aiState.skip.add(u.id);
+    const near = (from) => foes.slice().sort((a, b) => hexDist(from, [a.col, a.row]) - hexDist(from, [b.col, b.row]))[0];
+    const tgt = near(here), dT = hexDist(here, [tgt.col, tgt.row]);
+    const b = reach(u), tiles = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) || (t[0] === u.col && t[1] === u.row));
+    const closest = (pred) => { let best = null; for (const t of tiles) { if (!pred(t)) continue; const d = b.dist.get(key(...t)); if (!best || d < best.d) best = { t, d }; } return best; };
+    const walkToward = () => { if (u.moved) return false; let best = null;
+      for (const t of tiles) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
+      if (!best || (best.t[0] === u.col && best.t[1] === u.row)) return false; aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return true; };
+    if (ty.ranged === 'arc' || ty.magic) {
+      const inR = foes.filter(o => hexDist(here, [o.col, o.row]) <= ty.range);
+      if (!u.attacked && inR.length && canShootNow(u)) { aiGo({ type: 'shoot', id: u.id, target: inR.sort((a, b2) => a.hp - b2.hp)[0].id }); return; }
+      if (!u.moved && !u.attacked && !noMoveShoot(u)) { const s = closest(t => hexDist(t, [tgt.col, tgt.row]) <= ty.range); if (s) { aiGo({ type: 'shoot', id: u.id, path: pathTo(b, s.t), target: tgt.id }); return; } }
+      if (walkToward()) return;
+    } else if (ty.ranged === 'line' || ty.ranged === 'pierce') {
+      if (!u.moved && !u.attacked) for (let d = 0; d < 6; d++) { const f = firstInLine(here, d, ty.range); if (f && f.unit.team !== team) { aiGo({ type: ty.ranged === 'line' ? 'bolt' : 'pierce', id: u.id, dir: d }); return; } }
+      if (walkToward()) return;
+    } else if (ty.ranged === 'mark') {
+      if (!u.moved && !u.attacked && dT <= ty.range) { aiGo({ type: 'mark', id: u.id, col: tgt.col, row: tgt.row }); return; }
+      if (walkToward()) return;
+    } else if (!u.attacked) {                                       // melee
+      const r = u.type === 'warrior' ? (hasPassive(u, 'halberd') ? 2 : 1) : (ty.reach || 1);
+      const adj = foes.find(o => hexDist(here, [o.col, o.row]) <= 1);
+      if (adj) { aiGo({ type: 'attack', id: u.id, path: [], target: adj.id, targets: [adj.id], dir: u.type === 'warrior' ? warriorAim(u, here, [adj.col, adj.row]) : undefined }); return; }
+      if (!u.moved) { const s = closest(t => hexDist(t, [tgt.col, tgt.row]) === 1);
+        if (s) { aiGo({ type: 'attack', id: u.id, path: pathTo(b, s.t), target: tgt.id, targets: [tgt.id], dir: u.type === 'warrior' ? warriorAim(u, s.t, [tgt.col, tgt.row]) : undefined }); return; } }
+      if (r && walkToward()) return;
+    }
+    aiBusyUntil = Date.now() + 60;                                    // nothing useful for this unit: try the next one
+  }
+  // ---------- campaign AI ----------
+  function campPath(from, to, u) {                  // BFS over land to a target tile (units block, except the goal)
+    const k0 = key(...from), prev = new Map([[k0, null]]), q = [from];
+    while (q.length) { const h = q.shift(); if (h[0] === to[0] && h[1] === to[1]) break;
+      for (const n of nbIn(h[0], h[1], CCOLS, CROWS)) { const k = key(...n); if (prev.has(k) || isWater(n)) continue;
+        const goal = n[0] === to[0] && n[1] === to[1], o = unitAt(n), c = cityAt(n);
+        if (!goal && ((o && o !== u) || (c && c.owner !== u.team))) continue; prev.set(k, h); q.push(n); } }
+    if (!prev.has(key(...to))) return null;
+    const p = []; let cur = to; while (cur && key(...cur) !== k0) { p.unshift(cur); cur = prev.get(key(...cur)); } return p;
+  }
+  function aiCampaignStep(f) {
+    if (!aiState || aiState.kind !== 'camp' || aiState.fid !== f.id) aiState = { kind: 'camp', fid: f.id, econ: false, done: new Set() };
+    const pts = () => game.points[f.id] || 0, spend = n => { game.points = { ...game.points, [f.id]: pts() - n }; };
+    const myCities = game.cities.filter(c => c.owner === f.id), myArmies = () => units.filter(u => u.troops && u.team === f.id && u.dying === null);
+    const freeSpots = game.cities.filter(c => !c.owner);
+    const settleTarget = myCities.length < 4 && freeSpots.length ? freeSpots.map(c => ({ c, d: Math.min(...myCities.map(m => hexDist([m.col, m.row], [c.col, c.row])), ...myArmies().map(a => hexDist([a.col, a.row], [c.col, c.row]))) })).sort((x, y) => x.d - y.d)[0] : null;
+    const reserve = settleTarget && settleTarget.d <= 16 && (f.style !== 'aggressive' || myCities.length < 2) ? FOUND_COST : 0;   // save up to found a city
+    if (!aiState.econ) {                                              // buildings and recruits, all at once
+      aiState.econ = true;
+      const wants = f.style === 'builder' ? ['swordsman', 'tradepost', 'archer', 'garrison', 'spearman', 'heroes'] : f.style === 'aggressive' ? ['swordsman', 'archer', 'horseman', 'tradepost', 'heroes', 'garrison'] : ['swordsman', 'tradepost', 'archer', 'garrison', 'horseman', 'heroes'];
+      for (const c of myCities) {
+        if (!c.acted && c.buildings.length < CITY_SLOTS) { const b = wants.find(w => !c.buildings.includes(w));
+          const first = !recruitable(c).length && b === 'swordsman';
+          if (b && pts() >= BUILDINGS[b].cost + (first ? 0 : reserve + 4)) { c.buildings = [...c.buildings, b]; c.acted = true; spend(BUILDINGS[b].cost); } }
+        const types = recruitable(c).filter(t => !HEROES.includes(t) || Math.random() < 0.3); if (!types.length) continue;
+        const near = myArmies().filter(a => hexDist([a.col, a.row], [c.col, c.row]) <= 1);
+        for (let tries = 0; tries < 3; tries++) { const t = types[(Math.random() * types.length) | 0]; if (pts() < unitCost(t) + reserve + (f.style === 'builder' ? 6 : 0)) break;
+          let a = near.find(x => x.troops.length < MAX_TROOPS);
+          if (!a && myArmies().length < myCities.length + 1) { const spot = nbIn(c.col, c.row, CCOLS, CROWS).find(n => !isWater(n) && !unitAt(n) && !cityAt(n));
+            if (spot) { a = runtimeUnit({ id: `army-${f.id}-${Date.now().toString(36)}${tries}`, type: 'army', team: f.id, col: spot[0], row: spot[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [] }); units.push(a); near.push(a); } }
+          if (!a) break; a.troops = [...a.troops, troop(t)]; spend(unitCost(t)); }
+      }
+      commit({ type: 'ai' }); aiBusyUntil = Date.now() + 300; return;
+    }
+    const a = myArmies().find(x => !x.moved && !aiState.done.has(x.id));
+    if (!a) { aiBusyUntil = Date.now() + 300; commit({ type: 'end' }); return; }
+    aiState.done.add(a.id);
+    const here = [a.col, a.row], str = troopStrength(a.troops), home = myCities.slice().sort((x, y) => hexDist(here, [x.col, x.row]) - hexDist(here, [y.col, y.row]))[0];
+    // pick a goal
+    const enemies = [...units.filter(u => u.troops && u.team !== f.id && u.dying === null).map(u => ({ tile: [u.col, u.row], army: u, s: troopStrength(u.troops) * (cityAt([u.col, u.row]) ? 1.3 : 1) })),
+      ...game.cities.filter(c => c.owner && c.owner !== f.id).map(c => ({ tile: [c.col, c.row], city: c, s: troopStrength(garrisonOf(c).map(troop)) * 1.15 + (units.find(u => u.troops && u.col === c.col && u.row === c.row) ? 1e9 : 0) }))];
+    const free = game.cities.filter(c => !c.owner);
+    const dist = t => hexDist(here, t);
+    let goal = null, mode2 = null;
+    const prey = enemies.filter(e => e.s < str * (f.style === 'aggressive' ? 1.0 : 0.7) && dist(e.tile) <= (f.style === 'aggressive' ? 30 : 12)).sort((x, y) => dist(x.tile) - dist(y.tile))[0];
+    const spot = reserve && settleTarget ? settleTarget.c : null;
+    const settler = spot && myArmies().slice().sort((x, y) => hexDist([x.col, x.row], [spot.col, spot.row]) - hexDist([y.col, y.row], [spot.col, spot.row]))[0] === a;
+    if (spot && settler && (f.style !== 'aggressive' || !prey)) {
+      if (dist([spot.col, spot.row]) === 1) {                        // next to the free land: found it once the points are there
+        if (pts() >= FOUND_COST) { spot.owner = f.id; spot.buildings = []; spot.acted = true; spend(FOUND_COST); commit({ type: 'ai' }); }
+        aiBusyUntil = Date.now() + 100; return; }
+      goal = [spot.col, spot.row]; mode2 = 'settle'; }
+    else if (prey && a.troops.length >= (f.style === 'aggressive' ? 3 : 4)) { goal = prey.tile; mode2 = 'attack'; }
+    else if (f.style !== 'aggressive' && home) {                    // road builders head for the nearest other city
+      const other = game.cities.filter(c => c.owner && c !== home && !connectedCities(home).includes(c)).sort((x, y) => hexDist([home.col, home.row], [x.col, x.row]) - hexDist([home.col, home.row], [y.col, y.row]))[0];
+      if (other && a.troops.length <= 3) { goal = [other.col, other.row]; mode2 = 'road'; }
+    }
+    if (!goal && home && dist([home.col, home.row]) > 1) { goal = [home.col, home.row]; mode2 = 'home'; }   // nothing to do: go home for reinforcements
+    if (!goal) { aiBusyUntil = Date.now() + 50; return; }
+    if (mode2 === 'road' && pts() >= ROAD_COST + 6 + reserve && !hasRoad(here) && !cityAt(here)) { game.roads = [...(game.roads || []), key(...here)]; spend(ROAD_COST); }
+    const path = campPath(here, goal, a); if (!path || !path.length) { if (mode2 === 'road') commit({ type: 'ai' }); aiBusyUntil = Date.now() + 50; return; }
+    const b = reach(a); let stop = -1;
+    for (let i = 0; i < path.length - 1; i++) if (b.dist.has(key(...path[i])) && !unitAt(path[i])) stop = i;
+    const adjGoal = path.length >= 2 ? path[path.length - 2] : here, atGoalNext = path.length === 1 || (stop === path.length - 2);
+    const walk = stop >= 0 ? pathTo(b, path[stop]) : [];
+    const after = () => {
+      if (atGoalNext && mode2 === 'attack') { const tgtU = unitAt(goal), c = cityAt(goal); engage(a, tgtU && tgtU.troops && tgtU.team !== f.id ? tgtU : c); return; }
+      if (atGoalNext && mode2 === 'settle' && pts() >= FOUND_COST) { const c = cityAt(goal); if (c && !c.owner) { c.owner = f.id; c.buildings = []; c.acted = true; spend(FOUND_COST); commit({ type: 'ai' }); return; } }
+      if (mode2 === 'road' && pts() >= ROAD_COST + 6 + reserve && !hasRoad([a.col, a.row]) && !cityAt([a.col, a.row])) { game.roads = [...(game.roads || []), key(a.col, a.row)]; spend(ROAD_COST); commit({ type: 'ai' }); }
+    };
+    if (walk.length) { const mv = { type: 'move', id: a.id, path: walk }; mv.rng = 1; aiBusyUntil = Date.now() + 200; play(mv, () => { commit(mv); after(); }); }
+    else { after(); if (mode2 === 'road') commit({ type: 'ai' }); aiBusyUntil = Date.now() + 100; }
   }
   // ---------- Saving: autosave in this browser + save/load files ----------
   const SAVE_KEY = 'medieval-cities-save-v2';
   function saveLocal() { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, savedAt: Date.now(), g: exportState(null) })); } catch (e) {} }
   function validState(st) {
-    return st && typeof st.seq === 'number' && (st.turn === 'blue' || st.turn === 'red') && Array.isArray(st.units) &&
-      st.units.every(u => u && typeof u.id === 'string' && TEAM[u.team] && (u.type === undefined || UNIT_TYPES[u.type]) && Number.isInteger(u.col) && Number.isInteger(u.row) &&
-        u.col >= 0 && u.col < COLS && u.row >= 0 && u.row < ROWS && typeof u.hp === 'number');
+    return st && typeof st.seq === 'number' && (st.turn === 'blue' || st.turn === 'red' || (Array.isArray(st.factions) && st.factions.some(f => f.id === st.turn))) && Array.isArray(st.units) &&
+      st.units.every(u => u && typeof u.id === 'string' && (TEAM[u.team] || (Array.isArray(st.factions) && st.factions.some(f => f.id === u.team))) && (u.type === undefined || UNIT_TYPES[u.type]) && Number.isInteger(u.col) && Number.isInteger(u.row) &&
+        u.col >= 0 && u.col < (st.view === 'campaign' ? CCOLS : 22) && u.row >= 0 && u.row < (st.view === 'campaign' ? CROWS : 22) && typeof u.hp === 'number');
   }
   function loadLocal() {
     try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (d && validState(d.g)) { applyState(d.g); return true; } } catch (e) {}
@@ -950,7 +1365,7 @@
   const unitAt = h => h && units.find(u => u.col === h[0] && u.row === h[1]);
   const busy = () => !!afterIdle || projectiles.length > 0 || units.some(u => u.path || u.atk || u.dying !== null);
   const faceToward = (u, o) => { const a = center(u.col, u.row), b = center(o.col, o.row); u.want = Math.atan2(b.x - a.x, (b.y - a.y) / SQ); };
-  const winner = () => { if (game.view === 'campaign') return null;   // the players decide who wins the campaign
+  const winner = () => { if (game.view !== 'battle') return null;   // the players decide who wins the campaign
     if (game.dm && !game.battle) return null; const t = new Set(units.filter(u => u.dying === null).map(u => u.team)); return t.size === 1 ? [...t][0] : null; };
 
   // hex neighbours & pathfinding (odd-q offset <-> axial)
@@ -967,8 +1382,16 @@
       for (const n of neighbors(...h)) {
         const k = key(...n); if (dist.has(k)) continue;
         const o = unitAt(n); if (o && o !== u) continue;
+        if (u.troops && game.view === 'campaign') { if (isWater(n)) continue; const c = cityAt(n); if (c && c.owner !== u.team) continue; }
         dist.set(k, d + 1); prev.set(k, h); q.push(n);
       }
+    }
+    if (u.troops && game.view === 'campaign' && moveOf(u) === 2) {   // both steps on road (or own city): one more step anywhere
+      const onRoad = t => hasRoad(t) || (cityAt(t) && cityAt(t).owner === u.team), free = t => !isWater(t) && !(unitAt(t) && unitAt(t) !== u) && !(cityAt(t) && cityAt(t).owner !== u.team);
+      for (const a1 of neighbors(u.col, u.row)) { if (!onRoad(a1) || !free(a1)) continue;
+        for (const a2 of neighbors(...a1)) { if (!onRoad(a2) || !free(a2) || (a2[0] === u.col && a2[1] === u.row)) continue;
+          for (const a3 of neighbors(...a2)) { const k3 = key(...a3); if (dist.has(k3) || !free(a3)) continue;
+            dist.set(k3, 3); prev.set(k3, a2); if (!prev.has(key(...a2)) || dist.get(key(...a2)) !== 2) { dist.set(key(...a2), 2); prev.set(key(...a2), a1); } if (!dist.has(key(...a1))) { dist.set(key(...a1), 1); prev.set(key(...a1), [u.col, u.row]); } } } }
     }
     return { dist, prev };
   }
@@ -1198,7 +1621,7 @@
   });
   HERO_CARDS.assassin = { passive: ['backstab', 'bloodthirst', 'flurry'], skill: ['eviscerate', 'shadowstep', 'vanish'] };
   const combo = u => hasPassive(u, 'quickdraw') || hasPassive(u, 'flurry');
-  const hiddenFromMe = u => !!u.invis && mode === 'online' && mySeat !== u.team;
+  const hiddenFromMe = u => !!u.invis && ownerOfTeam(u.team) !== viewer();
   function facingDir(u) {                                    // nearest of the 6 hex directions to where the unit faces
     const a = center(u.col, u.row); let best = 0, bd = 9;
     for (let d = 0; d < 6; d++) { const b = center(...step([u.col, u.row], d)); let x = Math.abs(Math.atan2(b.x - a.x, (b.y - a.y) / SQ) - u.want); x = x % (Math.PI * 2); x = Math.min(x, Math.PI * 2 - x); if (x < bd) { bd = x; best = d; } }
@@ -1307,7 +1730,7 @@
     for (let d = 0; d < 6; d++) { const s2 = center(...step(from, d)), ad = Math.atan2((s2.y - a.y) / SQ, s2.x - a.x); let x = Math.abs(ad - ang); x = Math.min(x, Math.PI * 2 - x); if (x < bd) { bd = x; best = d; } }
     return best;
   }
-  const CARD_PRICE = 1, UPGRADE_PRICE = 1;
+  const CARD_PRICE = 10, UPGRADE_PRICE = 10;      // campaign prices
   const heroCards = u => HERO_CARDS[u.type] || null;
   const hasPassive = (u, id) => !!(u.cards && u.cards.passive === id);
   const emptyCards = () => ({ passive: null, skills: [null, null, null] });
@@ -1707,12 +2130,13 @@
     if (game.view === 'campaign') for (const c of game.cities) { const m = center(c.col, c.row); list.push({ city: c, p: { x: m.x + OX, y: m.y + OY } }); }
     list.sort((a, b) => a.p.y - b.p.y);
     for (const { u, p, city } of list) {
-      if (city) {                                         // cities on the campaign map
-        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(p.x + 3, p.y + 2, 10.5 * K, 10.5 * K * SQ, 0, 0, 7); ctx.fill();
-        drawMesh(ctx, CITY_MESH[city.team], p.x, p.y, 0, 0, 0);
-        ctx.font = '700 13px Georgia,serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(8,10,6,0.85)'; ctx.strokeText(city.name, p.x, p.y + 10.5 * K * SQ + 4);
-        ctx.fillStyle = `rgb(${TEAM[city.team].map(v => Math.min(255, v + 100))})`; ctx.fillText(city.name, p.x, p.y + 10.5 * K * SQ + 4);
+      if (city) {                                         // cities on the campaign map (free land is drawn on the ground)
+        const fo = faction(city.owner);
+        if (fo) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(p.x + 3, p.y + 2, 10.5 * K, 10.5 * K * SQ, 0, 0, 7); ctx.fill();
+          drawMesh(ctx, cityMesh(fo.col), p.x, p.y, 0, 0, 0); }
+        ctx.font = `700 ${Math.min(40, Math.max(15, 13 / z)).toFixed(1)}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(8,10,6,0.85)'; ctx.strokeText(city.name + (fo ? '' : ' · free'), p.x, p.y + 10.5 * K * SQ + 4);
+        ctx.fillStyle = fo ? `rgb(${fo.col.map(v => Math.min(255, v + 100))})` : '#d8cfae'; ctx.fillText(city.name + (fo ? '' : ' · free'), p.x, p.y + 10.5 * K * SQ + 4);
         continue;
       }
       if (hiddenFromMe(u)) continue;
@@ -1753,11 +2177,15 @@
   }
   // army plate on the campaign map: troop count + the "has its turn" line
   function drawArmyLabel(u, bx, by) {
+    const sc = Math.min(2.6, Math.max(1, 0.75 / z)); if (sc > 1) { ctx.save(); ctx.translate(bx, by - 15.5 * CE * K - 16); ctx.scale(sc, sc); ctx.translate(-bx, -(by - 15.5 * CE * K - 16)); drawArmyLabel1(u, bx, by); ctx.restore(); return; }
+    drawArmyLabel1(u, bx, by);
+  }
+  function drawArmyLabel1(u, bx, by) {
     const w = 46, h = 15, x = bx - w / 2, y = by - 15.5 * CE * K - 24;
     ctx.fillStyle = 'rgba(8,10,6,0.85)'; ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = `rgba(${TEAM[u.team].map(v => v + 60)},0.9)`; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     ctx.font = '700 10px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#e9e4cf'; ctx.fillText(`⚔ ${u.troops.length}`, bx, y + h / 2 + 0.5);
+    ctx.fillStyle = '#e9e4cf'; ctx.fillText(`⚔ ${seesArmy(u) ? u.troops.length : '?'}`, bx, y + h / 2 + 0.5);
     if (u.team === game.turn && u.dying === null && !winner() && !unitDone(u)) {
       ctx.fillStyle = 'rgba(8,10,6,0.8)'; ctx.fillRect(x, y - 5, w, 4);
       ctx.fillStyle = 'rgba(160,128,58,0.95)'; ctx.fillRect(x + 1.5, y - 4, u.moved ? (w - 3) / 2 : w - 3, 2.5);
@@ -2048,8 +2476,9 @@
     ctx.fillStyle = '#12140e'; ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * off.x, dpr * off.y);
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(boardCv, 0, 0);
-    ctx.drawImage(gridCv, 0, 0);
+    ctx.drawImage(boardCv, 0, 0, BW, BH);
+    ctx.drawImage(gridCv, 0, 0, BW, BH);
+    if (game.view === 'campaign') drawCampaignGround(t);
 
     if (sel) {
       ctx.beginPath();
@@ -2099,8 +2528,9 @@
   // Each player's presence carries the latest shared game state; the highest seq wins.
   let resetArmed = 0, lastTurnHtml = '', lastNetHtml = '', placing = null, dragUnit = null, dmSide = 'red';
   // Dungeon Master: in online games the host is the DM (enemy side), the friend plays the heroes
-  function updateSeat() { if (mode === 'online' && p2p.role) mySeat = game.dm ? (p2p.role === 'host' ? 'red' : 'blue') : (p2p.role === 'host' ? 'blue' : 'red'); }
-  const isHost = () => mode === 'local' || p2p.role === 'host' || (room && mode === 'online' && mySeat === (game.dm ? 'red' : 'blue'));
+  const hostSeat = () => ((game.factions || []).find(f => f.kind ? f.kind === 'human' : !f.ai) || {}).id || 'f0';
+  function updateSeat() { if (mode === 'online' && p2p.role === 'host') mySeat = hostSeat(); }
+  const isHost = () => mode === 'local' || p2p.role === 'host';
   const dmActive = () => game.dm && isHost();
   function toggleDM() {
     if (!isHost()) { toast('Only the host can switch Dungeon Master mode'); return; }
@@ -2131,25 +2561,41 @@
   const netEl = document.getElementById('net');
   function publish(last) {
     if (room) room.presence({ seat: mode === 'online' ? mySeat : null, g: exportState(last) }).catch(() => {});
-    if (p2p.conn && p2p.conn.open) try { p2p.conn.send({ seat: mySeat, g: exportState(last) }); } catch (e) {}
+    const msg = { seat: mySeat, g: exportState(last) };
+    if (p2p.role === 'host') { for (const c of p2p.conns) if (c.open) try { c.send(msg); } catch (e) {} }
+    else if (p2p.conn && p2p.conn.open) try { p2p.conn.send(msg); } catch (e) {}
   }
 
   // ---------- Direct connection (PeerJS / WebRTC): host gets a code, friend joins with it ----------
-  const p2p = { peer: null, conn: null, code: null, role: null, status: '', ready: false, needSync: false };
+  const p2p = { peer: null, conn: null, conns: [], code: null, role: null, status: '', ready: false, needSync: false };
   const PREFIX = 'medieval-cities-';
   function p2pStop(msg) {
-    try { p2p.conn && p2p.conn.close(); } catch (e) {} try { p2p.peer && p2p.peer.destroy(); } catch (e) {}
-    Object.assign(p2p, { peer: null, conn: null, code: null, role: null, status: msg || '' });
+    try { p2p.conn && p2p.conn.close(); } catch (e) {} for (const c of p2p.conns) try { c.close(); } catch (e) {} try { p2p.peer && p2p.peer.destroy(); } catch (e) {}
+    for (const f of game.factions || []) f.joined = false;
+    Object.assign(p2p, { peer: null, conn: null, conns: [], code: null, role: null, status: msg || '' });
     mode = 'local'; mySeat = null; refreshUI();
   }
-  function p2pSetup(c, seat) {
-    if (seat === 'red') p2p.needSync = true;                          // guest waits for the host's game
-    c.on('open', () => { p2p.conn = c; p2p.status = ''; mode = 'online'; mySeat = seat; selUnit = null; sel = null;
-      updateSeat(); refreshUI();
-      if (seat === 'blue') publish(null); else try { c.send({ hello: 1 }); } catch (e) {}   // ask the host for its game
-      refreshUI(); });
-    c.on('data', d => { if (!d || typeof d !== 'object') return; if (d.hello && seat === 'blue') publish(null); if (d.g) onRemoteState(d.g); });
-    c.on('close', () => { if (p2p.conn === c) p2pStop('Your friend disconnected · playing locally'); });
+  function p2pSetup(c) {                              // a friend's side of the connection
+    p2p.needSync = true;
+    c.on('open', () => { p2p.conn = c; p2p.status = ''; mode = 'online'; selUnit = null; sel = null; refreshUI(); try { c.send({ hello: 1 }); } catch (e) {} });
+    c.on('data', d => { if (!d || typeof d !== 'object') return;
+      if (d.full) { p2pStop('That game has no free player seat'); return; }
+      if (d.assign) { mySeat = d.assign; refreshUI(); }
+      if (d.g) onRemoteState(d.g); });
+    c.on('close', () => { if (p2p.conn === c) p2pStop('Lost the connection to the host · playing locally'); });
+    c.on('error', () => {});
+  }
+  function hostAccept(c) {                            // the host gives every friend the next free "Player" faction
+    c.on('open', () => {
+      const f = (game.factions || []).find(x => x.id !== hostSeat() && (x.kind ? x.kind === 'human' : !x.ai) && !x.joined);
+      if (!f) { try { c.send({ full: 1 }); } catch (e) {} setTimeout(() => { try { c.close(); } catch (e) {} }, 400); return; }
+      f.joined = true; c.seat = f.id; p2p.conns.push(c); mode = 'online'; mySeat = hostSeat(); p2p.status = '';
+      try { c.send({ assign: f.id }); } catch (e) {}
+      commit({ type: 'setup' }); toast(`${f.name} joined`);
+    });
+    c.on('data', d => { if (!d || typeof d !== 'object') return; if (d.hello) publish(null); if (d.g) onRemoteState(d.g); });
+    c.on('close', () => { p2p.conns = p2p.conns.filter(x => x !== c); const f = faction(c.seat); if (f) { f.joined = false; toast(`${f.name} disconnected`); }
+      if (!p2p.conns.length && p2p.role === 'host') p2p.status = 'Ready · waiting for friends to join…'; refreshUI(); });
     c.on('error', () => {});
   }
   function p2pAvailable() { return typeof window.Peer === 'function' && typeof window.RTCPeerConnection === 'function'; }
@@ -2160,9 +2606,9 @@
     p2p.role = 'host'; p2p.status = 'Creating game…'; refreshUI();
     const peer = p2p.peer = new Peer(PREFIX + p2p.code.toLowerCase());
     p2p.ready = false;
-    peer.on('open', () => { p2p.ready = true; p2p.status = 'Ready · waiting for your friend to join…'; refreshUI(); });
+    peer.on('open', () => { p2p.ready = true; mode = 'online'; mySeat = hostSeat(); p2p.status = 'Ready · waiting for friends to join…'; refreshUI(); });
     peer.on('disconnected', () => { if (p2p.peer === peer && !peer.destroyed) { p2p.status = 'Lost the server, reconnecting…'; refreshUI(); try { peer.reconnect(); } catch (e) {} } });
-    peer.on('connection', c => { if (p2p.conn) { c.close(); return; } p2pSetup(c, 'blue'); });
+    peer.on('connection', c => hostAccept(c));
     peer.on('error', e => { if (e.type === 'unavailable-id') { peer.destroy(); p2pHost(); }
       else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'socket-closed') { p2pStop('Could not reach the connection server (' + e.type + '). Check internet / firewall and try again.'); }
       else { p2p.status = 'Error: ' + e.type + ' · still hosting'; refreshUI(); } });
@@ -2175,7 +2621,7 @@
     const peer = p2p.peer = new Peer();
     let tries = 0;
     const attempt = () => { tries++; p2p.status = `Looking for game ${code}… (try ${tries}/8)`; refreshUI();
-      p2pSetup(peer.connect(PREFIX + code.toLowerCase(), { reliable: true }), 'red'); };
+      p2pSetup(peer.connect(PREFIX + code.toLowerCase(), { reliable: true })); };
     peer.on('open', attempt);
     peer.on('error', e => {
       if (e.type === 'peer-unavailable' && tries < 8 && p2p.peer === peer) { setTimeout(attempt, 2500); return; }
@@ -2193,7 +2639,7 @@
     publish({ ...action, seq: game.seq }); saveLocal(); refreshUI();
     if (volley && (volley.treb.length || volley.rain.length)) { seedRng(game.seq * 7919 + 13); launchBoulders(volley.treb, true); launchRain(volley.rain, true); afterIdle = () => commit({ type: 'impact' }); return; }
     // hand the turn over automatically once every unit of this side has nothing left to do
-    if (!['end', 'impact', 'cards', 'points', 'edit'].includes(action.type) && !winner() && sideDone(game.turn)) setTimeout(() => { if (!busy() && !winner() && sideDone(game.turn) && myTurn()) commit({ type: 'end' }); }, 700);
+    if (game.view === 'battle' && !['end', 'impact', 'cards', 'points', 'edit'].includes(action.type) && !winner() && sideDone(game.turn)) setTimeout(() => { if (!busy() && !winner() && sideDone(game.turn) && myTurn()) commit({ type: 'end' }); }, 700);
   }
   function unitDone(u) {
     if (u.stunActive) return true;
@@ -2207,6 +2653,7 @@
   }
   const sideDone = team => units.filter(u => u.team === team && u.dying === null).every(unitDone);
   function endTurnLocal() {
+    if (game.view === 'campaign') { campaignEndTurn(); return { treb: [], rain: [] }; }
     const ending = game.turn;
     for (const u of units) { u.moved = false; u.attacked = false; if (u.team === ending) { u.stunActive = false; u.slowNow = null; } }
     if (game.turn === 'red') game.round += 1;
@@ -2218,11 +2665,11 @@
   }
   function onRemoteState(st) {
     if (!validState(st)) return;
-    if (p2p.needSync) { p2p.needSync = false; if (busy()) { lastRemote = null; } floats = []; selUnit = null; sel = null; applyState(st); toast('Joined the host\'s game'); return; }
+    if (p2p.needSync) { p2p.needSync = false; if (p2p.role === 'join' && !mySeat) mySeat = null; if (busy()) { lastRemote = null; } floats = []; selUnit = null; sel = null; applyState(st); toast('Joined the host\'s game'); return; }
     if (st.seq < game.seq || (st.seq === game.seq && p2p.role !== 'join')) return;   // on a tie the host's game wins
     if (busy()) { lastRemote = st; return; }                 // finish current animation first
     const a = st.last;
-    if (a && a.seq === st.seq && st.seq === game.seq + 1 && ACTIONS.includes(a.type)) {
+    if (a && a.seq === st.seq && st.seq === game.seq + 1 && ACTIONS.includes(a.type) && !document.hidden) {   // a hidden tab doesn't animate: just jump to the result
       game.seq = st.seq;                                     // claim it so we don't replay twice
       play(a, () => { applyState(st); publish(st.last); });  // then keep a copy in my presence too
     } else {
@@ -2231,7 +2678,6 @@
       if (a && a.type === 'end' && Array.isArray(a.impacts))       // show the other side's trebuchet boulders landing
         launchBoulders(a.impacts.map(i => ({ tile: i.tile, from: (i.from || []).map(id => units.find(u => u.id === id)).filter(Boolean) })), false);
       if (a && a.type === 'end' && Array.isArray(a.rain)) launchRain(a.rain, false);
-      if (a && a.type === 'campaign' && myTurn() && !winner() && sideDone(game.turn)) setTimeout(() => { if (!busy() && myTurn() && sideDone(game.turn)) commit({ type: 'end' }); }, 700);
     }
   }
   function seatsTaken() { const s = {}; for (const p of peerList) if (!p.sameTab && p.presence && p.presence.seat) s[p.presence.seat] = true; return s; }
@@ -2249,12 +2695,190 @@
     refreshUI();
   }
 
+  // ===================== CAMPAIGN UI =====================
+  let selCity = null, placingArmy = null, lastHuman = null;
+  function viewer() {
+    if (mode === 'online') return mySeat;
+    const f = faction(ownerOfTeam(game.turn)); if (f && !f.ai) { lastHuman = f.id; return f.id; }
+    return lastHuman || ((game.factions || []).find(x => !x.ai && x.kind !== 'ai') || {}).id || null;
+  }
+  const campEl = document.getElementById('camp'), facsEl = document.getElementById('facs'), lobbyEl = document.getElementById('lobby'), modalEl = document.getElementById('modal');
+  const pts = fid => (game.points && game.points[fid]) || 0;
+  const myCampaignTurn = () => game.view === 'campaign' && myTurn() && !busy() && !game.pending && !game.cwinner;
+  function renderLobby() {
+    if (game.view !== 'lobby') { lobbyEl.style.display = 'none'; return; }
+    const host = isHost(), me = mode === 'online' ? mySeat : null, taken = new Set(game.factions.map(f => f.color));
+    const rows = game.factions.map((f, i) => {
+      const mine = host || f.id === me, kinds = [['human', 'Player'], ['ai', 'AI'], ['off', 'None']];
+      const kindSel = host ? kinds.map(([k, l]) => `<button data-kind="${i}:${k}" class="${f.kind === k ? 'on' : ''}" ${i === 0 && k !== 'human' ? 'disabled' : ''}>${l}</button>`).join('') : `<b>${f.kind === 'human' ? 'Player' : f.kind === 'ai' ? 'AI' : 'None'}</b>`;
+      const sw = PALETTE.map(p => `<button class="sw ${f.color === p.key ? 'on' : ''}" data-color="${i}:${p.key}" style="background:rgb(${p.col})" ${mine && (f.color === p.key || !taken.has(p.key)) ? '' : 'disabled'} title="${p.name}"></button>`).join('');
+      const who = mode === 'online' && f.kind === 'human' ? (i === 0 ? ' · host' : f.joined ? ' · joined' : ' · waiting for a friend…') : '';
+      return `<div class="lrow ${f.kind === 'off' ? 'off' : ''}"><span class="lnm" style="color:rgb(${f.col.map(v => Math.min(255, v + 70))})">${f.name}${f.id === me ? ' (you)' : ''}${who}</span><span class="lk">${kindSel}</span><span class="lsw">${sw}</span></div>`;
+    }).join('');
+    const n = game.factions.filter(f => f.kind !== 'off').length;
+    const html = `<div class="lt">⚔ Medieval Cities · new campaign</div>
+      <div class="lsub">Up to 5 factions. Pick who plays and each faction's colour. Friends join with the code (top right) and take the "Player" seats.</div>
+      ${rows}
+      <div class="lsub">${n} faction${n === 1 ? '' : 's'} · 10 city spots · each faction starts with 1 city and 1 army of 1 swordsman.</div>
+      ${host ? `<button id="lstart" ${n < 2 ? 'disabled' : ''}>Start the campaign</button>` : '<div class="lsub">Waiting for the host to start…</div>'}`;
+    if (lobbyEl.dataset.h !== html) { lobbyEl.dataset.h = html; lobbyEl.innerHTML = html; }
+    lobbyEl.style.display = 'block';
+  }
+  lobbyEl.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || game.view !== 'lobby') return;
+    if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
+    if (b.dataset.kind && isHost()) { const [i, k] = b.dataset.kind.split(':'); game.factions[i].kind = k; commit({ type: 'setup' }); }
+    if (b.dataset.color) { const [i, k] = b.dataset.color.split(':'), f = game.factions[i], p = PALETTE.find(x => x.key === k);
+      if (!(isHost() || f.id === mySeat) || game.factions.some(o => o !== f && o.color === k)) return;
+      f.color = k; f.col = p.col; f.name = p.name; commit({ type: 'setup' }); }
+  });
+  function renderFactions() {
+    if (game.view !== 'campaign') { facsEl.style.display = 'none'; document.getElementById('teams').style.display = game.view === 'lobby' ? 'none' : ''; return; }
+    document.getElementById('teams').style.display = 'none';
+    const me = viewer();
+    const html = game.factions.map(f => {
+      const nc = game.cities.filter(c => c.owner === f.id).length, na = units.filter(u => u.troops && u.team === f.id && u.dying === null).length;
+      const cur = f.id === game.turn, inc = f.id === me ? incomeOf(f.id).pts : null;
+      return `<div class="frow ${cur ? 'cur' : ''} ${f.alive ? '' : 'dead'}" style="--fc:rgb(${f.col.map(v => Math.min(255, v + 60))})"><span class="fsw" style="background:rgb(${f.col})"></span>
+        <b>${f.name}</b>${f.id === me ? ' (you)' : f.ai ? ' · AI' : ''}${f.alive ? '' : ' · ✝ defeated'} · 🏰 ${nc} · ⚑ ${na}${f.id === me ? ` · <b style="color:#e8c25a">${pts(f.id)} pts</b> <span class="k">(+${inc}/turn)</span>` : ''}</div>`;
+    }).join('');
+    if (facsEl.dataset.h !== html) { facsEl.dataset.h = html; facsEl.innerHTML = html; }
+    facsEl.style.display = 'block';
+  }
+  const btn = (attr, label, ok, title = '') => `<button ${attr} ${ok ? '' : 'disabled'} title="${title}">${label}</button>`;
+  function renderCamp() {
+    if (game.view !== 'campaign' || dmActive()) { campEl.style.display = 'none'; return; }
+    const me = viewer(), my = myCampaignTurn(), p = pts(me);
+    let html = '';
+    const a = selUnit && selUnit.troops ? selUnit : null, city = selCity || (a && cityAt([a.col, a.row]));
+    if (a) {
+      const mine = a.team === me, fa = faction(a.team);
+      html += `<div class="t" style="color:rgb(${fa.col.map(v => Math.min(255, v + 70))})">⚑ ${fa.name} army</div>`;
+      if (!mine) html += '<div class="k">Its troops are unknown.</div>';
+      else {
+        const n = {}; for (const t of a.troops) n[t.type] = (n[t.type] || 0) + 1;
+        html += `<div>${Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', ') || 'no troops'} <span class="k">(${a.troops.length}/${MAX_TROOPS})</span></div>`;
+        html += `<div class="k">${a.moved ? 'Has moved this turn' : 'Can move 2 (3 if both steps are on road)'}</div>`;
+        const here = [a.col, a.row], road = hasRoad(here);
+        html += `<div class="row">${!road && !cityAt(here) ? btn('data-ca="road"', `Build road here · ${ROAD_COST} pts`, my && p >= ROAD_COST) : ''}${road ? btn('data-ca="unroad"', 'Destroy road here', my) : ''}</div>`;
+        const homes = game.cities.filter(c => c.owner === me && hexDist(here, [c.col, c.row]) <= 1);
+        for (const c of homes) { const types = recruitable(c);
+          html += `<div class="sub">Recruit from ${c.name}</div>` + (types.length ? `<div class="grid">${types.map(t => btn(`data-recruit="${c.id}:${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t)}`, my && p >= unitCost(t) && a.troops.length < MAX_TROOPS)).join('')}</div>` : '<div class="k">No unit buildings in this city yet.</div>'); }
+      }
+    }
+    if (city) {
+      const own = city.owner === me, fo = faction(city.owner), sees = seesCity(city, me);
+      html += `<div class="t" style="margin-top:${a ? 10 : 0}px;color:${fo ? `rgb(${fo.col.map(v => Math.min(255, v + 70))})` : '#c8b98a'}">🏰 ${city.name}${fo ? ` · ${fo.name}` : ' · free land'}</div>`;
+      if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} pts (right-click it).</div>`;
+      else {
+        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} pts/turn · defended by ${garrisonOf(city).map(t => UNIT_TYPES[t].name).join(', ')}</div>`; }
+        if (sees) {
+          html += `<div class="sub">Buildings ${city.buildings.length}/${CITY_SLOTS}${!own ? ' (seen through the road link)' : ''}</div><div class="blist">${city.buildings.map((b, i) => `<span class="bld">${BUILDINGS[b].name}${own ? btn(`data-unbuild="${i}"`, '✕', my && !city.acted && p >= DESTROY_COST, `Destroy (${DESTROY_COST} pts)`) : ''}</span>`).join('') || '<span class="k">none</span>'}</div>`;
+        } else html += '<div class="k">Its buildings are unknown. Connect a road to it to see them.</div>';
+        if (own) {
+          html += city.acted ? '<div class="k">Already built or destroyed something here this turn.</div>' : '';
+          if (city.buildings.length < CITY_SLOTS) html += `<div class="sub">Build (1 per turn)</div><div class="grid">${Object.entries(BUILDINGS).filter(([k]) => !city.buildings.includes(k)).map(([k, b]) => btn(`data-build="${k}"`, `${b.name} · ${b.cost}`, my && !city.acted && p >= b.cost, b.text)).join('')}</div>`;
+          const types = recruitable(city);
+          html += `<div class="sub">New army</div>` + (placingArmy && placingArmy.city === city.id ? `<div class="k">${UNIT_TYPES[placingArmy.type].name}: click a highlighted tile next to the city.</div>${btn('data-ca="cancelnew"', 'Cancel', true)}`
+            : types.length ? `<div class="grid">${types.map(t => btn(`data-newarmy="${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t)}`, my && p >= unitCost(t))).join('')}</div><div class="k">Pick its first unit, then the tile. It can move next turn.</div>` : '<div class="k">Build a unit building first.</div>');
+        }
+      }
+    }
+    if (!html) html = `<div class="k">Click a city or an army.</div>`;
+    if (campEl.dataset.h !== html) { campEl.dataset.h = html; campEl.innerHTML = html; }
+    campEl.style.display = 'block';
+  }
+  campEl.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.disabled || !myCampaignTurn()) return;
+    const me = viewer(), a = selUnit && selUnit.troops ? selUnit : null, city = selCity || (a && cityAt([a.col, a.row]));
+    const spend = n => { game.points = { ...game.points, [me]: pts(me) - n }; };
+    if (b.dataset.ca === 'road' && a && pts(me) >= ROAD_COST) { game.roads = [...(game.roads || []), key(a.col, a.row)]; spend(ROAD_COST); commit({ type: 'road' }); }
+    else if (b.dataset.ca === 'unroad' && a) { game.roads = (game.roads || []).filter(k => k !== key(a.col, a.row)); commit({ type: 'road' }); toast('Road destroyed'); }
+    else if (b.dataset.ca === 'cancelnew') { placingArmy = null; refreshUI(); }
+    else if (b.dataset.recruit && a) { const [cid, t] = b.dataset.recruit.split(':'); if (pts(me) < unitCost(t) || a.troops.length >= MAX_TROOPS) return;
+      a.troops = [...a.troops, troop(t)]; spend(unitCost(t)); commit({ type: 'recruit' }); toast(`${UNIT_TYPES[t].name} joins the army`); }
+    else if (b.dataset.build && city && city.owner === me && !city.acted) { const k = b.dataset.build, bd = BUILDINGS[k]; if (pts(me) < bd.cost || city.buildings.length >= CITY_SLOTS) return;
+      city.buildings = [...city.buildings, k]; city.acted = true; spend(bd.cost); commit({ type: 'build' }); toast(`${bd.name} built in ${city.name}`); }
+    else if (b.dataset.unbuild !== undefined && city && city.owner === me && !city.acted) { if (pts(me) < DESTROY_COST) return;
+      const i = Number(b.dataset.unbuild); toast(`${BUILDINGS[city.buildings[i]].name} torn down`); city.buildings = city.buildings.filter((_, j) => j !== i); city.acted = true; spend(DESTROY_COST); commit({ type: 'build' }); }
+    else if (b.dataset.newarmy && city) { placingArmy = { city: city.id, type: b.dataset.newarmy }; refreshUI(); }
+  });
+  const armySpawnTiles = city => nbIn(city.col, city.row, CCOLS, CROWS).filter(n => !isWater(n) && !unitAt(n) && !cityAt(n));
+  function placeNewArmy(h) {                                          // left-click on a highlighted tile
+    const pa = placingArmy, city = pa && game.cities.find(c => c.id === pa.city), me = viewer();
+    if (!city || !h || !armySpawnTiles(city).some(n => n[0] === h[0] && n[1] === h[1])) { toast('Pick a highlighted tile next to the city'); return; }
+    if (pts(me) < unitCost(pa.type)) { toast('Not enough points'); placingArmy = null; refreshUI(); return; }
+    const a = runtimeUnit({ id: `army-${me}-${Date.now().toString(36)}`, type: 'army', team: me, col: h[0], row: h[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [troop(pa.type)] });
+    units.push(a); game.points = { ...game.points, [me]: pts(me) - unitCost(pa.type) }; placingArmy = null; selUnit = a; sel = h; selCity = null;
+    commit({ type: 'recruit' }); toast('New army raised · it can move next turn');
+  }
+  function showModal(html) { modalEl.innerHTML = html; modalEl.style.display = 'flex'; }
+  function hideModal() { modalEl.style.display = 'none'; modalEl.innerHTML = ''; }
+  modalEl.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.m === 'found') { const c = game.cities.find(x => x.id === b.dataset.city), me = viewer();
+      if (c && !c.owner && pts(me) >= FOUND_COST) { c.owner = me; c.buildings = []; c.acted = true; game.points = { ...game.points, [me]: pts(me) - FOUND_COST }; commit({ type: 'found' }); toast(`${c.name} founded!`); } }
+    if (b.dataset.m === 'keep') captureCity(true);
+    if (b.dataset.m === 'raze') captureCity(false);
+    hideModal(); refreshUI();
+  });
+  function renderPending() {                        // the capturing player decides: keep the city or raze it
+    const p = game.pending;
+    if (p && p.type === 'capture' && p.by === viewer() && (mode === 'local' || mySeat === p.by) && !faction(p.by).ai) {
+      const c = game.cities.find(x => x.id === p.city);
+      if (c && modalEl.dataset.p !== c.id) { modalEl.dataset.p = c.id;
+        showModal(`<div class="mbox"><div class="t">🏰 ${c.name} has fallen</div><div>Keep it with everything inside, or raze it to the ground for ${Math.floor(cityValue(c) / 2)} points (it becomes free land)?</div>
+          <div class="row"><button data-m="keep">Capture it</button><button data-m="raze">Raze it · +${Math.floor(cityValue(c) / 2)} pts</button></div></div>`); }
+    } else if (modalEl.dataset.p && (!p || p.type !== 'capture')) { modalEl.dataset.p = ''; if (!modalEl.querySelector('[data-m=found]')) hideModal(); }
+  }
+  // right-click orders for an army on the campaign map
+  function campaignOrder(u, h) {
+    const tgt = unitAt(h), city = cityAt(h), here = [u.col, u.row];
+    const hint = txt => { const m = center(...h); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
+    if (isWater(h)) { hint('Water'); return; }
+    const foeArmy = tgt && tgt.troops && tgt.team !== u.team ? tgt : null, foeCity = city && city.owner && city.owner !== u.team ? city : null, freeSpot = city && !city.owner ? city : null;
+    const goAdj = then => {                                          // walk next to the target first (if needed), then do something
+      if (hexDist(here, h) === 1) { then(); return; }
+      if (u.moved) { hint('Already moved'); return; }
+      const b = reach(u); let best = null;
+      for (const [k, d] of b.dist) { if (d === 0) continue; const t = k.split(',').map(Number); if (unitAt(t) || hexDist(t, h) !== 1) continue; if (!best || d < best.d) best = { t, d }; }
+      if (!best) { hint('Too far'); return; }
+      const mv = { type: 'move', id: u.id, path: pathTo(b, best.t) }; mv.rng = 1; play(mv, () => { commit(mv); then(); });
+    };
+    if (foeArmy || foeCity) { if (u.attacked) { hint('Already fought this turn'); return; } goAdj(() => engage(u, foeArmy || foeCity)); return; }
+    if (freeSpot) { goAdj(() => { const me = viewer();
+      if (pts(me) < FOUND_COST) { toast(`Founding a city costs ${FOUND_COST} points (you have ${pts(me)})`); return; }
+      showModal(`<div class="mbox"><div class="t">🏰 Found ${freeSpot.name}?</div><div>Turn this free land into your city for ${FOUND_COST} points. It will give +1 point every turn.</div>
+        <div class="row"><button data-m="found" data-city="${freeSpot.id}">Found it · ${FOUND_COST} pts</button><button data-m="no">Not now</button></div></div>`); }); return; }
+    if (tgt) return;
+    if (u.moved) { hint('Already moved'); return; }
+    const b = reach(u); if (!b.dist.has(key(...h))) { hint('Too far'); return; }
+    const mv = { type: 'move', id: u.id, path: pathTo(b, h) }; mv.rng = 1; play(mv, () => commit(mv));
+  }
+  // drawing: roads, free land markers, cities in their owner's colour, spawn highlights
+  const cityMeshCache = {};
+  const cityMesh = col => cityMeshCache[col.join()] || (cityMeshCache[col.join()] = buildCity(col));
+  function drawCampaignGround(t) {
+    const rs = roadSet(), nodes = new Set(rs); for (const c of game.cities) if (c.owner) nodes.add(key(c.col, c.row));
+    ctx.lineCap = 'round';
+    for (const pass of [0, 1]) for (const k of rs) { const [c, r] = k.split(',').map(Number), m = center(c, r), x = m.x + OX, y = m.y + OY;
+      ctx.strokeStyle = pass ? '#8a6c46' : 'rgba(40,28,16,0.75)'; ctx.lineWidth = pass ? 14 : 20;
+      let any = false; for (const n of nbIn(c, r, CCOLS, CROWS)) if (nodes.has(key(...n))) { const q = center(...n); any = true; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo((x + q.x + OX) / 2, (y + q.y + OY) / 2); ctx.stroke(); }
+      ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.ellipse(x, y, (pass ? 7 : 10) * (any ? 1 : 1.6), (pass ? 7 : 10) * SQ * (any ? 1 : 1.6), 0, 0, 7); ctx.fill(); }
+    for (const c of game.cities) if (!c.owner) { const m = center(c.col, c.row), x = m.x + OX, y = m.y + OY;     // free land: a ring of stones
+      ctx.strokeStyle = 'rgba(220,210,170,0.55)'; ctx.setLineDash([8, 8]); ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y, S * 0.55, S * 0.55 * SQ, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      for (let i = 0; i < 8; i++) { const a = i / 8 * 7; ctx.fillStyle = '#8d8676'; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * S * 0.55, y + Math.sin(a) * S * 0.55 * SQ, 5, 3.5, 0, 0, 7); ctx.fill(); } }
+    if (placingArmy) { const c = game.cities.find(x => x.id === placingArmy.city);
+      if (c) for (const n of armySpawnTiles(c)) { tintHex(n, `rgba(226,206,130,${0.22 + 0.08 * Math.sin(t * 5)})`); outlineHex(n, 'rgba(240,220,140,0.95)', 3); } }
+    if (selCity) outlineHex([selCity.col, selCity.row], 'rgba(240,220,140,0.9)', 3);
+  }
   // ---------- UI ----------
   const hovEl = document.getElementById('hov'), selEl = document.getElementById('sel'), infoEl = document.getElementById('info');
   const turnEl = document.getElementById('turn'), topEl = document.getElementById('top'), flashEl = document.getElementById('flash'), vicEl = document.getElementById('victory');
   let seenTurn = 'blue', seenWinner = null, vicTimer = null;
   const fmt = h => h ? `${h[0]}, ${h[1]}` : '–';
-  const myTurn = () => mode === 'local' || game.turn === mySeat;
+  const myTurn = () => { if (game.view === 'lobby') return false; const fid = ownerOfTeam(game.turn), f = faction(fid);
+    if (!f) return mode === 'local' || game.turn === mySeat; if (f.ai) return false; return mode === 'local' || fid === mySeat; };
   const canCommand = u => u && !winner() && u.team === game.turn && myTurn() && (T(u).hero ? heroCanAct(u, false) : !(u.moved && u.attacked));
 
   function statusOf(u) {
@@ -2287,7 +2911,7 @@
   // ---------- Card panel (shows the selected hero's cards to everyone) ----------
   const cardsEl = document.getElementById('cards');
   let shopFor = null;
-  const canManage = u => mode === 'local' || mySeat === u.team;
+  const canManage = u => { const f = faction(ownerOfTeam(u.team)); if (f && f.ai) return false; return mode === 'local' || mySeat === ownerOfTeam(u.team); };
   function cardHtml(id, l, o = {}) {
     const c = CARDS[id];
     const cost = c.kind === 'skill' ? `<span class="mc">${c.cost(l)} mana</span>` : '<span class="mc pas">passive</span>';
@@ -2370,6 +2994,7 @@
       tile: cd === CARDS.rain ? 'right-click tiles to mark them (1 mana each)' : 'right-click a tile', empty: 'right-click an empty tile', unit: 'right-click any unit (friend or foe)', any: 'right-click a unit next to her', cone: 'aim with the mouse, right-click to set the cone' }[cd.target] || 'right-click a target';
   }
   function refreshUI() {
+    renderLobby(); renderFactions(); renderCamp(); renderPending();
     if (armed && (!selUnit || armed.id !== selUnit.id)) armed = null;
     if (shopFor && (!selUnit || shopFor.id !== selUnit.id)) shopFor = null;
     renderCards();
@@ -2377,12 +3002,12 @@
     const troopsText = u => { const n = {}; for (const t of u.troops) n[t.type] = (n[t.type] || 0) + 1;
       return Object.entries(n).map(([ty, k]) => `${k} ${UNIT_TYPES[ty].name}`).join(', ') || 'no troops'; };
     infoEl.textContent = armed && selUnit && armed.id === selUnit.id ? `Casting ${CARDS[armed.skill].name} (Lv ${armed.lvl}): ${castHint(CARDS[armed.skill], armed)} · Esc to ${armed.skill === 'rain' ? 'finish' : 'cancel'}` :
-      selUnit && selUnit.troops ? `${teamName(selUnit.team)} Army · ${troopsText(selUnit)} · Move ${selUnit.move}` + (selUnit.team === game.turn ? ` · ${selUnit.attacked ? 'done' : selUnit.moved ? 'can still attack' : 'ready'}` : '') :
+      selUnit && selUnit.troops ? `${teamName(selUnit.team)} Army · ${seesArmy(selUnit) ? troopsText(selUnit) : 'troops unknown'} · Move ${selUnit.move}` + (selUnit.team === game.turn ? ` · ${selUnit.attacked ? 'done' : selUnit.moved ? 'can still attack' : 'ready'}` : '') :
       selUnit ? `${teamName(selUnit.team)} ${selUnit.name} · HP ${selUnit.hp}/${selUnit.maxHp}${T(selUnit).hero ? ` · Mana ${selUnit.mana}/${selUnit.manaMax}` : ''} · Damage ${baseDmg(selUnit)} · Move ${moveOf(selUnit)}` + traits(selUnit) + (isStunned(selUnit) ? ' · STUNNED' : '') + (selUnit.guard ? ' · PROTECTED' : '') + (tauntLock(selUnit, [selUnit.col, selUnit.row]) ? ' · TAUNTED' : '') +
       (selUnit.team === game.turn ? ` · ${statusOf(selUnit)}` : '') : '';
-    const w = winner(), where = game.view === 'campaign' ? '🗺 Campaign' : '⚔ Battle';
+    const w = winner(), where = game.view === 'campaign' ? '🗺 Campaign' : game.view === 'lobby' ? '⚙ Setting up' : '⚔ Battle';
     const turnHtml = w ? `${where} · <b style="color:rgb(${TEAM[w].map(c => c + 70)})">${teamName(w)} wins the battle!</b> · back to the campaign map…`
-      : `${where} · Round ${game.round} · <b style="color:rgb(${TEAM[game.turn].map(c => c + 70)})">${poss(teamName(game.turn))} turn</b>` +
+      : game.view === 'lobby' ? `${where} a new campaign` : game.cwinner ? `👑 <b style="color:rgb(${TEAM[game.cwinner].map(c => Math.min(255, c + 70))})">${teamName(game.cwinner)} rules the land!</b> · hold ⟲ Reset for a new campaign` : `${where} · Round ${game.round} · <b style="color:rgb(${TEAM[game.turn].map(c => c + 70)})">${poss(teamName(game.turn))} turn</b>` +
         (mode === 'online' ? (myTurn() ? ' · your move' : ' · waiting for opponent') : '');
     if (Date.now() - resetArmed > 2000 && lastTurnHtml !== turnHtml) { lastTurnHtml = turnHtml; turnEl.innerHTML = turnHtml; }
     const bdm = document.getElementById('bdm'), dmEl = document.getElementById('dm');
@@ -2391,7 +3016,7 @@
     if (dmActive() && game.view === 'campaign') {
       const sideBtn = (t, lbl) => `<button data-side="${t}" class="${dmSide === t ? 'on' : ''}">${lbl}</button>`, a = selUnit && selUnit.troops ? selUnit : null;
       const html = `<div class="t">🧙 Dungeon Master · campaign</div>
-        <div class="row"><span class="lbl">Side</span>${sideBtn('blue', teamName('blue'))}${sideBtn('red', teamName('red'))}</div>
+        <div class="row" style="flex-wrap:wrap"><span class="lbl">Side</span>${game.factions.map(f => sideBtn(f.id, f.name)).join('')}</div>
         <div class="row"><button data-place="army:${dmSide}" class="${placing && placing.type === 'army' ? 'on' : ''}">⚑ New ${teamName(dmSide)} army</button></div>
         ${a ? `<div class="sub">${teamName(a.team)} army · ${a.troops.length} troop${a.troops.length === 1 ? '' : 's'} (first 7 fight) · click to remove</div>
           <div class="grid">${a.troops.map((t, i) => `<button data-rmtroop="${i}">${UNIT_TYPES[t.type].name} ✕</button>`).join('') || '<span class="na">empty</span>'}</div>
@@ -2428,7 +3053,7 @@
       const active = team === game.turn && !w, left = active ? alive.filter(u => !unitDone(u)).length : alive.length;
       const pips = alive.map(u => `<span class="pip ${!active ? 'on' : unitDone(u) ? '' : u.moved ? 'half' : 'on'}"></span>`).join('');
       const you = mode === 'online' && mySeat === team ? ' (you)' : '';
-      const pts = (game.points && game.points[team]) || 0, ptsHtml = ` · <b style="color:#e8c25a">${pts} pt${pts === 1 ? '' : 's'}</b>${isHost() ? `<button data-pt="${team}:-1">−</button><button data-pt="${team}:1">+</button>` : ''}`;
+      const pts = (game.points && game.points[team]) || 0, ptsHtml = (game.factions || []).length && ownerOfTeam(team) !== viewer() ? '' : ` · <b style="color:#e8c25a">${pts} pt${pts === 1 ? '' : 's'}</b>${isHost() && !(game.factions || []).length ? `<button data-pt="${team}:-1">−</button><button data-pt="${team}:1">+</button>` : ''}`;
       const html = `<span class="nm" style="color:rgb(${TEAM[team].map(v => v + 80)})">${teamName(team)}${you}</span> · ` +
         (active ? `${left}/${alive.length} ${game.view === 'campaign' ? 'armies' : 'units'} left to act` : `${alive.length} ${game.view === 'campaign' ? (alive.length === 1 ? 'army' : 'armies') : (alive.length === 1 ? 'unit' : 'units')} · waiting`) + `<span class="pips">${pips}</span>` + ptsHtml;
       if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
@@ -2436,7 +3061,7 @@
     }
     endBtn.disabled = !!w || !myTurn() || busy() || endLocked();
     // turn change flash
-    if (!w && game.turn !== seenTurn) {
+    if (!w && game.turn !== seenTurn && game.view !== 'lobby') {
       seenTurn = game.turn; turnStartedAt = Date.now(); const c = `rgb(${TEAM[game.turn].map(v => v + 40)})`;
       topEl.style.setProperty('--tc', c); topEl.classList.remove('pulse'); void topEl.offsetWidth; topEl.classList.add('pulse');
       flashEl.style.color = `rgb(${TEAM[game.turn].map(v => v + 90)})`;
@@ -2444,20 +3069,20 @@
       flashEl.classList.remove('show'); void flashEl.offsetWidth; flashEl.classList.add('show');
     }
     // big victory banner for 4 seconds
-    const wKey = w ? game.view + ':' + w : null;
+    const wKey = w ? game.view + ':' + w : game.cwinner ? 'camp:' + game.cwinner : null;
     if (wKey !== seenWinner) {
       seenWinner = wKey; clearTimeout(vicTimer);
       if (w && game.view === 'battle' && (mode !== 'online' || p2p.role === 'host')) setTimeout(returnToCampaign, 4300);
-      if (w) {
+      if (w || game.cwinner) {
         const n = document.getElementById('vname');
-        n.textContent = mode === 'online' ? `${teamName(w)} wins the battle${w === mySeat ? ' · you' : ''}` : `${teamName(w)} wins the battle`;
-        n.style.color = `rgb(${TEAM[w].map(v => v + 80)})`;
+        n.textContent = w ? `${teamName(w)} wins the battle` : `${teamName(game.cwinner)} wins the campaign`;
+        n.style.color = `rgb(${TEAM[w || game.cwinner].map(v => Math.min(255, v + 80))})`;
         vicEl.classList.add('show'); vicTimer = setTimeout(() => vicEl.classList.remove('show'), 4000);
       } else { vicEl.classList.remove('show'); seenTurn = game.turn; }
     }
     if (!room) {                                           // direct-connection panel
       let html;
-      if (p2p.conn) html = `<div>🟢 Connected to your friend · you are <b style="color:rgb(${TEAM[mySeat].map(c => c + 70)})">${teamName(mySeat)}</b></div>
+      if (p2p.conn || p2p.conns.length) html = `<div>🟢 ${p2p.role === 'host' ? `Hosting · code <b style="letter-spacing:2px;color:#f0e2a8">${p2p.code}</b> · ${p2p.conns.length} friend${p2p.conns.length === 1 ? '' : 's'}` : 'Connected to the host'} · you are <b style="color:rgb(${(TEAM[mySeat] || [200, 200, 200]).map(c => Math.min(255, c + 70))})">${teamName(mySeat)}</b></div>
         <div class="seats"><button data-act="leave">Disconnect</button></div>`;
       else if (p2p.role === 'host') html = `<div>Game code: <b style="font-size:17px;letter-spacing:2px;color:#f0e2a8">${p2p.ready ? p2p.code : '·····'}</b></div>
         <div class="k">${p2p.status}</div><div class="seats"><button data-act="leave">Cancel</button></div>`;
@@ -2577,8 +3202,9 @@
           commit({ type: 'edit' });
         } else if (h) toast('That tile is taken');
       } else {
+        if (placingArmy && game.view === 'campaign') { placeNewArmy(h); down = null; dragging = false; cv.classList.remove('drag'); return; }
         sel = (h && sel && h[0] === sel[0] && h[1] === sel[1]) ? null : h;
-        selUnit = unitAt(sel) || null; if (selUnit && hiddenFromMe(selUnit)) selUnit = null; refreshUI();
+        selUnit = unitAt(sel) || null; if (selUnit && hiddenFromMe(selUnit)) selUnit = null; selCity = game.view === 'campaign' ? cityAt(sel) : null; refreshUI();
       }
     }
     down = null; dragging = false; cv.classList.remove('drag');
@@ -2598,7 +3224,7 @@
     { const k = e.key.toLowerCase(); if ('wasd'.includes(k) && k.length === 1 || k === 'shift') { held.add(k); if (k !== 'shift') return; } }
     if (e.repeat) return;
     const k = e.key.toLowerCase();
-    if (k === 'escape') { if (armed) { armed = null; refreshUI(); return; } if (shopFor) { shopFor = null; refreshUI(); return; } if (placing) { placing = null; refreshUI(); return; } sel = null; selUnit = null; refreshUI(); }
+    if (k === 'escape') { if (placingArmy) { placingArmy = null; refreshUI(); return; } if (modalEl.style.display === 'flex' && !game.pending) { hideModal(); return; } if (armed) { armed = null; refreshUI(); return; } if (shopFor) { shopFor = null; refreshUI(); return; } if (placing) { placing = null; refreshUI(); return; } sel = null; selUnit = null; refreshUI(); }
     if (k === 'delete' || k === 'backspace') removeUnit(unitAt(hover) || selUnit);   // DM: delete the unit under the mouse
     if (k === ' ') { e.preventDefault(); endTurn(); }
     if (k === 'tab') {                                       // cycle through your units that can still act
@@ -2616,6 +3242,7 @@
     const hint = (txt, hh) => { const m = center(...hh); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
     const go = a => { a.rng = Math.floor(Math.random() * 4e9); play(a, () => { commit(a); if (a.skill === 'rain' && armed && armed.skill === 'rain' && (u.mana || 0) < 1) { armed = null; refreshUI(); } }); };
     if (!canCommand(u)) { hint(winner() ? 'Game over' : isStunned(u) ? 'Stunned' : u.team !== game.turn || !myTurn() ? 'Not your turn' : 'Already acted', here); return; }
+    if (game.view === 'campaign') { if (u.troops && !game.pending) campaignOrder(u, h); return; }
     const lock = tauntLock(u, here), lockedOut = (from, target) => { const p = tauntLock(u, from); return p && p !== target; };
     if (armed && armed.id === u.id) {                         // casting a skill card
       const card = CARDS[armed.skill], L = armed.lvl;
@@ -2777,11 +3404,6 @@
       path = approach(r, tgt); if (!path) { hint(lock ? 'Taunted: must target the Paladin' : 'Out of reach', h); return; }
       from = path[path.length - 1];
     }
-    if (u.troops) {                                    // campaign: armies meeting start a battle
-      if (!tgt.troops) return;
-      const mv = { type: 'move', id: u.id, path };
-      play(mv, () => { if (path.length) commit(mv); startBattle(u, tgt); }); return;
-    }
     const targets = [tgt.id];
     if (r === 2 && hexDist(from, h) === 2) { const ld = lineDir(from, h); if (ld) { const mo = liveUnitAt(step(from, ld.d)); if (mo && mo.team !== u.team) targets.push(mo.id); } }
     go({ type: 'attack', id: u.id, path, target: tgt.id, targets });
@@ -2792,9 +3414,12 @@
 
   // ---------- Start ----------
   if (loadLocal()) setTimeout(() => toast(`Continuing your saved game · Round ${game.round}`), 600); else applyState(freshState(0));
-  setInterval(() => { if (lastRemote && !busy()) { const st = lastRemote; lastRemote = null; onRemoteState(st); } refreshUI(); }, 250);
+  let stuckSince = 0;
+  setInterval(() => {
+    if (lastRemote && busy() && document.hidden) { stuckSince = stuckSince || Date.now(); if (Date.now() - stuckSince > 1500) { for (const u of units) { u.path = null; u.atk = null; } units = units.filter(u => u.dying === null); projectiles = []; afterIdle = null; } } else stuckSince = 0;
+    if (lastRemote && !busy()) { const st = lastRemote; lastRemote = null; onRemoteState(st); } try { aiTick(); } catch (e) { console.error(e); } refreshUI(); }, 250);
   setTimeout(() => {
-    buildLayers();
+    layersReady = true; ensureLayers();
     document.getElementById('load').remove();
     resize(true);
     loop();
