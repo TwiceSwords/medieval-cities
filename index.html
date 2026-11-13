@@ -52,10 +52,10 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v0.2</div>
+  <div class="t">Medieval Cities · v0.3</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
-  <div class="k">Drag: pan · Wheel: zoom · Left-click: select · Esc: deselect</div>
+  <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
   <div class="k">Right-click: move / attack enemy · Tab: next unit</div>
   <div class="k">Turn passes automatically · End turn / Space: end it early · R twice: new game</div>
 </div>
@@ -777,7 +777,15 @@
   }
   let last = performance.now();
   function loop(now) { now = now || performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    updateUnits(dt); turnUnits(dt); render(now / 1000); requestAnimationFrame(loop); }
+    panKeys(dt); updateUnits(dt); turnUnits(dt); render(now / 1000); requestAnimationFrame(loop); }
+  // WASD camera: hold to scroll (Shift = faster)
+  const held = new Set();
+  function panKeys(dt) {
+    if (!held.size) return;
+    const sp = (held.has('shift') ? 1600 : 800) * dt;
+    if (held.has('w')) off.y += sp; if (held.has('s')) off.y -= sp;
+    if (held.has('a')) off.x += sp; if (held.has('d')) off.x -= sp;
+  }
 
   // ---------- Online: players & sync (room capability) ----------
   // Each player's presence carries the latest shared game state; the highest seq wins.
@@ -1144,6 +1152,7 @@
   addEventListener('keydown', e => {
     if (e.target && e.target.tagName === 'INPUT') { if (e.key === 'Enter') { if (e.target.id === 'code') p2pJoin(e.target.value); else e.target.blur(); } return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); return; }
+    { const k = e.key.toLowerCase(); if ('wasd'.includes(k) && k.length === 1 || k === 'shift') { held.add(k); if (k !== 'shift') return; } }
     if (e.repeat) return;
     const k = e.key.toLowerCase();
     if (k === 'r') resetGame();
@@ -1190,6 +1199,8 @@
     const a = { type: 'move', id: u.id, path: pathTo(b, h) };
     play(a, () => commit(a));
   });
+  addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
+  addEventListener('blur', () => held.clear());
   addEventListener('resize', () => resize(false));
 
   // ---------- Start ----------
