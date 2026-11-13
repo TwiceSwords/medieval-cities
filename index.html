@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Medieval Cities</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  html,body{margin:0;height:100%;background:#12140e;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+  canvas{display:block;width:100vw;height:100vh;cursor:grab;touch-action:none}
+  canvas.drag{cursor:grabbing}
+  #hud{position:fixed;left:12px;top:12px;background:rgba(10,12,8,.75);color:#c9cdbd;padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;border:1px solid rgba(255,255,255,.07);pointer-events:none;user-select:none}
+  #hud .t{color:#e2d6a6;font-weight:600;font-size:14px}
+  #hud .k{color:#8f9682}
+  #top{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:rgba(10,12,8,.8);color:#d8dccb;padding:8px 10px 8px 16px;border-radius:8px;font-size:14px;border:1px solid rgba(255,255,255,.08);display:flex;gap:14px;align-items:center;user-select:none}
+  button{font:inherit;font-size:13px;background:#3b3524;color:#eadfb4;border:1px solid #6b5d36;border-radius:6px;padding:5px 12px;cursor:pointer}
+  button:hover:not(:disabled){background:#4a422c}button:disabled{opacity:.4;cursor:default}button.on{background:#6b5d36;color:#fff4cf}
+  #teams{position:fixed;bottom:14px;right:12px;display:flex;flex-direction:column;gap:6px;user-select:none;pointer-events:none}
+  .team{background:rgba(10,12,8,.82);color:#c9cdbd;padding:8px 14px;border-radius:8px;font-size:13px;border:1px solid rgba(255,255,255,.07);min-width:190px;opacity:.6;transition:opacity .3s,border-color .3s}
+  .team.active{opacity:1;border-color:var(--tc)}
+  .team .nm{font-weight:700;letter-spacing:1px}
+  .pips{display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle}.pip{width:10px;height:10px;border-radius:2px;border:1px solid #b2924a;background:transparent}.pip.on{background:#b2924a}.pip.half{background:linear-gradient(90deg,#96783a 50%,transparent 50%)}
+  #savebar{position:fixed;left:12px;bottom:14px;display:flex;gap:6px;align-items:center;background:rgba(10,12,8,.8);padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.07);font-size:12px;user-select:none}
+  #savebar .k{color:#8f9682;margin-left:4px}
+  #toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:rgba(20,22,14,.92);color:#eadfb4;padding:8px 16px;border-radius:8px;border:1px solid #6b5d36;font-size:14px;opacity:0;pointer-events:none}
+  #toast.show{animation:toast 2.6s ease-out}@keyframes toast{0%{opacity:0;transform:translate(-50%,8px)}10%{opacity:1;transform:translate(-50%,0)}75%{opacity:1}100%{opacity:0}}
+  #dm{position:fixed;left:12px;top:190px;background:rgba(10,12,8,.85);color:#c9cdbd;padding:10px 12px;border-radius:8px;font-size:13px;border:1px solid #6b5d36;user-select:none;display:none;width:270px}
+  #dm .t{color:#e2d6a6;font-weight:700;margin-bottom:6px}#dm .row{display:flex;gap:6px;align-items:center;margin:5px 0}#dm .lbl{width:58px;color:#8f9682}
+  #dm .sub{color:#c8b98a;font-size:12px;margin-top:9px;border-top:1px solid rgba(255,255,255,.08);padding-top:7px}
+  #dm input{font:inherit;font-size:13px;width:52px;background:#1d2016;color:#eadfb4;border:1px solid #6b5d36;border-radius:6px;padding:3px 6px}
+  #dm table.st{border-collapse:collapse;margin-top:4px}#dm .st th{font-weight:400;color:#8f9682;font-size:11px;text-align:left;padding:0 4px}#dm .st td{padding:2px 4px 2px 0}#dm .st input{width:48px}
+  #dm .st td.na{color:#5d6354;text-align:center}
+  #dm .k{color:#8f9682;font-size:12px;margin-top:6px;line-height:1.5}
+  #net{position:fixed;right:12px;top:12px;background:rgba(10,12,8,.8);color:#c9cdbd;padding:10px 12px;border-radius:8px;font-size:13px;border:1px solid rgba(255,255,255,.07);user-select:none}
+  #net .seats{display:flex;gap:6px;margin-top:8px}
+  #net .k{color:#8f9682;max-width:300px}
+  #net input{font:inherit;font-size:13px;width:64px;text-transform:uppercase;letter-spacing:1px;background:#1d2016;color:#eadfb4;border:1px solid #6b5d36;border-radius:6px;padding:5px 8px}
+  #top{transition:box-shadow .2s,background .2s}
+  #top.pulse{animation:pulse 1.1s ease-out}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 var(--tc);background:var(--tc)}100%{box-shadow:0 0 0 14px transparent;background:rgba(10,12,8,.8)}}
+  #flash{position:fixed;top:56px;left:50%;transform:translateX(-50%);font-weight:800;font-size:20px;letter-spacing:3px;color:#fff;text-shadow:0 2px 6px #000;opacity:0;pointer-events:none;white-space:nowrap}
+  #flash.show{animation:flashin 1.6s ease-out}
+  @keyframes flashin{0%{opacity:0;transform:translate(-50%,-8px) scale(1.3)}15%{opacity:1;transform:translate(-50%,0) scale(1)}70%{opacity:1}100%{opacity:0}}
+  #victory{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .5s;background:radial-gradient(ellipse at center,rgba(0,0,0,.55),rgba(0,0,0,0) 65%)}
+  #victory.show{opacity:1}
+  #victory .v1{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:min(16vw,140px);letter-spacing:.12em;color:#f3dc8e;text-shadow:0 0 30px rgba(240,200,90,.55),0 6px 0 #6b4f1c,0 10px 20px #000;transform:scale(.8);transition:transform .6s cubic-bezier(.2,1.6,.4,1)}
+  #victory.show .v1{transform:scale(1)}
+  #victory .v2{margin-top:8px;font-size:min(5vw,34px);font-weight:700;letter-spacing:.2em;text-transform:uppercase;text-shadow:0 3px 10px #000}
+  #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#8f9682;font-size:14px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div class="t">Medieval Cities · v0.1</div>
+  <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
+  <div id="info" style="color:#e2d6a6"></div>
+  <div class="k">Drag: pan · Wheel: zoom · Left-click: select · Esc: deselect</div>
+  <div class="k">Right-click: move / attack enemy · Tab: next unit</div>
+  <div class="k">Turn passes automatically · End turn / Space: end it early · R twice: new game</div>
+</div>
+<div id="top"><span id="turn"></span><button id="endturn" title="Space">End turn</button></div>
+<div id="dm"></div>
+<div id="savebar"><button id="bdm">🧙 Dungeon Master: Off</button><button id="bsave" title="Ctrl+S">💾 Save file</button><button id="bload">📂 Load file</button><input type="file" id="fload" accept=".json,application/json" hidden><span class="k">autosaves in this browser</span></div>
+<div id="toast"></div>
+<div id="teams"><div class="team" id="tb"></div><div class="team" id="tr"></div></div>
+<div id="flash"></div>
+<div id="victory"><div class="v1">VICTORY</div><div class="v2" id="vname"></div></div>
+<div id="net"></div>
+<div id="load">Growing grass…</div>
+<script>
+(() => {
+  // ---------- Board settings ----------
+  const COLS = 22, ROWS = 22;     // board size in hexes (pointy-top: rows run straight left-right)
+  const S = 80;                   // hex radius (center to corner), px — tiles are 4x the area of before
+  const U = 40;                   // unit-sized UI (rings, bars) stays the same size
+  const SQ = 0.68;                // vertical squash for the angled (isometric-style) view
+  const SKIRT = 14;               // thickness of the earth edge under the board
+  const SQ3 = Math.sqrt(3);
+
+  let seed = 20261113;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+
+  // flat-top hexes, "odd-q" offset columns
+  const center = (c, r) => ({ x: SQ3 * S * (c + 0.5 * (r & 1)), y: 1.5 * S * r * SQ });
+  const corners = (cx, cy) => {
+    const p = [];
+    for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i + Math.PI / 6; p.push([cx + S * Math.cos(a), cy + S * Math.sin(a) * SQ]); }
+    return p;
+  };
+  const toCube = (c, r) => { const q = c - (r - (r & 1)) / 2; return [q, r, -q - r]; };
+  const hexDist = (a, b) => { const A = toCube(a[0], a[1]), B = toCube(b[0], b[1]);
+    return (Math.abs(A[0] - B[0]) + Math.abs(A[1] - B[1]) + Math.abs(A[2] - B[2])) / 2; };
+
+  // ---------- Board canvas size ----------
+  const PAD = 24;
+  const minX = -SQ3 / 2 * S, maxX = SQ3 * S * (COLS - 0.5) + SQ3 / 2 * S;
+  const minY = -S * SQ, maxY = 1.5 * S * (ROWS - 1) * SQ + S * SQ + SKIRT;
+  const BW = Math.ceil(maxX - minX + PAD * 2), BH = Math.ceil(maxY - minY + PAD * 2);
+  const OX = -minX + PAD, OY = -minY + PAD;
+
+  const hexPath = (c, r, ctx) => {
+    const m = center(c, r), p = corners(m.x + OX, m.y + OY);
+    ctx.moveTo(p[0][0], p[0][1]); for (let i = 1; i < 6; i++) ctx.lineTo(p[i][0], p[i][1]); ctx.closePath();
+  };
+
+  // ---------- Value noise ----------
+  function makeNoise(gs) {
+    const w = Math.ceil(BW / gs) + 3, h = Math.ceil(BH / SQ / gs) + 3, g = new Float32Array(w * h);
+    for (let i = 0; i < g.length; i++) g[i] = rnd();
+    return (x, y) => {
+      x /= gs; y /= gs; const xi = x | 0, yi = y | 0, xf = x - xi, yf = y - yi;
+      const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+      const a = g[yi * w + xi], b = g[yi * w + xi + 1], c = g[(yi + 1) * w + xi], d = g[(yi + 1) * w + xi + 1];
+      return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    };
+  }
+
+  // ---------- Grass texture (muted, darker) ----------
+  function makeGrass() {
+    const cv = document.createElement('canvas'); cv.width = BW; cv.height = BH;
+    const g = cv.getContext('2d'), img = g.createImageData(BW, BH), d = img.data;
+    const nBig = makeNoise(220), nMid = makeNoise(70), nFine = makeNoise(16), nDry = makeNoise(160), nDirt = makeNoise(110);
+    for (let y = 0; y < BH; y++) {
+      const wy = y / SQ; // un-squash so patches look like they lie flat on the ground
+      for (let x = 0; x < BW; x++) {
+        const n = 0.5 * nBig(x, wy) + 0.32 * nMid(x, wy) + 0.18 * nFine(x, wy);
+        const grain = (rnd() - 0.5) * 0.09;
+        const l = 1.13 + 0.5 * (n - 0.5) * 1.6 + grain;
+        let r = 40 * l, gg = 56 * l, b = 30 * l;
+        const dry = Math.max(0, nDry(x, wy) - 0.55) * 2.2;       // yellowish dry patches
+        r += 16 * dry; gg += 6 * dry; b += 2 * dry;
+        const dirt = Math.max(0, 0.3 - nDirt(x, wy)) * 3.2;      // faint worn earth
+        r = r + (52 - r) * dirt * 0.55; gg = gg + (44 - gg) * dirt * 0.55; b = b + (32 - b) * dirt * 0.55;
+        const i = (y * BW + x) * 4; d[i] = r; d[i + 1] = gg; d[i + 2] = b; d[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+
+    // grass blades, batched by colour
+    const buckets = ['rgba(24,34,18,0.45)', 'rgba(30,42,22,0.4)', 'rgba(58,74,40,0.35)', 'rgba(66,80,44,0.3)', 'rgba(74,76,46,0.28)', 'rgba(20,28,15,0.5)'];
+    const blades = Math.floor(BW * BH / 34);
+    g.lineCap = 'round';
+    for (const col of buckets) {
+      g.beginPath();
+      for (let i = 0; i < blades / buckets.length; i++) {
+        const x = rnd() * BW, y = rnd() * BH, len = 2.5 + rnd() * 5, a = -Math.PI / 2 + (rnd() - 0.5) * 0.9;
+        g.moveTo(x, y); g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      }
+      g.strokeStyle = col; g.lineWidth = 1; g.stroke();
+    }
+    // a few small stones
+    for (let i = 0; i < BW * BH / 9000; i++) {
+      const x = rnd() * BW, y = rnd() * BH, s = 1.2 + rnd() * 2.2;
+      g.fillStyle = 'rgba(20,20,16,0.5)'; g.beginPath(); g.ellipse(x + 0.8, y + 0.8, s, s * SQ, 0, 0, 7); g.fill();
+      g.fillStyle = `rgba(${95 + rnd() * 20},${92 + rnd() * 15},${80},0.75)`; g.beginPath(); g.ellipse(x, y, s, s * SQ, 0, 0, 7); g.fill();
+    }
+    return cv;
+  }
+
+  // ---------- Pre-rendered layers ----------
+  let boardCv, gridCv;
+  function buildLayers() {
+    boardCv = document.createElement('canvas'); boardCv.width = BW; boardCv.height = BH;
+    const b = boardCv.getContext('2d');
+
+    // earth skirt (board thickness)
+    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+      const m = center(c, r), p = corners(m.x + OX, m.y + OY);
+      b.beginPath(); b.moveTo(p[0][0], p[0][1]);
+      for (let i = 1; i <= 2; i++) b.lineTo(p[i][0], p[i][1]);
+      for (let i = 2; i >= 0; i--) b.lineTo(p[i][0], p[i][1] + SKIRT);
+      b.closePath();
+      const gr = b.createLinearGradient(0, m.y + OY, 0, m.y + OY + S * SQ + SKIRT);
+      gr.addColorStop(0, '#2c2318'); gr.addColorStop(1, '#16110b');
+      b.fillStyle = gr; b.fill();
+    }
+
+    // grass top clipped to the board shape
+    const grass = makeGrass();
+    b.save(); b.beginPath();
+    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) hexPath(c, r, b);
+    b.clip(); b.drawImage(grass, 0, 0);
+    const vg = b.createRadialGradient(BW / 2, BH / 2, Math.min(BW, BH) * 0.25, BW / 2, BH / 2, Math.max(BW, BH) * 0.62);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.38)');
+    b.fillStyle = vg; b.fillRect(0, 0, BW, BH);
+    b.restore();
+
+    // grid lines on their own layer
+    gridCv = document.createElement('canvas'); gridCv.width = BW; gridCv.height = BH;
+    const gc = gridCv.getContext('2d');
+    gc.beginPath(); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) hexPath(c, r, gc);
+    gc.lineJoin = 'round'; gc.strokeStyle = 'rgba(8,12,5,0.78)'; gc.lineWidth = 2.4; gc.stroke();
+    gc.strokeStyle = 'rgba(190,200,150,0.13)'; gc.lineWidth = 0.8; gc.translate(0, 1.6); gc.stroke();
+  }
+
+  // ---------- Mini 3D renderer (flat-shaded low-poly, no libraries) ----------
+  // Model space: y up, +z = forward (toward viewer at facing 0), figure's right hand = -x.
+  const CE = Math.sqrt(1 - SQ * SQ);           // cos of camera elevation (heights are drawn shorter by this)
+  const K = 4.6;                               // model units -> board pixels
+  const LIGHT = (() => { const l = [-0.55, 0.75, 0.45], n = Math.hypot(...l); return l.map(x => x / n); })();
+
+  function rot(p, [rx, ry, rz]) {
+    let [x, y, w] = p, c, s;
+    if (rx) { c = Math.cos(rx); s = Math.sin(rx); [y, w] = [y * c - w * s, y * s + w * c]; }
+    if (rz) { c = Math.cos(rz); s = Math.sin(rz); [x, y] = [x * c - y * s, x * s + y * c]; }
+    if (ry) { c = Math.cos(ry); s = Math.sin(ry); [x, w] = [x * c + w * s, -x * s + w * c]; }
+    return [x, y, w];
+  }
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+
+  function boxG(w, h, d, tx = 1, tz = 1) {
+    const v = [[-w/2,0,-d/2],[w/2,0,-d/2],[w/2,0,d/2],[-w/2,0,d/2],
+               [-w*tx/2,h,-d*tz/2],[w*tx/2,h,-d*tz/2],[w*tx/2,h,d*tz/2],[-w*tx/2,h,d*tz/2]];
+    return { v, f: [[0,1,2,3],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]] };
+  }
+  function cylG(r, h, n, rTop = r) {
+    const v = [], f = [], bot = [], top = [];
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; v.push([Math.cos(a) * r, 0, Math.sin(a) * r]); }
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; v.push([Math.cos(a) * rTop, h, Math.sin(a) * rTop]); }
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; f.push([i, j, n + j, n + i]); bot.push(i); top.push(n + i); }
+    f.push(bot, top); return { v, f };
+  }
+  function part(mesh, g, col, { o = [0,0,0], r = [0,0,0], p = [0,0,0], bias = 0 } = {}) {
+    const base = mesh.v.length, tv = g.v.map(q => add(rot(add(q, o), r), p));
+    const cen = tv.reduce((a, q) => add(a, q), [0,0,0]).map(x => x / tv.length);
+    mesh.v.push(...tv, cen);
+    for (const f of g.f) mesh.f.push({ i: f.map(k => k + base), col, c: base + tv.length, b: bias });   // bias: draw on top of what it sits on
+  }
+  const tip = (p, r, len) => add(p, rot([0, -len, 0], r));
+
+  function buildSwordsman(team) {
+    const m = { v: [], f: [] };
+    const STEEL = [150,155,162], MAIL = [112,116,122], LEATHER = [86,60,38], DARK = [48,34,22],
+          CLOTH = [72,60,46], SKIN = [196,156,124], WOOD = [96,66,40];
+    // legs & boots
+    for (const sx of [-1, 1]) {
+      part(m, boxG(1.4, 2.1, 2.3), DARK, { p: [sx * 0.95, 0, 0.25] });
+      part(m, boxG(1.25, 6.2, 1.35), CLOTH, { p: [sx * 0.95, 1.9, 0] });
+    }
+    // mail skirt, torso, belt, tabard
+    part(m, boxG(4.0, 3.2, 2.6, 0.95, 0.95), MAIL, { p: [0, 6.3, 0] });
+    part(m, boxG(3.9, 5.0, 2.4, 1.12, 1.0), MAIL, { p: [0, 9.2, 0] });
+    part(m, boxG(4.25, 0.7, 2.75), LEATHER, { p: [0, 9.1, 0] });
+    part(m, boxG(2.8, 6.6, 0.18, 1.05), team, { p: [0, 6.9, 1.27] });
+    part(m, boxG(2.8, 6.6, 0.18, 1.05), team, { p: [0, 6.9, -1.27] });
+    // neck, head, helmet with nasal guard
+    part(m, boxG(1.0, 0.8, 1.0), SKIN, { p: [0, 14.1, 0] });
+    part(m, boxG(1.6, 2.0, 1.75), SKIN, { p: [0, 14.6, 0.05] });
+    part(m, cylG(1.08, 1.25, 10, 1.0), STEEL, { p: [0, 15.55, 0.05] });
+    part(m, cylG(1.0, 0.9, 10, 0.12), STEEL, { p: [0, 16.8, 0.05] });
+    part(m, boxG(0.28, 1.3, 0.2), STEEL, { p: [0, 14.8, 0.98] });
+    // shoulder guards
+    for (const sx of [-1, 1]) part(m, boxG(1.5, 1.3, 2.6, 0.85, 0.9), LEATHER, { p: [sx * 2.25, 13.0, 0] });
+
+    // right arm (screen-left at facing 0) raising the sword
+    const rS = [-2.35, 13.4, 0.1], rU = [-0.35, 0, 0.12], rE = tip(rS, rU, 3.6), rF = [-1.35, 0, 0.05], rH = tip(rE, rF, 3.0);
+    part(m, boxG(1.15, 3.6, 1.2), MAIL, { o: [0, -3.6, 0], r: rU, p: rS });
+    part(m, boxG(1.05, 3.0, 1.05), LEATHER, { o: [0, -3.0, 0], r: rF, p: rE });
+    part(m, boxG(1.1, 1.0, 1.1), DARK, { o: [0, -0.5, 0], r: rF, p: rH });
+    const sw = [0.45, 0, 0];
+    part(m, boxG(0.32, 1.6, 0.32), DARK, { o: [0, -0.8, 0], r: sw, p: rH });
+    part(m, boxG(0.6, 0.45, 0.6), STEEL, { o: [0, -1.25, 0], r: sw, p: rH });
+    part(m, boxG(2.0, 0.32, 0.45), STEEL, { o: [0, 0.8, 0], r: sw, p: rH });
+    part(m, boxG(0.42, 7.2, 0.13, 0.25), [190,195,202], { o: [0, 1.1, 0], r: sw, p: rH });
+
+    // left arm (screen-right) bracing the shield
+    const lS = [2.35, 13.4, 0.1], lU = [-0.3, 0, -0.1], lE = tip(lS, lU, 3.5), lF = [-1.5, 0, 0], lH = tip(lE, lF, 2.3);
+    part(m, boxG(1.15, 3.5, 1.2), MAIL, { o: [0, -3.5, 0], r: lU, p: lS });
+    part(m, boxG(1.05, 2.3, 1.05), LEATHER, { o: [0, -2.3, 0], r: lF, p: lE });
+    // round shield: wooden rim, painted face, steel boss
+    const sh = [Math.PI / 2, 0.32, 0], sp = [lH[0] - 0.4, lH[1] + 0.9, lH[2] + 0.35];
+    part(m, cylG(3.05, 0.4, 16), WOOD, { r: sh, p: sp });
+    part(m, cylG(2.65, 0.1, 16), team, { r: sh, p: add(sp, rot([0, 0.4, 0], sh)) });
+    part(m, cylG(0.75, 0.55, 10, 0.3), STEEL, { r: sh, p: add(sp, rot([0, 0.45, 0], sh)) });
+    return m;
+  }
+
+  // extruded flat shape (e.g. a kite shield): outline in x/y, thickness along z
+  function prismG(pts, d) {
+    const n = pts.length, v = [...pts.map(([x, y]) => [x, y, 0]), ...pts.map(([x, y]) => [x, y, d])], f = [];
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; f.push([i, j, n + j, n + i]); }
+    f.push([...Array(n).keys()], [...Array(n).keys()].map(i => n + i));
+    return { v, f };
+  }
+
+  // one-sided flat decal facing +z (emblems): invisible from behind
+  function flatG(pts) {
+    let a = 0; for (let i = 0; i < pts.length; i++) { const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length]; a += x1 * y2 - x2 * y1; }
+    const p = a < 0 ? [...pts].reverse() : pts;
+    return { v: p.map(([x, y]) => [x, y, 0]), f: [[...p.keys()]] };
+  }
+  const rectG = (w, h) => flatG([[-w / 2, 0], [w / 2, 0], [w / 2, h], [-w / 2, h]]);
+
+  // Hero: heavy plate armour, great helm with plume, long cloak, kite shield, longsword
+  function buildKnight(team) {
+    const m = { v: [], f: [] };
+    const STEEL = [176,182,192], DSTEEL = [112,118,128], GOLD = [196,160,72], LEATHER = [70,48,30], DARK = [34,28,24],
+          CLOAK = team.map(c => c * 0.55), TRIM = team.map(c => Math.min(255, c * 1.15 + 20));
+    // cloak behind (wider at the hem), plus collar
+    part(m, boxG(5.6, 11.8, 0.28, 0.78, 1), CLOAK, { r: [0.07, 0, 0], p: [0, 2.3, -1.75] });
+    part(m, boxG(4.6, 0.9, 0.9), CLOAK, { p: [0, 13.8, -1.35] });
+    // legs: sabatons, greaves, knee cops, cuisses
+    for (const sx of [-1, 1]) {
+      part(m, boxG(1.5, 1.1, 2.5), DSTEEL, { p: [sx * 1.0, 0, 0.3] });
+      part(m, boxG(1.38, 4.0, 1.5, 0.95, 0.95), STEEL, { p: [sx * 1.0, 1.0, 0] });
+      part(m, boxG(1.1, 0.9, 0.6), DSTEEL, { p: [sx * 1.0, 4.6, 0.6] });
+      part(m, boxG(1.5, 2.6, 1.65, 1.08, 1), STEEL, { p: [sx * 1.0, 4.9, 0] });
+    }
+    // plate skirt, breastplate, surcoat, belt
+    part(m, boxG(4.3, 2.6, 2.9, 0.92, 0.92), STEEL, { p: [0, 6.8, 0] });
+    part(m, boxG(4.3, 5.2, 2.75, 1.14, 1.0), STEEL, { p: [0, 9.1, 0] });
+    part(m, boxG(3.0, 7.4, 0.16, 1.0), team, { p: [0, 5.6, 1.42], bias: 1 });
+    part(m, rectG(3.2, 0.35), TRIM, { p: [0, 12.6, 1.6], bias: 2 });
+    part(m, rectG(0.5, 3.4), GOLD, { p: [0, 7.4, 1.6], bias: 2 });              // emblem: gold cross
+    part(m, rectG(1.9, 0.45), GOLD, { p: [0, 9.9, 1.6], bias: 2 });
+    part(m, boxG(4.45, 0.75, 3.0), LEATHER, { p: [0, 8.9, 0] });
+    part(m, rectG(0.8, 0.8), GOLD, { p: [0, 8.88, 1.62], bias: 3 });
+    // gorget & great helm with eye slit and plume
+    part(m, cylG(1.15, 0.8, 12, 1.0), DSTEEL, { p: [0, 14.0, 0] });
+    part(m, cylG(1.2, 2.5, 12, 1.12), STEEL, { p: [0, 14.7, 0.05] });
+    part(m, cylG(1.12, 0.3, 12, 0.75), STEEL, { p: [0, 17.2, 0.05] });
+    part(m, boxG(1.75, 0.24, 0.3), DARK, { p: [0, 16.1, 1.0] });
+    part(m, boxG(0.22, 1.5, 0.3), DSTEEL, { p: [0, 14.8, 1.12] });
+    part(m, boxG(0.32, 1.1, 2.4, 0.7, 0.6), TRIM, { r: [-0.15, 0, 0], p: [0, 17.35, -0.2] });
+    // big pauldrons with a lower lame
+    for (const sx of [-1, 1]) {
+      part(m, boxG(2.1, 1.6, 3.0, 0.72, 0.85), STEEL, { p: [sx * 2.55, 12.8, 0] });
+      part(m, boxG(1.9, 0.6, 2.7), DSTEEL, { p: [sx * 2.6, 12.25, 0] });
+    }
+    // right arm (screen-left at facing 0) with longsword
+    const rS = [-2.55, 13.2, 0.1], rU = [-0.35, 0, 0.12], rE = tip(rS, rU, 3.5), rF = [-1.35, 0, 0.05], rH = tip(rE, rF, 2.9);
+    part(m, boxG(1.3, 3.5, 1.35), STEEL, { o: [0, -3.5, 0], r: rU, p: rS });
+    part(m, boxG(1.4, 0.9, 1.4), DSTEEL, { o: [0, -0.45, 0], r: rU, p: rE });
+    part(m, boxG(1.2, 2.9, 1.2, 1.1, 1.1), STEEL, { o: [0, -2.9, 0], r: rF, p: rE });
+    part(m, boxG(1.3, 1.1, 1.3), DSTEEL, { o: [0, -0.55, 0], r: rF, p: rH });
+    const sw = [0.4, 0, 0];
+    part(m, boxG(0.34, 1.9, 0.34), LEATHER, { o: [0, -0.95, 0], r: sw, p: rH });
+    part(m, boxG(0.7, 0.55, 0.7), GOLD, { o: [0, -1.5, 0], r: sw, p: rH });
+    part(m, boxG(2.4, 0.36, 0.5), GOLD, { o: [0, 0.95, 0], r: sw, p: rH });
+    part(m, boxG(0.5, 8.6, 0.14, 0.22), [205,210,218], { o: [0, 1.3, 0], r: sw, p: rH });
+    // left arm braced behind a kite shield
+    const lS = [2.55, 13.2, 0.1], lU = [-0.3, 0, -0.1], lE = tip(lS, lU, 3.4), lF = [-1.5, 0, 0], lH = tip(lE, lF, 2.2);
+    part(m, boxG(1.3, 3.4, 1.35), STEEL, { o: [0, -3.4, 0], r: lU, p: lS });
+    part(m, boxG(1.2, 2.2, 1.2), STEEL, { o: [0, -2.2, 0], r: lF, p: lE });
+    const kite = [[-1.65, 3.5], [1.65, 3.5], [2.15, 2.6], [2.0, 0.2], [0, -4.6], [-2.0, 0.2], [-2.15, 2.6]];
+    const sr = [0, 0.3, 0], sp = [lH[0] - 0.3, lH[1] + 0.6, lH[2] + 0.3];
+    part(m, prismG(kite.map(([x, y]) => [x * 1.07, y * 1.05]), 0.35), DSTEEL, { r: sr, p: sp });
+    part(m, prismG(kite, 0.12), team, { r: sr, p: add(sp, rot([0, 0, 0.35], sr)), bias: 1 });
+    part(m, flatG([[-0.28, 2.9], [0.28, 2.9], [0.28, -3.4], [-0.28, -3.4]]), GOLD, { r: sr, p: add(sp, rot([0, 0, 0.5], sr)), bias: 3 });
+    part(m, flatG([[-1.6, 1.6], [1.6, 1.6], [1.6, 1.05], [-1.6, 1.05]]), GOLD, { r: sr, p: add(sp, rot([0, 0, 0.5], sr)), bias: 3 });
+    return m;
+  }
+
+  // draw a mesh at board position (bx,by) facing angle th (radians, 0 = toward viewer)
+  function drawMesh(g, mesh, bx, by, th, t, flash = 0) {
+    const c = Math.cos(th), s = Math.sin(th), breathe = 0.012 * Math.sin(t * 2.1);
+    const P = mesh.v.map(([x, y, w]) => {
+      if (y > 8) y = 8 + (y - 8) * (1 + breathe);
+      const X = x * c + w * s, Z = -x * s + w * c;
+      return [X, y, Z];
+    });
+    const faces = [];
+    for (const f of mesh.f) {
+      const a = P[f.i[0]], b = P[f.i[1]], d = P[f.i[2]];
+      let n = [(b[1]-a[1])*(d[2]-a[2]) - (b[2]-a[2])*(d[1]-a[1]),
+               (b[2]-a[2])*(d[0]-a[0]) - (b[0]-a[0])*(d[2]-a[2]),
+               (b[0]-a[0])*(d[1]-a[1]) - (b[1]-a[1])*(d[0]-a[0])];
+      const L = Math.hypot(...n) || 1; n = n.map(x => x / L);
+      // orient outward using the part centre
+      let fc = [0,0,0]; for (const k of f.i) fc = add(fc, P[k]); fc = fc.map(x => x / f.i.length);
+      const pc = P[f.c];
+      if ((fc[0]-pc[0])*n[0] + (fc[1]-pc[1])*n[1] + (fc[2]-pc[2])*n[2] < 0) n = n.map(x => -x);
+      if (n[1] * SQ + n[2] * CE <= 0.01) continue;            // facing away from camera
+      const lit = 0.42 + 0.7 * Math.max(0, n[0]*LIGHT[0] + n[1]*LIGHT[1] + n[2]*LIGHT[2]);
+      faces.push({ f, depth: fc[2] * CE + fc[1] * SQ + f.b, lit });
+    }
+    faces.sort((p, q) => p.depth - q.depth);
+    g.lineJoin = 'round'; g.lineWidth = 0.5;
+    for (const { f, lit } of faces) {
+      g.beginPath();
+      f.i.forEach((k, j) => { const [x, y, w] = P[k]; const sx = bx + x * K, sy = by + (w * SQ - y * CE) * K; j ? g.lineTo(sx, sy) : g.moveTo(sx, sy); });
+      g.closePath();
+      const fl = flash * 0.65, cr = f.col[0] * lit * (1 - fl) + 255 * fl, cg = f.col[1] * lit * (1 - fl) + 70 * fl, cb = f.col[2] * lit * (1 - fl) + 55 * fl;
+      const col = `rgb(${Math.min(255, cr) | 0},${Math.min(255, cg) | 0},${Math.min(255, cb) | 0})`;
+      g.fillStyle = col; g.strokeStyle = col; g.fill(); g.stroke();
+    }
+  }
+
+  // ---------- Units & game state ----------
+  const TEAM = { blue: [52, 86, 146], red: [152, 30, 42] };
+  const poss = n => n.endsWith('s') ? n + "'" : n + "'s";
+  const teamName = t => game.dm ? (t === 'blue' ? 'Heroes' : 'Dungeon Master') : (t === 'blue' ? 'Blue' : 'Red');
+  const UNIT_TYPES = {
+    swordsman: { name: 'Swordsman', maxHp: 12, staMax: 2, manaMax: 2, dmg: 3, move: 2, build: buildSwordsman },
+    knight:    { name: 'Knight',    hero: true, maxHp: 24, staMax: 2, manaMax: 2, dmg: 3, move: 2, build: buildKnight },
+  };
+  const meshCache = {};
+  const meshFor = (type, team) => meshCache[type + team] || (meshCache[type + team] = UNIT_TYPES[type].build(TEAM[team]));
+  const START = [
+    { id: 'b1', col: 7, row: 8, team: 'blue' }, { id: 'b2', col: 7, row: 11, team: 'blue' }, { id: 'b3', col: 7, row: 14, team: 'blue' },
+    { id: 'r1', col: 14, row: 8, team: 'red' }, { id: 'r2', col: 14, row: 11, team: 'red' }, { id: 'r3', col: 14, row: 14, team: 'red' },
+  ];
+  // game = what both players share; units = the same plus local animation fields
+  let game = { seq: 0, turn: 'blue', round: 1, dm: false, battle: false, types: {} };
+  const typeMax = type => (game.types[type] && game.types[type].maxHp) || UNIT_TYPES[type].maxHp;   // DM can change a unit type's max HP
+  const hasRes = u => !!UNIT_TYPES[u.type].hero;               // only hero units (either side) use stamina and mana
+  const typeStat = (type, k) => { const t = game.types[type]; return t && typeof t[k] === 'number' ? t[k] : UNIT_TYPES[type][k]; };
+  let units = [], floats = [], selUnit = null, afterIdle = null;
+
+  function runtimeUnit(s) {
+    const type = UNIT_TYPES[s.type] ? s.type : 'swordsman', T = UNIT_TYPES[type];
+    const staMax = s.staMax ?? typeStat(type, 'staMax'), manaMax = s.manaMax ?? typeStat(type, 'manaMax');
+    return { name: T.name, maxHp: T.maxHp, dmg: T.dmg, move: T.move, moved: false, attacked: false, ...s, type,
+      staMax, manaMax, sta: s.sta ?? staMax, mana: s.mana ?? manaMax,
+      hpShown: s.hp, want: s.face, mesh: meshFor(type, s.team), phase: Math.random() * 6,
+      path: null, segT: 0, atk: null, flash: 0, dying: null };
+  }
+  function freshState(seq) {
+    return { seq, turn: 'blue', round: 1, last: null, dm: !!game.dm, battle: false,
+      types: game.types, units: START.map(s => ({ ...s, type: 'swordsman', hp: typeMax('swordsman'), maxHp: typeMax('swordsman'), sta: typeStat('swordsman', 'staMax'), staMax: typeStat('swordsman', 'staMax'), mana: typeStat('swordsman', 'manaMax'), manaMax: typeStat('swordsman', 'manaMax'), face: s.team === 'blue' ? Math.PI / 2 : -Math.PI / 2, moved: false, attacked: false })) };
+  }
+  function exportState(last) {
+    return { seq: game.seq, turn: game.turn, round: game.round, dm: !!game.dm, battle: !!game.battle, types: game.types, last: last || null,
+      units: units.filter(u => u.dying === null && u.hp > 0).map(u => ({ id: u.id, type: u.type, team: u.team, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, sta: u.sta, staMax: u.staMax, mana: u.mana, manaMax: u.manaMax,
+        face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked })) };
+  }
+  function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
+    const old = new Map(units.map(u => [u.id, u]));
+    units = st.units.map(s => { const o = old.get(s.id);
+      if (!o) return runtimeUnit(s);
+      if (typeof s.face === 'number') o.want = s.face;          // keep facing in sync with the shared game
+      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, path: null, atk: null, dying: null, dragPos: null });
+      return o; });
+    game = { seq: st.seq, turn: st.turn, round: st.round, dm: !!st.dm, battle: !!st.battle, types: (st.types && typeof st.types === 'object') ? st.types : {} };
+    updateSeat();
+    if (selUnit && !units.includes(selUnit)) { selUnit = null; sel = null; }
+    if (selUnit) sel = [selUnit.col, selUnit.row];
+    saveLocal(); refreshUI();
+  }
+
+  // ---------- Saving: autosave in this browser + save/load files ----------
+  const SAVE_KEY = 'medieval-cities-save-v1';
+  function saveLocal() { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, savedAt: Date.now(), g: exportState(null) })); } catch (e) {} }
+  function validState(st) {
+    return st && typeof st.seq === 'number' && (st.turn === 'blue' || st.turn === 'red') && Array.isArray(st.units) &&
+      st.units.every(u => u && typeof u.id === 'string' && TEAM[u.team] && (u.type === undefined || UNIT_TYPES[u.type]) && Number.isInteger(u.col) && Number.isInteger(u.row) &&
+        u.col >= 0 && u.col < COLS && u.row >= 0 && u.row < ROWS && typeof u.hp === 'number');
+  }
+  function loadLocal() {
+    try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (d && validState(d.g)) { applyState(d.g); return true; } } catch (e) {}
+    return false;
+  }
+  function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.remove('show'); void t.offsetWidth; t.classList.add('show'); }
+  function saveFile() {
+    const blob = new Blob([JSON.stringify({ v: 1, savedAt: new Date().toISOString(), g: exportState(null) }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a'), d = new Date();
+    a.href = URL.createObjectURL(blob);
+    a.download = `medieval-cities-round${game.round}-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('Saved to your Downloads folder');
+  }
+  function loadFile(file) {
+    if (busy()) { toast('Wait for the current move to finish'); return; }
+    if (mode === 'online' && mySeat !== 'blue') { toast('Only the host can load a save'); return; }
+    file.text().then(txt => {
+      let d; try { d = JSON.parse(txt); } catch (e) { toast('That is not a Medieval Cities save file'); return; }
+      const st = d && d.g; if (!validState(st)) { toast('That is not a Medieval Cities save file'); return; }
+      const loaded = { ...st, seq: game.seq + 1, last: { type: 'load', seq: game.seq + 1 } };
+      floats = []; selUnit = null; sel = null; applyState(loaded); publish(loaded.last);
+      toast(`Loaded save · Round ${loaded.round}`);
+    });
+  }
+  const unitAt = h => h && units.find(u => u.col === h[0] && u.row === h[1]);
+  const busy = () => !!afterIdle || units.some(u => u.path || u.atk || u.dying !== null);
+  const faceToward = (u, o) => { const a = center(u.col, u.row), b = center(o.col, o.row); u.want = Math.atan2(b.x - a.x, (b.y - a.y) / SQ); };
+  const winner = () => { if (game.dm && !game.battle) return null; const t = new Set(units.filter(u => u.dying === null).map(u => u.team)); return t.size === 1 ? [...t][0] : null; };
+
+  // hex neighbours & pathfinding (odd-q offset <-> axial)
+  const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+  const toAx = (c, r) => [c - (r - (r & 1)) / 2, r], fromAx = (q, r) => [q + (r - (r & 1)) / 2, r];
+  const key = (c, r) => c + ',' + r;
+  const neighbors = (c, r) => { const [q, rr] = toAx(c, r);
+    return DIRS.map(([dq, dr]) => fromAx(q + dq, rr + dr)).filter(([a, b]) => a >= 0 && a < COLS && b >= 0 && b < ROWS); };
+  function reach(u) {
+    const dist = new Map([[key(u.col, u.row), 0]]), prev = new Map(), q = [[u.col, u.row]];
+    while (q.length) {
+      const h = q.shift(), d = dist.get(key(...h));
+      if (d >= u.move) continue;
+      for (const n of neighbors(...h)) {
+        const k = key(...n); if (dist.has(k)) continue;
+        const o = unitAt(n); if (o && o !== u) continue;
+        dist.set(k, d + 1); prev.set(k, h); q.push(n);
+      }
+    }
+    return { dist, prev };
+  }
+  function pathTo(b, h) { const p = []; let cur = h; while (b.prev.has(key(...cur))) { p.unshift(cur); cur = b.prev.get(key(...cur)); } return p; }
+
+  function upos(u) {
+    if (u.dragPos) return u.dragPos;
+    const a = center(u.col, u.row); let x = a.x, y = a.y;
+    if (u.path) { const b = center(...u.path[0]), e = u.segT * u.segT * (3 - 2 * u.segT); x += (b.x - x) * e; y += (b.y - y) * e; }
+    if (u.atk) { const b = center(u.atk.target.col, u.atk.target.row), L = Math.sin(Math.PI * Math.min(1, u.atk.t)) * 0.24;
+      x += (b.x - a.x) * L; y += (b.y - a.y) * L; }
+    if (u.flash > 0) x += Math.sin(u.flash * 40) * u.flash * 2.5;
+    return { x: x + OX, y: y + OY };
+  }
+  function addFloat(x, y, text, color, size = 20) { floats.push({ x, y, text, color, size, t: 0 }); }
+  function moveUnit(u, path, then) { if (!path.length) { then && then(); return; } u.path = path; u.segT = 0; u.then = then || null; }
+  function attack(u, tgt) { faceToward(u, tgt); u.atk = { target: tgt, t: 0, hit: false }; }
+
+  // play one action (used for your own clicks AND to replay the other player's), then call done when idle
+  function play(a, done) {
+    const u = units.find(x => x.id === a.id);
+    if (a.type === 'end' || a.type === 'reset' || !u) { done(); return; }
+    const tgt = a.target && units.find(x => x.id === a.target);
+    const strike = () => { if (tgt && tgt.hp > 0) { attack(u, tgt); u.attacked = true; u.moved = true; } };
+    if (a.path && a.path.length) u.moved = true;
+    moveUnit(u, (a.path || []).map(h => [h[0], h[1]]), a.type === 'attack' ? strike : null);
+    afterIdle = done;
+  }
+
+  function updateUnits(dt) {
+    for (const u of units) {
+      if (u.path) {
+        const a = center(u.col, u.row), b = center(...u.path[0]);
+        u.want = Math.atan2(b.x - a.x, (b.y - a.y) / SQ);
+        u.segT += dt * 3.6;
+        if (u.segT >= 1) {
+          [u.col, u.row] = u.path.shift(); u.segT = 0;
+          if (!u.path.length) { u.path = null; if (u === selUnit) sel = [u.col, u.row];
+            const th = u.then; u.then = null; th && th(); }
+        }
+      }
+      if (u.atk) {
+        u.atk.t += dt / 0.5;
+        if (!u.atk.hit && u.atk.t >= 0.45) {
+          u.atk.hit = true; const tg = u.atk.target;
+          tg.hp = Math.max(0, tg.hp - u.dmg); tg.flash = 1;
+          const p = upos(tg); addFloat(p.x + 18, p.y - 17.6 * CE * K - 40, `-${u.dmg}`, '#ff5a46', 22);
+          if (tg.hp === 0) tg.dying = 0;
+        }
+        if (u.atk.t >= 1) u.atk = null;
+      }
+      if (u.flash > 0) u.flash = Math.max(0, u.flash - dt * 3);
+      u.hpShown += (u.hp - u.hpShown) * Math.min(1, dt * 7);
+      if (u.dying !== null && !units.some(o => o.atk && o.atk.target === u)) {
+        u.dying += dt / 0.9;
+        if (u.dying >= 1) {
+          const p = upos(u); addFloat(p.x, p.y - 30, 'Defeated', '#d8cfb4', 15);
+          if (selUnit === u) { selUnit = null; sel = null; }
+          units = units.filter(o => o !== u);
+        }
+      }
+    }
+    for (const f of floats) f.t += dt;
+    floats = floats.filter(f => f.t < 1.2);
+    if (afterIdle && !units.some(u => u.path || u.atk || u.dying !== null)) { const f = afterIdle; afterIdle = null; f(); }
+  }
+
+  function drawUnits(t) {
+    const list = units.map(u => ({ u, p: upos(u) })).sort((a, b) => a.p.y - b.p.y);
+    for (const { u, p } of list) {
+      const bx = p.x, by = p.y, spent = u.team === game.turn && u.attacked;
+      ctx.save(); if (u.dying !== null) ctx.globalAlpha = Math.max(0, 1 - u.dying);
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(bx + 2, by + 1, U * 0.5, U * 0.5 * SQ, 0, 0, 7); ctx.fill();
+      const tc = TEAM[u.team];
+      ctx.strokeStyle = `rgba(${tc[0] + 40},${tc[1] + 40},${tc[2] + 40},${spent ? 0.25 : 0.75})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(bx, by, U * 0.55, U * 0.55 * SQ, 0, 0, 7); ctx.stroke();
+      const walk = u.path ? Math.abs(Math.sin(u.segT * Math.PI)) * 2.5 : 0;
+      drawMesh(ctx, u.mesh, bx, by - walk + (u.dying || 0) * 6, u.face, t + u.phase, u.flash);
+      ctx.restore();
+    }
+    for (const { u, p } of list) { ctx.save(); if (u.dying !== null) ctx.globalAlpha = Math.max(0, 1 - u.dying); drawHealth(u, p.x, p.y); ctx.restore(); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const f of floats) {
+      const pop = 1 + 0.6 * Math.max(0, 1 - f.t * 7), a = Math.max(0, 1 - Math.max(0, f.t - 0.65) / 0.55);
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(f.x, f.y - f.t * 30); ctx.scale(pop, pop);
+      ctx.font = `800 ${f.size}px system-ui,sans-serif`; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(10,6,4,0.85)';
+      ctx.strokeText(f.text, 0, 0); ctx.fillStyle = f.color; ctx.fillText(f.text, 0, 0); ctx.restore();
+    }
+  }
+  // health bar above the head: one segment per HP
+  function drawHealth(u, bx, by) {
+    const w = U * 0.95, h = 6, x = bx - w / 2, y = by - 17.6 * CE * K - 22;
+    const hasTurn = u.team === game.turn && u.dying === null && !winner() && !unitDone(u);
+    const rows = [['mana', 'manaMax', '#4a7fe0', 'rgba(74,127,224,0.28)']].filter(b => u[b[1]] > 0 && hasRes(u));
+    const rh = 5, total = h + (rows.length ? 2 + rows.length * rh : 0);
+    ctx.fillStyle = 'rgba(8,10,6,0.85)'; ctx.fillRect(x - 1.5, y - 1.5, w + 3, total + 3);
+    // health: always green, notched
+    const f = Math.max(0, u.hpShown / u.maxHp);
+    ctx.fillStyle = '#16241a'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#3f9a45'; ctx.fillRect(x, y, w * f, h);
+    ctx.fillStyle = 'rgba(210,255,200,0.2)'; ctx.fillRect(x, y, w * f, h / 2.5);
+    ctx.fillStyle = 'rgba(8,10,6,0.7)';
+    const step = Math.max(1, Math.ceil(u.maxHp / 14));         // about 12-14 notches, whatever the max HP
+    for (let i = step; i < u.maxHp; i += step) ctx.fillRect(x + w * i / u.maxHp - 0.5, y, 1, h);
+    // mana (blue) as small dots: filled = available, faint = spent
+    rows.forEach(([cur, max, on, offc], ri) => {
+      const n = u[max], v = Math.max(0, Math.min(u[cur], n)), cy = y + h + 2 + ri * rh + rh / 2;
+      const gap = Math.min(5, (w - 2) / Math.max(1, n)), r = Math.min(1.7, gap * 0.36), x0 = x + 1 + gap / 2;
+      for (let k = 0; k < n; k++) {
+        ctx.beginPath(); ctx.arc(x0 + k * gap, cy, r, 0, 7);
+        ctx.fillStyle = k < v ? on : offc; ctx.fill();
+      }
+    });
+    // turn line sits just above the health bar
+    if (hasTurn) {
+      ctx.fillStyle = 'rgba(8,10,6,0.8)'; ctx.fillRect(x - 1.5, y - 6, w + 3, 4);
+      ctx.fillStyle = 'rgba(160,128,58,0.95)';                    // half-bright brownish yellow: "has its turn to spend"
+      ctx.fillRect(x, y - 5, u.moved ? w / 2 : w, 2.5);
+    }
+    ctx.font = '600 9px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    const ty = hasTurn ? y - 7 : y - 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillText(`${u.hp}/${u.maxHp}`, bx + 0.6, ty + 0.6);
+    ctx.fillStyle = '#e9e4cf'; ctx.fillText(`${u.hp}/${u.maxHp}`, bx, ty);
+  }
+  function turnUnits(dt) {
+    for (const u of units) {
+      let d = u.want - u.face; d = Math.atan2(Math.sin(d), Math.cos(d));
+      u.face += d * Math.min(1, dt * 8);
+    }
+  }
+
+  // ---------- View / camera ----------
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  let dpr = 1, z = 1, off = { x: 0, y: 0 }, hover = null, sel = null, dirty = true;
+
+  function resize(fit) {
+    dpr = window.devicePixelRatio || 1;
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    if (fit) { z = Math.min(innerWidth / BW, innerHeight / BH) * 0.96; off.x = (innerWidth - BW * z) / 2; off.y = (innerHeight - BH * z) / 2; }
+    dirty = true;
+  }
+
+  function pick(mx, my) {
+    const bx = (mx - off.x) / z - OX, by = ((my - off.y) / z - OY) / SQ;
+    const qf = (SQ3 / 3 * bx - 1 / 3 * by) / S, rf = (2 / 3 * by) / S, sf = -qf - rf;
+    let q = Math.round(qf), r = Math.round(rf), s = Math.round(sf);
+    const dq = Math.abs(q - qf), dr = Math.abs(r - rf), ds = Math.abs(s - sf);
+    if (dq > dr && dq > ds) q = -r - s; else if (dr > ds) r = -q - s;
+    const col = q + (r - (r & 1)) / 2, row = r;
+    return (col >= 0 && col < COLS && row >= 0 && row < ROWS) ? [col, row] : null;
+  }
+
+  function render(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#12140e'; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * off.x, dpr * off.y);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(boardCv, 0, 0);
+    ctx.drawImage(gridCv, 0, 0);
+
+    if (sel) {
+      ctx.beginPath();
+      if (selUnit && !busy() && canCommand(selUnit) && !selUnit.moved) for (const [k, d] of reach(selUnit).dist) if (d > 0) { const [c, r] = k.split(',').map(Number); hexPath(c, r, ctx); }
+      ctx.fillStyle = 'rgba(214,196,120,0.13)'; ctx.fill();
+      ctx.beginPath(); hexPath(sel[0], sel[1], ctx);
+      ctx.fillStyle = 'rgba(226,206,130,0.18)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(232,212,140,0.85)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
+    }
+    if (hover) {
+      ctx.beginPath(); hexPath(hover[0], hover[1], ctx);
+      ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(235,235,220,0.45)'; ctx.lineWidth = 1.5 / Math.max(z, 0.6); ctx.stroke();
+    }
+    const hu = unitAt(hover);
+    if (selUnit && hu && hu.team !== selUnit.team && !busy() && canCommand(selUnit) && !selUnit.attacked) {
+      ctx.beginPath(); hexPath(hu.col, hu.row, ctx);
+      ctx.fillStyle = 'rgba(200,50,40,0.18)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(230,80,60,0.9)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
+    }
+    if (dmActive() && hover && (placing || dragUnit)) {
+      const free = !unitAt(hover) || unitAt(hover) === dragUnit;
+      ctx.beginPath(); hexPath(hover[0], hover[1], ctx);
+      ctx.fillStyle = free ? 'rgba(178,146,64,0.22)' : 'rgba(200,50,40,0.22)'; ctx.fill();
+      ctx.strokeStyle = free ? 'rgba(220,190,100,0.9)' : 'rgba(230,80,60,0.9)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
+    }
+    drawUnits(t);
+    if (dmActive() && placing && hover && !unitAt(hover)) {
+      const m = center(...hover); ctx.save(); ctx.globalAlpha = 0.5;
+      drawMesh(ctx, meshFor(placing.type, placing.team), m.x + OX, m.y + OY, placing.team === 'blue' ? Math.PI / 2 : -Math.PI / 2, t, 0); ctx.restore();
+    }
+  }
+  let last = performance.now();
+  function loop(now) { now = now || performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    updateUnits(dt); turnUnits(dt); render(now / 1000); requestAnimationFrame(loop); }
+
+  // ---------- Online: players & sync (room capability) ----------
+  // Each player's presence carries the latest shared game state; the highest seq wins.
+  let resetArmed = 0, lastTurnHtml = '', lastNetHtml = '', placing = null, dragUnit = null;
+  // Dungeon Master: in online games the host is the DM (enemy side), the friend plays the heroes
+  function updateSeat() { if (mode === 'online' && p2p.role) mySeat = game.dm ? (p2p.role === 'host' ? 'red' : 'blue') : (p2p.role === 'host' ? 'blue' : 'red'); }
+  const isHost = () => mode === 'local' || p2p.role === 'host' || (room && mode === 'online' && mySeat === (game.dm ? 'red' : 'blue'));
+  const dmActive = () => game.dm && isHost();
+  function toggleDM() {
+    if (!isHost()) { toast('Only the host can switch Dungeon Master mode'); return; }
+    if (busy()) return;
+    game.dm = !game.dm; placing = null; selUnit = null; sel = null;
+    updateSeat(); commit({ type: 'edit' });
+    toast(game.dm ? (mode === 'online' ? 'Dungeon Master mode ON · you are the DM, your friend plays the heroes' : 'Dungeon Master mode ON') : 'Dungeon Master mode OFF');
+  }
+  function removeUnit(u) {
+    if (!dmActive() || !u || busy()) return;
+    units = units.filter(x => x !== u); if (selUnit === u) { selUnit = null; sel = null; } commit({ type: 'edit' });
+  }
+  const removeSelected = () => removeUnit(selUnit);
+  const clampHp = v => Math.max(1, Math.min(999, Math.round(Number(v) || 1)));
+  function setUnitMax(u, v) {                // raising max HP does not heal a wounded unit; a unit at full stays full
+    const nm = clampHp(v), wasFull = u.hp >= u.maxHp;
+    u.maxHp = nm; u.hp = wasFull ? nm : Math.min(u.hp, nm); u.hpShown = Math.min(u.hpShown, nm);
+  }
+  function setTypeMax(type, v) { game.types = { ...game.types, [type]: { ...(game.types[type] || {}), maxHp: clampHp(v) } }; }
+  const clampRes = v => Math.max(0, Math.min(99, Math.round(Number(v) || 0)));
+  function setTypeStat(type, k, v) { game.types = { ...game.types, [type]: { ...(game.types[type] || {}), [k]: clampRes(v) } }; }
+  function setUnitRes(u, cur, max, v, isMax) {   // same rule as HP: raising the max refills only a unit that was full
+    if (isMax) { const nm = clampRes(v), wasFull = u[cur] >= u[max]; u[max] = nm; u[cur] = wasFull ? nm : Math.min(u[cur], nm); }
+    else u[cur] = Math.min(u[max], clampRes(v));
+  }
+  function healHeroes() { if (!dmActive() || busy()) return; for (const u of units) if (u.team === 'blue') u.hp = u.maxHp; commit({ type: 'edit' }); toast('All heroes healed'); }
+  let room = null, mode = 'local', mySeat = null, peerList = [], lastRemote = null;
+  const netEl = document.getElementById('net');
+  function publish(last) {
+    if (room) room.presence({ seat: mode === 'online' ? mySeat : null, g: exportState(last) }).catch(() => {});
+    if (p2p.conn && p2p.conn.open) try { p2p.conn.send({ seat: mySeat, g: exportState(last) }); } catch (e) {}
+  }
+
+  // ---------- Direct connection (PeerJS / WebRTC): host gets a code, friend joins with it ----------
+  const p2p = { peer: null, conn: null, code: null, role: null, status: '', ready: false, needSync: false };
+  const PREFIX = 'medieval-cities-';
+  function p2pStop(msg) {
+    try { p2p.conn && p2p.conn.close(); } catch (e) {} try { p2p.peer && p2p.peer.destroy(); } catch (e) {}
+    Object.assign(p2p, { peer: null, conn: null, code: null, role: null, status: msg || '' });
+    mode = 'local'; mySeat = null; refreshUI();
+  }
+  function p2pSetup(c, seat) {
+    if (seat === 'red') p2p.needSync = true;                          // guest waits for the host's game
+    c.on('open', () => { p2p.conn = c; p2p.status = ''; mode = 'online'; mySeat = seat; selUnit = null; sel = null;
+      updateSeat(); refreshUI();
+      if (seat === 'blue') publish(null); else try { c.send({ hello: 1 }); } catch (e) {}   // ask the host for its game
+      refreshUI(); });
+    c.on('data', d => { if (!d || typeof d !== 'object') return; if (d.hello && seat === 'blue') publish(null); if (d.g) onRemoteState(d.g); });
+    c.on('close', () => { if (p2p.conn === c) p2pStop('Your friend disconnected · playing locally'); });
+    c.on('error', () => {});
+  }
+  function p2pAvailable() { return typeof window.Peer === 'function' && typeof window.RTCPeerConnection === 'function'; }
+  function p2pHost() {
+    if (!p2pAvailable()) { p2p.status = 'Direct connection needs the downloaded game file opened in Chrome/Edge/Firefox.'; refreshUI(); return; }
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    p2p.code = Array.from({ length: 5 }, () => letters[Math.floor(Math.random() * letters.length)]).join('');
+    p2p.role = 'host'; p2p.status = 'Creating game…'; refreshUI();
+    const peer = p2p.peer = new Peer(PREFIX + p2p.code.toLowerCase());
+    p2p.ready = false;
+    peer.on('open', () => { p2p.ready = true; p2p.status = 'Ready · waiting for your friend to join…'; refreshUI(); });
+    peer.on('disconnected', () => { if (p2p.peer === peer && !peer.destroyed) { p2p.status = 'Lost the server, reconnecting…'; refreshUI(); try { peer.reconnect(); } catch (e) {} } });
+    peer.on('connection', c => { if (p2p.conn) { c.close(); return; } p2pSetup(c, 'blue'); });
+    peer.on('error', e => { if (e.type === 'unavailable-id') { peer.destroy(); p2pHost(); }
+      else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'socket-closed') { p2pStop('Could not reach the connection server (' + e.type + '). Check internet / firewall and try again.'); }
+      else { p2p.status = 'Error: ' + e.type + ' · still hosting'; refreshUI(); } });
+  }
+  function p2pJoin(code) {
+    code = (code || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{5}$/.test(code)) { p2p.status = 'Enter the 5-character code from the host.'; refreshUI(); return; }
+    if (!p2pAvailable()) { p2p.status = 'Direct connection needs the downloaded game file opened in Chrome/Edge/Firefox.'; refreshUI(); return; }
+    p2p.role = 'join'; p2p.code = code; p2p.status = 'Connecting…'; refreshUI();
+    const peer = p2p.peer = new Peer();
+    let tries = 0;
+    const attempt = () => { tries++; p2p.status = `Looking for game ${code}… (try ${tries}/8)`; refreshUI();
+      p2pSetup(peer.connect(PREFIX + code.toLowerCase(), { reliable: true }), 'red'); };
+    peer.on('open', attempt);
+    peer.on('error', e => {
+      if (e.type === 'peer-unavailable' && tries < 8 && p2p.peer === peer) { setTimeout(attempt, 2500); return; }
+      p2pStop(e.type === 'peer-unavailable' ? `No game found with code ${code}. Make sure the host's box says "Ready" and the code matches.`
+        : 'Connection error (' + e.type + ') · check internet / firewall and try again'); });
+  }
+  function commit(action) {
+    game.seq += 1; if (action.type === 'end') endTurnLocal();
+    if (action.type === 'attack') game.battle = true; if (action.type === 'edit') game.battle = false; publish({ ...action, seq: game.seq }); saveLocal(); refreshUI();
+    // hand the turn over automatically once every unit of this side has nothing left to do
+    if (action.type !== 'end' && !winner() && sideDone(game.turn)) setTimeout(() => { if (!busy() && !winner() && sideDone(game.turn) && myTurn()) commit({ type: 'end' }); }, 700);
+  }
+  function unitDone(u) {
+    if (u.attacked) return true;
+    if (!u.moved) return false;
+    return !neighbors(u.col, u.row).some(h => { const o = unitAt(h); return o && o.team !== u.team && o.dying === null; });
+  }
+  const sideDone = team => units.filter(u => u.team === team && u.dying === null).every(unitDone);
+  function endTurnLocal() {
+    for (const u of units) { u.moved = false; u.attacked = false; }
+    if (game.turn === 'red') game.round += 1;
+    game.turn = game.turn === 'blue' ? 'red' : 'blue';
+    selUnit = null; sel = null;
+  }
+  function onRemoteState(st) {
+    if (!validState(st)) return;
+    if (p2p.needSync) { p2p.needSync = false; if (busy()) { lastRemote = null; } floats = []; selUnit = null; sel = null; applyState(st); toast('Joined the host\'s game'); return; }
+    if (st.seq < game.seq || (st.seq === game.seq && p2p.role !== 'join')) return;   // on a tie the host's game wins
+    if (busy()) { lastRemote = st; return; }                 // finish current animation first
+    const a = st.last;
+    if (a && a.seq === st.seq && st.seq === game.seq + 1 && (a.type === 'move' || a.type === 'attack')) {
+      game.seq = st.seq;                                     // claim it so we don't replay twice
+      play(a, () => { applyState(st); publish(st.last); });  // then keep a copy in my presence too
+    } else {
+      if (a && a.type === 'reset') { floats = []; }
+      applyState(st); publish(st.last);
+    }
+  }
+  function seatsTaken() { const s = {}; for (const p of peerList) if (!p.sameTab && p.presence && p.presence.seat) s[p.presence.seat] = true; return s; }
+
+  async function connect() {
+    try { room = await claude.use('room'); } catch (e) { room = null; }
+    if (!room) { refreshUI(); return; }
+    room.onPeers(ch => {
+      peerList = ch.peers;
+      for (const p of ch.peers) if (!p.sameTab && p.presence) onRemoteState(p.presence.g);
+      refreshUI();
+    });
+    room.onConnection(() => refreshUI());
+    publish(null);
+    refreshUI();
+  }
+
+  // ---------- UI ----------
+  const hovEl = document.getElementById('hov'), selEl = document.getElementById('sel'), infoEl = document.getElementById('info');
+  const turnEl = document.getElementById('turn'), topEl = document.getElementById('top'), flashEl = document.getElementById('flash'), vicEl = document.getElementById('victory');
+  let seenTurn = 'blue', seenWinner = null, vicTimer = null;
+  const fmt = h => h ? `${h[0]}, ${h[1]}` : '–';
+  const myTurn = () => mode === 'local' || game.turn === mySeat;
+  const canCommand = u => u && !winner() && u.team === game.turn && myTurn() && !(u.moved && u.attacked);
+
+  function refreshUI() {
+    selEl.textContent = fmt(sel);
+    infoEl.textContent = selUnit ? `${teamName(selUnit.team)} ${selUnit.name} · HP ${selUnit.hp}/${selUnit.maxHp} · Damage ${selUnit.dmg} · Move ${selUnit.move}` +
+      (selUnit.team === game.turn ? ` · ${selUnit.attacked ? 'done' : selUnit.moved ? 'can still attack' : 'ready'}` : '') : '';
+    const w = winner();
+    const turnHtml = w ? `<b style="color:rgb(${TEAM[w].map(c => c + 70)})">${teamName(w)} wins!</b> · press R twice for a new game`
+      : `Round ${game.round} · <b style="color:rgb(${TEAM[game.turn].map(c => c + 70)})">${poss(teamName(game.turn))} turn</b>` +
+        (mode === 'online' ? (myTurn() ? ' · your move' : ' · waiting for opponent') : '');
+    if (Date.now() - resetArmed > 2000 && lastTurnHtml !== turnHtml) { lastTurnHtml = turnHtml; turnEl.innerHTML = turnHtml; }
+    const bdm = document.getElementById('bdm'), dmEl = document.getElementById('dm');
+    const dmLbl = `🧙 Dungeon Master: ${game.dm ? 'On' : 'Off'}`; if (bdm.textContent !== dmLbl) bdm.textContent = dmLbl;
+    bdm.classList.toggle('on', !!game.dm); bdm.disabled = !isHost();
+    if (dmActive()) {
+      const pb = (type, team, label) => `<button data-place="${type}:${team}" class="${placing && placing.type === type && placing.team === team ? 'on' : ''}">${label}</button>`;
+      const html = `<div class="t">🧙 Dungeon Master tools</div>
+        <div class="row"><span class="lbl">Heroes</span>${pb('knight', 'blue', 'Knight')}${pb('swordsman', 'blue', 'Swordsman')}</div>
+        <div class="row"><span class="lbl">Enemies</span>${pb('swordsman', 'red', 'Swordsman')}${pb('knight', 'red', 'Knight')}</div>
+        <div class="row"><button data-act="heal">❤ Heal all heroes</button></div>
+        <div class="sub">Unit types · values for new units (mana: hero units only)</div>
+        <table class="st"><tr><th></th><th>HP</th><th>Mana</th></tr>
+        ${['knight', 'swordsman'].map(ty => `<tr><td>${UNIT_TYPES[ty].name}</td>
+          <td><input type="number" min="1" max="999" data-type="${ty}" value="${typeMax(ty)}"></td>
+          ${UNIT_TYPES[ty].hero ? `<td><input type="number" min="0" max="99" data-type="${ty}" data-stat="manaMax" value="${typeStat(ty, 'manaMax')}"></td>` : '<td class="na">–</td>'}</tr>`).join('')}</table>
+        ${selUnit ? `<div class="sub">Selected: ${teamName(selUnit.team)} ${selUnit.name}</div>
+        <table class="st"><tr><th></th><th>Current</th><th>Max</th></tr>
+          <tr><td>HP</td><td><input type="number" min="1" max="999" data-unit="hp" value="${selUnit.hp}"></td><td><input type="number" min="1" max="999" data-unit="max" value="${selUnit.maxHp}"></td></tr>
+          ${hasRes(selUnit) ? `          <tr><td>Mana</td><td><input type="number" min="0" max="99" data-unit="mana" value="${selUnit.mana}"></td><td><input type="number" min="0" max="99" data-unit="manaMax" value="${selUnit.manaMax}"></td></tr>` : ''}</table>
+        <div class="row"><button data-act="remove">Remove</button></div>` : '<div class="sub">Click a unit to edit its HP and mana</div>'}
+        <div class="k">${placing ? 'Click empty tiles to place · Esc to stop' : 'Pick a unit above, then click tiles to place it.<br>Drag any unit to move it · Del removes the unit under the mouse.'}</div>`;
+      if (dmEl.dataset.h !== html) { dmEl.dataset.h = html; dmEl.innerHTML = html; }
+      dmEl.style.display = 'block';
+    } else { dmEl.style.display = 'none'; placing = null; }
+    // team panels: units that still have their turn
+    for (const team of ['blue', 'red']) {
+      const el = document.getElementById(team === 'blue' ? 'tb' : 'tr'), alive = units.filter(u => u.team === team && u.dying === null);
+      const active = team === game.turn && !w, left = active ? alive.filter(u => !unitDone(u)).length : alive.length;
+      const pips = alive.map(u => `<span class="pip ${!active ? 'on' : unitDone(u) ? '' : u.moved ? 'half' : 'on'}"></span>`).join('');
+      const you = mode === 'online' && mySeat === team ? ' (you)' : '';
+      const html = `<span class="nm" style="color:rgb(${TEAM[team].map(v => v + 80)})">${teamName(team)}${you}</span> · ` +
+        (active ? `${left}/${alive.length} units left to act` : `${alive.length} unit${alive.length === 1 ? '' : 's'} · waiting`) + `<span class="pips">${pips}</span>`;
+      if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
+      el.classList.toggle('active', active); el.style.setProperty('--tc', `rgb(${TEAM[team].map(v => v + 60)})`);
+    }
+    endBtn.disabled = !!w || !myTurn() || busy() || endLocked();
+    // turn change flash
+    if (!w && game.turn !== seenTurn) {
+      seenTurn = game.turn; turnStartedAt = Date.now(); const c = `rgb(${TEAM[game.turn].map(v => v + 40)})`;
+      topEl.style.setProperty('--tc', c); topEl.classList.remove('pulse'); void topEl.offsetWidth; topEl.classList.add('pulse');
+      flashEl.style.color = `rgb(${TEAM[game.turn].map(v => v + 90)})`;
+      flashEl.textContent = mode === 'online' ? (myTurn() ? 'YOUR TURN' : `${poss(teamName(game.turn)).toUpperCase()} TURN`) : `${poss(teamName(game.turn)).toUpperCase()} TURN`;
+      flashEl.classList.remove('show'); void flashEl.offsetWidth; flashEl.classList.add('show');
+    }
+    // big victory banner for 4 seconds
+    if (w !== seenWinner) {
+      seenWinner = w; clearTimeout(vicTimer);
+      if (w) {
+        const n = document.getElementById('vname');
+        n.textContent = mode === 'online' ? `${teamName(w)} wins${w === mySeat ? ' · you' : ''}` : `${teamName(w)} wins`;
+        n.style.color = `rgb(${TEAM[w].map(v => v + 80)})`;
+        vicEl.classList.add('show'); vicTimer = setTimeout(() => vicEl.classList.remove('show'), 4000);
+      } else { vicEl.classList.remove('show'); seenTurn = game.turn; }
+    }
+    if (!room) {                                           // direct-connection panel
+      let html;
+      if (p2p.conn) html = `<div>🟢 Connected to your friend · you are <b style="color:rgb(${TEAM[mySeat].map(c => c + 70)})">${teamName(mySeat)}</b></div>
+        <div class="seats"><button data-act="leave">Disconnect</button></div>`;
+      else if (p2p.role === 'host') html = `<div>Game code: <b style="font-size:17px;letter-spacing:2px;color:#f0e2a8">${p2p.ready ? p2p.code : '·····'}</b></div>
+        <div class="k">${p2p.status}</div><div class="seats"><button data-act="leave">Cancel</button></div>`;
+      else html = `<div>Play with a friend (direct connection)</div>
+        <div class="seats"><button data-act="host">Host game</button>
+        <input id="code" maxlength="5" placeholder="CODE" autocomplete="off"><button data-act="join">Join</button></div>
+        ${p2p.status ? `<div class="k" style="margin-top:6px">${p2p.status}</div>` : ''}`;
+      if (lastNetHtml !== html) {
+        const old = document.getElementById('code'), v = old ? old.value : '';
+        lastNetHtml = html; netEl.innerHTML = html;
+        const inp = document.getElementById('code'); if (inp) inp.value = v;
+      }
+      return;
+    }
+    const others = peerList.filter(p => !p.sameTab && p.kind === 'viewer').length, taken = seatsTaken();
+    const conn = room.connected();
+    const btn = (id, label, dis) => `<button data-seat="${id}" ${dis ? 'disabled' : ''} class="${(mode === 'local' && id === 'local') || (mode === 'online' && mySeat === id) ? 'on' : ''}">${label}</button>`;
+    const netHtml = `<div>${conn ? '🟢 Online' : '⚪ Connecting…'} · ${others} other player${others === 1 ? '' : 's'} here</div>
+      <div class="seats">${btn('blue', 'Play Blue', taken.blue)}${btn('red', 'Play Red', taken.red)}${btn('local', 'Local (both)', false)}</div>`;
+    if (lastNetHtml !== netHtml) { lastNetHtml = netHtml; netEl.innerHTML = netHtml; }
+  }
+  document.getElementById('net').addEventListener('click', e => {
+    const act = e.target.closest('button[data-act]');
+    if (act) {
+      if (act.dataset.act === 'host') p2pHost();
+      if (act.dataset.act === 'join') p2pJoin(document.getElementById('code').value);
+      if (act.dataset.act === 'leave') p2pStop('');
+      return;
+    }
+    const s = e.target.closest('button[data-seat]'); if (!s || s.disabled) return;
+    if (s.dataset.seat === 'local') { mode = 'local'; mySeat = null; } else { mode = 'online'; mySeat = s.dataset.seat; }
+    selUnit = null; sel = null; publish(null); refreshUI();
+  });
+
+  let turnStartedAt = 0;                                    // End turn is locked for 1 s after every turn change
+  const endLocked = () => Date.now() - turnStartedAt < 1000;
+  function endTurn() { if (winner() || !myTurn() || busy() || endLocked()) return; commit({ type: 'end' }); }
+  const endBtn = document.getElementById('endturn');
+  endBtn.addEventListener('click', endTurn);
+  document.getElementById('bsave').addEventListener('click', saveFile);
+  document.getElementById('bdm').addEventListener('click', toggleDM);
+  document.getElementById('dm').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.place) { const [type, team] = b.dataset.place.split(':'); placing = placing && placing.type === type && placing.team === team ? null : { type, team }; selUnit = null; sel = null; }
+    if (b.dataset.act === 'remove') removeSelected();
+    if (b.dataset.act === 'heal') healHeroes();
+    refreshUI();
+  });
+  document.getElementById('dm').addEventListener('change', e => {
+    const i = e.target; if (i.tagName !== 'INPUT' || !dmActive() || busy()) return;
+    const k = i.dataset.unit;
+    if (i.dataset.type) { if (i.dataset.stat) setTypeStat(i.dataset.type, i.dataset.stat, i.value); else setTypeMax(i.dataset.type, i.value); }
+    else if (k && selUnit) {
+      if (k === 'max') setUnitMax(selUnit, i.value); else if (k === 'hp') selUnit.hp = Math.min(selUnit.maxHp, clampHp(i.value));
+      else if (k === 'sta' || k === 'staMax') setUnitRes(selUnit, 'sta', 'staMax', i.value, k === 'staMax');
+      else if (k === 'mana' || k === 'manaMax') setUnitRes(selUnit, 'mana', 'manaMax', i.value, k === 'manaMax');
+    }
+    else return;
+    commit({ type: 'edit' });
+  });
+  document.getElementById('bload').addEventListener('click', () => document.getElementById('fload').click());
+  document.getElementById('fload').addEventListener('change', e => { const f = e.target.files[0]; if (f) loadFile(f); e.target.value = ''; });
+  function resetGame() {
+    if (Date.now() - resetArmed > 2000) { resetArmed = Date.now(); turnEl.innerHTML = 'Press <b>R</b> again to reset the game for everyone'; lastTurnHtml = ''; return; }
+    resetArmed = 0; const st = freshState(game.seq + 1); st.last = { type: 'reset', seq: st.seq };
+    floats = []; applyState(st); publish(st.last);
+  }
+
+  // ---------- Input ----------
+  let down = null, dragging = false;
+  cv.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const h = pick(e.clientX, e.clientY), u = unitAt(h);
+    down = { x: e.clientX, y: e.clientY, ox: off.x, oy: off.y, grab: dmActive() && !placing && u && !busy() ? u : null };
+    dragging = false; cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (down) {
+      const dx = e.clientX - down.x, dy = e.clientY - down.y;
+      if (!dragging && Math.hypot(dx, dy) > 4) { dragging = true; cv.classList.add('drag'); if (down.grab) dragUnit = down.grab; }
+      if (dragging && dragUnit) dragUnit.dragPos = { x: (e.clientX - off.x) / z, y: (e.clientY - off.y) / z + 10 };
+      else if (dragging) { off.x = down.ox + dx; off.y = down.oy + dy; }
+    }
+    const h = pick(e.clientX, e.clientY);
+    if (fmt(h) !== fmt(hover)) { hover = h; hovEl.textContent = fmt(h); }
+  });
+  cv.addEventListener('pointerup', e => {
+    const h = pick(e.clientX, e.clientY);
+    if (dragUnit) {                                          // DM: drop the dragged unit
+      const u = dragUnit; dragUnit = null; u.dragPos = null;
+      const o = unitAt(h);
+      if (h && (!o || o === u) && dmActive()) { [u.col, u.row] = h; selUnit = u; sel = h; commit({ type: 'edit' }); }
+      else if (h) toast('That tile is taken');
+    } else if (down && !dragging) {
+      if (placing && dmActive()) {                         // DM: place a new unit
+        if (h && !unitAt(h)) {
+          const T = UNIT_TYPES[placing.type];
+          units.push(runtimeUnit({ id: placing.type[0] + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), type: placing.type,
+            team: placing.team, col: h[0], row: h[1], hp: typeMax(placing.type), maxHp: typeMax(placing.type), sta: typeStat(placing.type, 'staMax'), staMax: typeStat(placing.type, 'staMax'), mana: typeStat(placing.type, 'manaMax'), manaMax: typeStat(placing.type, 'manaMax'), face: placing.team === 'blue' ? Math.PI / 2 : -Math.PI / 2, moved: false, attacked: false }));
+          commit({ type: 'edit' });
+        } else if (h) toast('That tile is taken');
+      } else {
+        sel = (h && sel && h[0] === sel[0] && h[1] === sel[1]) ? null : h;
+        selUnit = unitAt(sel) || null; refreshUI();
+      }
+    }
+    down = null; dragging = false; cv.classList.remove('drag');
+  });
+  cv.addEventListener('pointerleave', () => { if (!down && hover) { hover = null; hovEl.textContent = '–'; } });
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    const nz = Math.min(3, Math.max(0.18, z * Math.exp(-e.deltaY * 0.0015)));
+    off.x = e.clientX - (e.clientX - off.x) * (nz / z); off.y = e.clientY - (e.clientY - off.y) * (nz / z);
+    z = nz;
+  }, { passive: false });
+
+  // hotkeys: work the same for every player on their own PC
+  addEventListener('keydown', e => {
+    if (e.target && e.target.tagName === 'INPUT') { if (e.key === 'Enter') { if (e.target.id === 'code') p2pJoin(e.target.value); else e.target.blur(); } return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); return; }
+    if (e.repeat) return;
+    const k = e.key.toLowerCase();
+    if (k === 'r') resetGame();
+    if (k === 'escape') { if (placing) { placing = null; refreshUI(); return; } sel = null; selUnit = null; refreshUI(); }
+    if (k === 'delete' || k === 'backspace') removeUnit(unitAt(hover) || selUnit);   // DM: delete the unit under the mouse
+    if (k === ' ') { e.preventDefault(); endTurn(); }
+    if (k === 'tab') {                                       // cycle through your units that can still act
+      e.preventDefault();
+      const mine = units.filter(canCommand); if (!mine.length) return;
+      selUnit = mine[(mine.indexOf(selUnit) + 1) % mine.length]; sel = [selUnit.col, selUnit.row];
+      const m = center(...sel); off.x = innerWidth / 2 - (m.x + OX) * z; off.y = innerHeight / 2 - (m.y + OY) * z; refreshUI();
+    }
+  });
+  addEventListener('contextmenu', e => e.preventDefault());   // no browser menu inside the game
+  cv.addEventListener('contextmenu', e => {
+    if (!selUnit || busy()) return;
+    const h = pick(e.clientX, e.clientY); if (!h) return;
+    const u = selUnit, tgt = unitAt(h), here = [u.col, u.row];
+    const hint = (txt, hh) => { const m = center(...hh); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
+    if (!canCommand(u)) { hint(winner() ? 'Game over' : u.team !== game.turn || !myTurn() ? 'Not your turn' : 'Already acted', here); return; }
+    if (tgt === u) return;
+    if (tgt) {
+      if (tgt.team === u.team || tgt.dying !== null) return;
+      if (u.attacked) { hint('Already attacked', here); return; }
+      let path = [];
+      if (hexDist(here, h) !== 1) {
+        if (u.moved) { hint('Already moved', here); return; }
+        const b = reach(u); let best = null;
+        for (const n of neighbors(...h)) { const d = b.dist.get(key(...n)); if (d != null && d > 0 && !unitAt(n) && (!best || d < best.d)) best = { n, d }; }
+        if (!best) { hint('Out of reach', h); return; }
+        path = pathTo(b, best.n);
+      }
+      const a = { type: 'attack', id: u.id, path, target: tgt.id };
+      play(a, () => commit(a)); return;
+    }
+    if (u.moved) { hint('Already moved', here); return; }
+    const b = reach(u);
+    if (!b.dist.has(key(...h))) { hint('Too far', h); return; }
+    const a = { type: 'move', id: u.id, path: pathTo(b, h) };
+    play(a, () => commit(a));
+  });
+  addEventListener('resize', () => resize(false));
+
+  // ---------- Start ----------
+  if (loadLocal()) setTimeout(() => toast(`Continuing your saved game · Round ${game.round}`), 600); else applyState(freshState(0));
+  setInterval(() => { if (lastRemote && !busy()) { const st = lastRemote; lastRemote = null; onRemoteState(st); } refreshUI(); }, 250);
+  setTimeout(() => {
+    buildLayers();
+    document.getElementById('load').remove();
+    resize(true);
+    loop();
+    connect();
+  }, 30);
+})();
+</script>
+</body>
+</html>
