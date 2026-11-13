@@ -78,7 +78,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v0.7</div>
+  <div class="t">Medieval Cities · v0.8</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -827,10 +827,14 @@
     lancer:      { name: 'Lancer',       maxHp: 18, dmg: 3, move: 4, h: 20.5, mounted: true, charge: 6, build: buildLancer },
     horsearcher: { name: 'Horse archer', maxHp: 9,  dmg: 2, move: 4, h: 20.5, mounted: true, ranged: 'arc', range: 5, build: buildHorseArcher },
     trebuchet:   { name: 'Trebuchet',    maxHp: 6,  dmg: 20, move: 1, h: 16, ranged: 'mark', range: 8, noMoveShoot: true, build: buildTrebuchet },
+    tower:       { name: 'Tower', maxHp: 24, dmg: 3, move: 0, h: 24, ranged: 'arc', range: 5, noMoveShoot: true, structure: true, build: buildTower },
     army:        { name: 'Army', army: true, maxHp: 1, staMax: 0, manaMax: 0, dmg: 0, move: 2, build: buildFlag },
     ballista:    { name: 'Ballista',     maxHp: 6,  dmg: 12, move: 1, h: 9, ranged: 'pierce', range: 8, noMoveShoot: true, build: buildBallista },
   };
-  const T = u => UNIT_TYPES[u.type] || UNIT_TYPES.swordsman;
+  const WALL_RANGE = {};
+  const T = u => { const t = UNIT_TYPES[u.type] || UNIT_TYPES.swordsman;      // standing on a wall: +1 range
+    if (t.range && game.bt && game.bt.siege && game.view === 'battle' && u.col !== undefined && onWall(u)) return WALL_RANGE[u.type] || (WALL_RANGE[u.type] = { ...t, range: t.range + 1 });
+    return t; };
 
   const meshCache = {};
   const meshFor = (type, team, v = '') => { const k = type + (TEAM[team] || TEAM.blue).join() + v; return meshCache[k] || (meshCache[k] = UNIT_TYPES[type].build(TEAM[team] || TEAM.blue, v || undefined)); };
@@ -874,14 +878,14 @@
         ...(u.cards ? { cards: u.cards } : {}), ...(u.tauntR ? { tauntR: u.tauntR } : {}), ...(u.guard ? { guard: u.guard } : {}),
         ...(u.dots && u.dots.length ? { dots: u.dots } : {}), ...(u.skillUsed ? { skillUsed: true } : {}),
         ...(u.raining ? { raining: true } : {}), ...(u.watch ? { watch: u.watch } : {}), ...(u.rain && u.rain.length ? { rain: u.rain } : {}),
-        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
+        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
     const old = new Map(units.map(u => [u.id, u]));
     units = st.units.map(s => { const o = old.get(s.id);
       if (!o || o.type !== (UNIT_TYPES[s.type] ? s.type : 'swordsman') || o.team !== s.team) return runtimeUnit(s);
       if (typeof s.face === 'number') o.want = s.face;          // keep facing in sync with the shared game
-      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
+      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, climb: s.climb || 0, replaced: s.replaced || null, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
       return o; });
     const prevView = game.view;
     game = { seq: st.seq, turn: st.turn, round: st.round, dm: !!st.dm, battle: !!st.battle, types: (st.types && typeof st.types === 'object') ? st.types : {},
@@ -1062,6 +1066,8 @@
   const BUILDINGS = {
     tradepost: { name: 'Trade post', cost: 20, text: '+1 point per turn (+1 more per city it is road-connected to)' },
     garrison:  { name: 'Garrison', cost: 10, text: '+1 swordsman defender, +1 defender of each unit type this city can recruit' },
+    walls:     { name: 'Walls', cost: 20, text: 'Stone walls with a 3-tile gate and stairs when this city is besieged' },
+    tower:     { name: 'Tower', cost: 20, text: 'A defence tower (24 HP, range 5, 3 damage) placed like a unit when besieged · up to 2' },
     heroes:    { name: "Heroes' hall", cost: 20, text: 'Recruit any hero (base stats, no cards)', units: HEROES },
   };
   for (const t of [...FOOT, ...ARCH, ...MOUNT, ...SIEGE]) BUILDINGS[t] = { name: `${UNIT_TYPES[t].name} ${MOUNT.includes(t) ? 'stables' : ARCH.includes(t) ? 'range' : SIEGE.includes(t) ? 'workshop' : 'barracks'}`, cost: 10, text: `Recruit ${UNIT_TYPES[t].name}s here (${unitCost(t)} pts each)`, units: [t], cost: 20 };
@@ -1166,7 +1172,7 @@
     return out;
   }
   const angDiff = (x, y) => { let d = Math.abs(x - y) % (Math.PI * 2); return Math.min(d, Math.PI * 2 - d); };
-  const inZone = (z, h) => z && hexDist(z.a, h) <= z.r && h[0] >= 0 && h[0] < BCOLS && h[1] >= 0 && h[1] < BROWS;
+  const inZone = (z, h) => z && (z.siege ? h[0] >= 0 && h[0] < BCOLS && h[1] >= 0 && h[1] < BROWS && inSiegeZone(z, h) : hexDist(z.a, h) <= z.r) && h[0] >= 0 && h[0] < BCOLS && h[1] >= 0 && h[1] < BROWS;
   const zoneTiles = z => { const out = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) if (inZone(z, [c, r])) out.push([c, r]); return out; };
   function makeBattleGround(base, zones) {
     const g = new Array(BCOLS * BROWS).fill(base), v = VARIETY[base] || base, R = Math.random;
@@ -1230,7 +1236,11 @@
     // lock the armies on the campaign map and remember it
     for (const j of b.joined) if (j.kind === 'army') { const u = units.find(x => x.id === j.id); if (u) u.inBattle = b.id; }
     game.campaign = { armies: exportCampaignUnits(), round: game.round, turn: game.turn };
-    units = []; for (const j of b.joined.filter(j => j.dist <= 1)) spawnTroops(j, zones[j.fid], 1);
+    const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity);
+    if (sc && sc.buildings.includes('walls') && zones[sc.owner]) { buildSiege(b, sc.owner, sc); b.siege.def = sc.owner; }
+    units = []; for (const j of b.joined.filter(j => j.dist <= 1)) spawnTroops(j, b.zones[j.fid], 1);
+    if (sc && b.zones[sc.owner]) { const free = zoneTiles(b.zones[sc.owner]).filter(h => !unitAt(h) && !wallAt(h)).sort((x, y) => hexDist(x, [BCOLS >> 1, BROWS >> 1]) - hexDist(y, [BCOLS >> 1, BROWS >> 1]));
+      sc.buildings.filter(x => x === 'tower').forEach((x, i) => { const h = free.splice(3 + i * 4, 1)[0] || free.shift(); if (h) units.push(runtimeUnit({ ...troop('tower'), id: `t:${sc.id}.${i}`, team: sc.owner, col: h[0], row: h[1], face: 0, moved: false, attacked: false })); }); }
     b.phase = 'place'; b.ready = {}; for (const fid of sides) if (faction(fid).ai) b.ready[fid] = true;
     for (const u of units) u.placing = true;
     game.view = 'battle'; game.turn = sides[0]; game.round = 1; game.battle = true; selUnit = null; sel = null; selCity = null;
@@ -1261,6 +1271,9 @@
   function placeUnitOp(id, h, seat) {
     const b = bt(), u = units.find(x => x.id === id); if (!b || !u || !u.placing || (seat && seat !== u.team) || b.ready[u.team]) return;
     const z = u.enter ? b.pockets[u.team] : b.zones[u.team]; if (!inZone(z, h) || unitAt(h) || blockedTile(h)) return;
+    if (u.replaced && sg()) { sg().pieces[u.replaced] = { kind: 'wall', hp: WALL_HP }; u.replaced = null; }
+    if (u.type === 'tower' && wallAt(h)) { if (wallAt(h).kind !== 'wall') return; u.replaced = key(...h); delete sg().pieces[key(...h)]; }   // a tower may take a wall piece's place
+    else if (wallAt(h) && wallAt(h).kind === 'gate') return;
     u.col = h[0]; u.row = h[1]; commit({ type: 'place' });
   }
   function readyOp(fid, seat) { const b = bt(); if (!b || (seat && seat !== fid)) return; b.ready[fid] = true; commit({ type: 'battle-ready' }); checkPlacementDone(); }
@@ -1353,6 +1366,104 @@
     if (op.op === 'answer') answerAsk(op.i, op.yes, seat);
     if (op.op === 'join') joinRunningBattle(op.id, seat);
   }
+  // ===================== SIEGES: walls, gate, stairs, ladders, towers =====================
+  const WALL_HP = 24, GATE_HP = 72, WALL_PX = 5.6 * Math.sqrt(1 - SQ * SQ) * K;
+  const sg = () => (game.view === 'battle' && game.bt && game.bt.siege) || null;
+  const wallAt = h => { const s2 = sg(); return s2 && h ? s2.pieces[key(...h)] || null : null; };   // {kind:'wall'|'gate'|'stair', hp}
+  const isWallTop = h => { const p = wallAt(h); return !!p && p.kind === 'wall'; };
+  const gateClosed = h => { const p = wallAt(h); return !!p && p.kind === 'gate' && !sg().gateOpen; };
+  const onWall = u => isWallTop([u.col, u.row]) && !u.climb;
+  const ladderAt = g => (sg() ? sg().ladders : []).find(l => l.g[0] === g[0] && l.g[1] === g[1]) || null;
+  function projAt(h, th) { const mid = center(BCOLS >> 1, BROWS >> 1), m = center(...h); return ((m.x - mid.x) * Math.cos(th) + ((m.y - mid.y) / SQ) * Math.sin(th)) / (SQ3 * S); }
+  function perpAt(h, th) { const mid = center(BCOLS >> 1, BROWS >> 1), m = center(...h); return (-(m.x - mid.x) * Math.sin(th) + ((m.y - mid.y) / SQ) * Math.cos(th)) / (SQ3 * S); }
+  function buildSiege(b, fid, city) {                  // a straight wall across the board in front of the defender, a 3-tile gate in the middle
+    const z = b.zones[fid], mid = center(BCOLS >> 1, BROWS >> 1), za = center(...z.a), th = Math.atan2((za.y - mid.y) / SQ, za.x - mid.x), W = 4;
+    const all = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) all.push([c, r]);
+    const band = all.filter(h => { const p = projAt(h, th); return p >= W && p < W + 1.15; });
+    const g = b.grid.split(''); for (const h of all) if (projAt(h, th) >= W - 1) g[h[1] * BCOLS + h[0]] = b.base;   // clear rocks at and behind the wall
+    b.grid = g.join('');
+    const pieces = {}; for (const h of band) pieces[key(...h)] = { kind: 'wall', hp: WALL_HP };
+    const gate = band.slice().sort((x, y) => Math.abs(perpAt(x, th)) - Math.abs(perpAt(y, th))).slice(0, 3);
+    for (const h of gate) pieces[key(...h)] = { kind: 'gate' };
+    const inner = all.filter(h => { const p = projAt(h, th); return p >= W + 1.15 && p < W + 2.2 && !pieces[key(...h)]; });
+    const gp = gate.map(h => perpAt(h, th)), gmin = Math.min(...gp), gmax = Math.max(...gp), byPerp = inner.slice().sort((x, y) => perpAt(x, th) - perpAt(y, th));
+    const stairs = [byPerp[0], byPerp[byPerp.length - 1], byPerp.filter(h => perpAt(h, th) > gmax + 0.4)[0], byPerp.filter(h => perpAt(h, th) < gmin - 0.4).slice(-1)[0]].filter(Boolean);
+    for (const h of stairs) pieces[key(...h)] = { kind: 'stair' };
+    b.siege = { th, W, pieces, gateOpen: false, gateHp: GATE_HP, gateChanged: '', ladders: [], city: city.id };
+    b.zones[fid] = { a: z.a, r: 99, siege: { th, W } };
+  }
+  const inSiegeZone = (z, h) => projAt(h, z.siege.th) >= z.siege.W && !(wallAt(h) && wallAt(h).kind === 'gate');
+  function canStep(from, to) {                        // walls are reached by stairs, ladders, or from other wall tiles
+    const s2 = sg(); if (!s2) return true;
+    const pf = s2.pieces[key(...from)], pt = s2.pieces[key(...to)];
+    if (pt && pt.kind === 'gate') return s2.gateOpen && !(pf && pf.kind === 'wall');
+    if (pt && pt.kind === 'wall') return !!pf && (pf.kind === 'wall' || pf.kind === 'stair');
+    if (pf && pf.kind === 'wall') return !!pt && pt.kind === 'stair';
+    return true;
+  }
+  function destroyPiece(h) {
+    const s2 = sg(), k = key(...h), p = s2.pieces[k]; if (!p) return;
+    if (p.kind === 'gate') { for (const kk of Object.keys(s2.pieces)) if (s2.pieces[kk].kind === 'gate') delete s2.pieces[kk]; floatAt(h, 'GATE BROKEN!', '#ffcf6a'); }
+    else { delete s2.pieces[k]; floatAt(h, 'WALL DOWN!', '#ffcf6a');
+      for (const u of units) if (u.col === h[0] && u.row === h[1] && !u.climb && u.dying === null) { u.hp = 0; u.dying = 0; } }   // whoever stood on it falls with it
+    for (const l of s2.ladders.filter(l => !s2.pieces[key(...l.w)])) for (const u of units) if (u.climb && u.col === l.g[0] && u.row === l.g[1]) u.climb = 0;
+    s2.ladders = s2.ladders.filter(l => s2.pieces[key(...l.w)]);
+    const m = tileAt(h); effects.push({ x: m.x, y: m.y, t: 0, color: '170,160,140', r: 70 });
+  }
+  function hitPiece(h, dmg) {
+    const s2 = sg(), p = wallAt(h); if (!p || p.kind === 'stair') return;
+    if (p.kind === 'gate') { s2.gateHp -= dmg; floatAt(h, `-${dmg}`, '#ff5a46'); if (s2.gateHp <= 0) destroyPiece(h); }
+    else { p.hp -= dmg; floatAt(h, `-${dmg}`, '#ff5a46'); if (p.hp <= 0) destroyPiece(h); }
+  }
+  const floatAt = (h, txt, col) => { const m = tileAt(h); addFloat(m.x, m.y - 40, txt, col, 18); };
+  // play() handlers for siege actions; returns true when handled
+  function siegeAction(u, a) {
+    if (a.type === 'hitwall') { const h = [a.col, a.row], ty = T(u);
+      moveUnit(u, (a.path || []).map(x => [x[0], x[1]]), () => { faceTile(u, h); u.attacked = true; u.moved = true;
+        if (ty.ranged && hexDist([u.col, u.row], h) > 1) fire(ty.ranged === 'arc' ? 'arrow' : 'bolt', shotFrom(u), tileAt(h), () => hitPiece(h, ty.ranged === 'mark' ? u.dmg : u.dmg));
+        else hitPiece(h, u.type === 'warrior' ? baseDmg(u) : u.dmg); });
+      return true; }
+    if (a.type === 'ladder') { faceTile(u, [a.col, a.row]); const s2 = sg(); if (!ladderAt([u.col, u.row])) s2.ladders.push({ g: [u.col, u.row], w: [a.col, a.row] });
+      u.attacked = true; u.moved = true; floatOn(u, 'LADDER UP', '#e8c890'); afterIdle && setTimeout(() => {}, 0); return true; }
+    if (a.type === 'climb') { const l = ladderAt([u.col, u.row]); if (!l) return true; faceTile(u, l.w); u.attacked = true; u.moved = true;
+      if ((u.climb || 0) < 2) { u.climb = (u.climb || 0) + 1; floatOn(u, u.climb === 1 ? 'CLIMBING…' : 'ALMOST UP', '#e8c890'); }
+      else { u.climb = 0; u.col = l.w[0]; u.row = l.w[1]; if (u === selUnit) sel = [u.col, u.row]; floatOn(u, 'ON THE WALL!', '#ffd27a'); }
+      return true; }
+    if (a.type === 'gate') { const s2 = sg(); s2.gateOpen = !!a.open; s2.gateChanged = `${game.round}:${game.turn}`; u.attacked = true; u.moved = true;
+      if (!a.open) for (const o of units) if (wallAt([o.col, o.row]) && wallAt([o.col, o.row]).kind === 'gate' && o.dying === null) { o.hp = 0; o.dying = 0; floatOn(o, 'CRUSHED', '#ff5a46'); }
+      floatOn(u, a.open ? 'GATE OPENED' : 'GATE CLOSED', '#ffd27a'); return true; }
+    return false;
+  }
+  // tower: a building that fights like a unit (can't move)
+  function buildTower(team) {
+    const m = { v: [], f: [] }, ST = [150, 144, 130], DST = [112, 106, 96], ROOF = team.map(c => Math.min(255, c * 1.05 + 10));
+    part(m, cylG(6.2, 15, 8, 5.4), ST, {});
+    part(m, cylG(6.8, 1.2, 8, 6.8), DST, { p: [0, 15, 0] });
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; part(m, boxG(1.6, 1.6, 1.6), ST, { p: [Math.cos(a) * 6, 16.2, Math.sin(a) * 6] }); }
+    part(m, boxG(1.4, 2.6, 0.3), [40, 32, 26], { p: [0, 9, 5.6], bias: 1 });
+    part(m, boxG(0.3, 7, 0.3), [92, 64, 40], { p: [0, 16.2, 0] });
+    part(m, prismG([[0.15, 23], [3.6, 23], [3.6, 20.6], [0.15, 20.6]], 0.14), team, { p: [0, 0, -0.07] });
+    return m;
+  }
+  const PIECE_MESH = {};
+  function pieceMesh(kind, open) {                    // stone wall block, gate (wood or open arch), stone stairs
+    const k = kind + (open ? 'o' : ''); if (PIECE_MESH[k]) return PIECE_MESH[k];
+    const m = { v: [], f: [] }, ST = [146, 140, 126], DST = [108, 102, 92], R = 17.2, H = 5.6;
+    if (kind === 'stair') { for (let i = 0; i < 3; i++) part(m, cylG(R * (1 - i * 0.22), H * (i + 1) / 3, 6), i % 2 ? ST : DST, { r: [0, Math.PI / 6, 0] }); }
+    else if (kind === 'gate' && open) { for (const sx of [-1, 1]) part(m, boxG(4, H + 1, 10), DST, { p: [sx * 12, 0, 0] }); }
+    else { part(m, cylG(R, H, 6), kind === 'gate' ? [96, 66, 40] : ST, { r: [0, Math.PI / 6, 0] });
+      if (kind === 'gate') { part(m, boxG(14, 0.5, 0.4), [60, 60, 64], { p: [0, H * 0.35, 9.2], bias: 2 }); part(m, boxG(14, 0.5, 0.4), [60, 60, 64], { p: [0, H * 0.75, 9.2], bias: 2 }); }
+      else for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + Math.PI / 6; part(m, boxG(3.2, 1.6, 3.2), DST, { p: [Math.cos(a) * R * 0.72, H, Math.sin(a) * R * 0.72] }); } }
+    return (PIECE_MESH[k] = m);
+  }
+  function drawLadders() {
+    const s2 = sg(); if (!s2) return;
+    for (const l of s2.ladders) { const a = tileAt(l.g), b = tileAt(l.w), bx = b.x, by = b.y - WALL_PX;
+      const dx = bx - a.x, dy = by - a.y, n = Math.hypot(dx, dy) || 1, px = -dy / n * 7, py = dx / n * 7;
+      ctx.strokeStyle = '#7a5530'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(a.x + px, a.y + py); ctx.lineTo(bx + px, by + py); ctx.moveTo(a.x - px, a.y - py); ctx.lineTo(bx - px, by - py);
+      for (let i = 1; i < 6; i++) { const f = i / 6; ctx.moveTo(a.x + dx * f + px, a.y + dy * f + py); ctx.lineTo(a.x + dx * f - px, a.y + dy * f - py); } ctx.stroke(); }
+  }
   function resolvePendingAI() {                     // an AI that took a city keeps it
     const p = game.pending; if (!p) return; const f = faction(p.by);
     if (f && f.ai && iRunAI()) { captureCity(true); }
@@ -1409,6 +1520,9 @@
       if (adj) { aiGo({ type: 'attack', id: u.id, path: [], target: adj.id, targets: [adj.id], dir: u.type === 'warrior' ? warriorAim(u, here, [adj.col, adj.row]) : undefined }); return; }
       if (!u.moved) { const s = closest(t => hexDist(t, [tgt.col, tgt.row]) === 1);
         if (s) { aiGo({ type: 'attack', id: u.id, path: pathTo(b, s.t), target: tgt.id, targets: [tgt.id], dir: u.type === 'warrior' ? warriorAim(u, s.t, [tgt.col, tgt.row]) : undefined }); return; } }
+      if (sg() && sg().def !== team) { const near2 = neighbors(...here).filter(n => { const p = wallAt(n); return p && p.kind !== 'stair' && !(p.kind === 'gate' && sg().gateOpen) && !liveUnitAt(n); })
+          .sort((x, y) => (wallAt(y).kind === 'gate') - (wallAt(x).kind === 'gate'));
+        if (near2.length && !u.attacked) { aiGo({ type: 'hitwall', id: u.id, col: near2[0][0], row: near2[0][1] }); return; } }
       if (r && walkToward()) return;
     }
     aiBusyUntil = Date.now() + 60;                                    // nothing useful for this unit: try the next one
@@ -1432,9 +1546,9 @@
     const reserve = settleTarget && settleTarget.d <= 16 && (f.style !== 'aggressive' || myCities.length < 2) ? FOUND_COST : 0;   // save up to found a city
     if (!aiState.econ) {                                              // buildings and recruits, all at once
       aiState.econ = true;
-      const wants = f.style === 'builder' ? ['swordsman', 'tradepost', 'archer', 'garrison', 'spearman', 'heroes'] : f.style === 'aggressive' ? ['swordsman', 'archer', 'horseman', 'tradepost', 'heroes', 'garrison'] : ['swordsman', 'tradepost', 'archer', 'garrison', 'horseman', 'heroes'];
+      const wants = f.style === 'builder' ? ['swordsman', 'tradepost', 'walls', 'archer', 'tower', 'garrison'] : f.style === 'aggressive' ? ['swordsman', 'archer', 'horseman', 'tradepost', 'heroes', 'garrison'] : ['swordsman', 'tradepost', 'archer', 'walls', 'garrison', 'horseman'];
       for (const c of myCities) {
-        if (!c.acted && c.buildings.length < CITY_SLOTS) { const b = wants.find(w => !c.buildings.includes(w));
+        if (!c.acted && c.buildings.length < CITY_SLOTS) { const b = wants.find(w => w === 'tower' ? c.buildings.filter(x => x === 'tower').length < 2 : !c.buildings.includes(w));
           const first = !recruitable(c).length && b === 'swordsman';
           if (b && pts() >= BUILDINGS[b].cost + (first ? 0 : reserve + 4)) { c.buildings = [...c.buildings, b]; c.acted = true; spend(BUILDINGS[b].cost); } }
         const types = recruitable(c).filter(t => !HEROES.includes(t) || Math.random() < 0.3); if (!types.length) continue;
@@ -1537,7 +1651,7 @@
       if (d >= moveOf(u)) continue;
       for (const n of neighbors(...h)) {
         const k = key(...n); if (dist.has(k)) continue;
-        const o = unitAt(n); if (o && o !== u) continue; if (blockedTile(n)) continue;
+        const o = unitAt(n); if (o && o !== u) continue; if (blockedTile(n) || !canStep(h, n)) continue;
         if (u.troops && game.view === 'campaign') { if (impassable(n)) continue; const c = cityAt(n); if (c && c.owner !== u.team) continue; }
         dist.set(k, d + 1); prev.set(k, h); q.push(n);
       }
@@ -1560,6 +1674,11 @@
     if (u.atk) { const b = center(u.atk.target.col, u.atk.target.row), L = Math.sin(Math.PI * Math.min(1, u.atk.t)) * 0.24;
       x += (b.x - a.x) * L; y += (b.y - a.y) * L; }
     if (u.flash > 0) x += Math.sin(u.flash * 40) * u.flash * 2.5;
+    if (game.bt && game.bt.siege && game.view === 'battle') {                       // on the wall / stairs / a ladder: lifted up
+      const l = u.climb && ladderAt([u.col, u.row]);
+      if (l) { const w = center(...l.w), f = u.climb / 3; x += (w.x - a.x) * f * 0.8; y += (w.y - a.y) * f * 0.8; y -= WALL_PX * f; }
+      else { const p = wallAt([u.col, u.row]); if (p && p.kind === 'wall') y -= WALL_PX; else if (p && p.kind === 'stair') y -= WALL_PX * 0.5; }
+    }
     return { x: x + OX, y: y + OY };
   }
   function addFloat(x, y, text, color, size = 20) { floats.push({ x, y, text, color, size, t: 0 }); }
@@ -1590,7 +1709,7 @@
   const liveUnitAt = h => h && units.find(u => u.col === h[0] && u.row === h[1] && u.dying === null && u.hp > 0);
   const isMounted = u => !!T(u).mounted;
   const onBoard = h => h[0] >= 0 && h[0] < COLS && h[1] >= 0 && h[1] < ROWS;
-  const blockedTile = h => !onBoard(h) || (game.view === 'battle' && !!game.bt && !!game.bt.grid && game.bt.grid[h[1] * BCOLS + h[0]] === 'r');
+  const blockedTile = h => !onBoard(h) || (game.view === 'battle' && !!game.bt && !!game.bt.grid && game.bt.grid[h[1] * BCOLS + h[0]] === 'r') || gateClosed(h);
   const step = (h, d, k = 1) => { const [q, r] = toAx(h[0], h[1]); return fromAx(q + DIRS[d][0] * k, r + DIRS[d][1] * k); };
   function lineDir(from, to) {                            // {d, n} when 'to' is on one of the 6 straight lines from 'from'
     const [q1, r1] = toAx(from[0], from[1]), [q2, r2] = toAx(to[0], to[1]), n = hexDist(from, to);
@@ -1909,6 +2028,7 @@
   // every hit goes through here: protection token, block, damage reduction, retribution
   function dealDamage(t, amt, { physical = true, melee = false, src = null, aoe = false, projectile = false } = {}) {
     if (!t || t.dying !== null || t.hp <= 0) return { blocked: true, dealt: 0 };
+    if (t.climb) amt *= 2;                                // on a ladder: double damage
     const g = t.guard && units.find(x => x.id === t.guard.by && x.dying === null && x.hp > 0);
     if (g && g !== t) {                                     // Guardian's Oath: damage goes to the paladin instead
       const moved = steadfast(g, Math.max(0, amt - (t.guard.red || 0)));
@@ -1952,13 +2072,14 @@
   }
 
   // play one action (your own click AND the other player's replay), then call done when everything settles
-  const ACTIONS = ['move', 'attack', 'shoot', 'bolt', 'pierce', 'charge', 'mark', 'skill'];
+  const ACTIONS = ['move', 'attack', 'shoot', 'bolt', 'pierce', 'charge', 'mark', 'skill', 'hitwall', 'ladder', 'climb', 'gate'];
   function play(a, done) {
     seedRng(a.rng || 7);
     const u = units.find(x => x.id === a.id);
     if (!u || !ACTIONS.includes(a.type)) { done(); return; }
     afterIdle = done;
     const here = () => [u.col, u.row], path = (a.path || []).map(h => [h[0], h[1]]), ty = T(u);
+    if (siegeAction(u, a)) return;
     if (path.length) u.moved = true;
     if (a.type === 'skill') {                          // paladin skill cards
       const card = CARDS[a.skill], c = u.cards && u.cards.skills.find(k => k && k.id === a.skill), L = c ? c.lvl : 1;
@@ -2032,7 +2153,7 @@
             if (hasPassive(u, 'siphon') && t.team !== u.team && !r.blocked && u.mana < u.manaMax) { u.mana += 1; floatOn(u, '+1 mana', '#8fb8ff', 0, 15); }
           });
           projectiles[projectiles.length - 1].color = healer ? '140,255,170' : '170,150,255';
-        } else if (t && t.dying === null) { faceToward(u, t); fire('arrow', shotFrom(u), shotAt(t), () => dealDamage(t, rangedDmg(baseDmg(u), t), { src: u, projectile: true })); }
+        } else if (t && t.dying === null) { faceToward(u, t); fire('arrow', shotFrom(u), shotAt(t), () => dealDamage(t, t.col === u.col && t.row === u.row ? 1 : rangedDmg(baseDmg(u), t), { src: u, projectile: true })); }   // same wall tile: only 1
         u.attacked = true; if (!hasPassive(u, 'skirmisher')) u.moved = true;   // Skirmisher: may still walk after shooting
       } else if (a.type === 'bolt') {                  // crossbow: straight bolt, first unit in line, push back or stun
         faceDir(u, a.dir); u.attacked = u.moved = true;
@@ -2283,9 +2404,14 @@
 
   function drawUnits(t) {
     const list = units.map(u => ({ u, p: upos(u) }));
+    if (sg()) for (const [k, p] of Object.entries(sg().pieces)) { const [c, r] = k.split(',').map(Number), m = center(c, r); list.push({ piece: p, h: [c, r], p: { x: m.x + OX, y: m.y + OY - 0.5 } }); }
     if (localView() === 'campaign') for (const c of game.cities) { const m = center(c.col, c.row); list.push({ city: c, p: { x: m.x + OX, y: m.y + OY } }); }
     list.sort((a, b) => a.p.y - b.p.y);
-    for (const { u, p, city } of list) {
+    for (const { u, p, city, piece, h } of list) {
+      if (piece) { drawMesh(ctx, pieceMesh(piece.kind, piece.kind === 'gate' && sg().gateOpen), p.x, p.y, 0, 0, 0);
+        const hp = piece.kind === 'gate' ? sg().gateHp / GATE_HP : piece.kind === 'wall' ? piece.hp / WALL_HP : 1;
+        if (hp < 1) { ctx.fillStyle = 'rgba(8,10,6,0.85)'; ctx.fillRect(p.x - 16, p.y - WALL_PX - 10, 32, 5); ctx.fillStyle = '#c9a25a'; ctx.fillRect(p.x - 15, p.y - WALL_PX - 9, 30 * Math.max(0, hp), 3); }
+        continue; }
       if (city) {                                         // cities on the campaign map (free land is drawn on the ground)
         const fo = faction(city.owner);
         if (fo) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(p.x + 3, p.y + 2, 10.5 * K, 10.5 * K * SQ, 0, 0, 7); ctx.fill();
@@ -2322,7 +2448,7 @@
       }
       ctx.restore();
     }
-    for (const { u, p } of list) { if (!u || hiddenFromMe(u)) continue; ctx.save(); if (u.dying !== null) ctx.globalAlpha = Math.max(0, 1 - u.dying); if (u.troops) drawArmyLabel(u, p.x, p.y); else drawHealth(u, p.x, p.y); ctx.restore(); }
+    for (const { u, p } of list) { if (!u || hiddenFromMe(u)) continue; if (u.climb === undefined) u.climb = 0; ctx.save(); if (u.dying !== null) ctx.globalAlpha = Math.max(0, 1 - u.dying); if (u.troops) drawArmyLabel(u, p.x, p.y); else drawHealth(u, p.x, p.y); ctx.restore(); }
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const f of floats) {
       const pop = 1 + 0.6 * Math.max(0, 1 - f.t * 7), a = Math.max(0, 1 - Math.max(0, f.t - 0.6) / 0.4);
@@ -2634,7 +2760,7 @@
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(boardCv, 0, 0, BW, BH);
     ctx.drawImage(gridCv, 0, 0, BW, BH);
-    if (localView() === 'campaign') drawCampaignGround(t); else if (game.bt) drawBattleZones(t);
+    if (localView() === 'campaign') drawCampaignGround(t); else if (game.bt) { drawBattleZones(t); drawLadders(); }
 
     if (sel) {
       ctx.beginPath();
@@ -2799,6 +2925,7 @@
   }
   function unitDone(u) {
     if (u.stunActive || (u.enter && u.enter > game.round) || u.placing) return true;
+    if (T(u).structure) return u.attacked || !units.some(o => o.team !== u.team && o.dying === null && o.hp > 0 && hexDist([u.col, u.row], [o.col, o.row]) <= T(u).range);
     if (T(u).hero) return !heroCanAct(u, true);
     if (u.attacked) return !(u.skillUsed && !u.moved);       // a hero who cast a skill may still move
     const ty = T(u);
@@ -2941,7 +3068,7 @@
         } else html += '<div class="k">Its buildings are unknown. Connect a road to it to see them.</div>';
         if (own) {
           html += city.acted ? '<div class="k">Already built or destroyed something here this turn.</div>' : '';
-          if (city.buildings.length < CITY_SLOTS) html += `<div class="sub">Build (1 per turn)</div><div class="grid">${Object.entries(BUILDINGS).filter(([k]) => !city.buildings.includes(k)).map(([k, b]) => btn(`data-build="${k}"`, `${b.name} · ${b.cost}`, my && !city.acted && p >= b.cost, b.text)).join('')}</div>`;
+          if (city.buildings.length < CITY_SLOTS) html += `<div class="sub">Build (1 per turn)</div><div class="grid">${Object.entries(BUILDINGS).filter(([k]) => k === 'tower' ? city.buildings.filter(x => x === 'tower').length < 2 : !city.buildings.includes(k)).map(([k, b]) => btn(`data-build="${k}"`, `${b.name} · ${b.cost}`, my && !city.acted && p >= b.cost, b.text)).join('')}</div>`;
           const types = recruitable(city);
           html += `<div class="sub">New army</div>` + (placingArmy && placingArmy.city === city.id ? `<div class="k">${UNIT_TYPES[placingArmy.type].name}: click a highlighted tile next to the city.</div>${btn('data-ca="cancelnew"', 'Cancel', true)}`
             : types.length ? `<div class="grid">${types.map(t => btn(`data-newarmy="${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t)}`, my && p >= unitCost(t))).join('')}</div><div class="k">Pick its first unit, then the tile. It can move next turn.</div>` : '<div class="k">Build a unit building first.</div>');
@@ -3081,6 +3208,40 @@
     return true;
   }
   modalEl.addEventListener('click', e => { const b = e.target.closest('button[data-ask]'); if (!b) return; const [i, y] = b.dataset.ask.split(':').map(Number); modalEl.dataset.ask = ''; hideModal(); requestOp({ op: 'answer', i, yes: !!y }); });
+  let wallChoice = null;
+  function siegeOrder(u, h, tgt, hint, go) {         // returns true when the click was about walls, the gate or a ladder
+    const s2 = sg(), here = [u.col, u.row], p = wallAt(h), lad = ladderAt(here), ty = T(u), canLadder = !ty.mounted && !ty.structure;
+    if (lad && h[0] === lad.w[0] && h[1] === lad.w[1] && canLadder) { if (u.moved || u.attacked) { hint('Already acted', here); return true; } go({ type: 'climb', id: u.id }); return true; }
+    if (u.climb) { hint('On the ladder: right-click the wall to climb on', here); return true; }
+    const mate = units.find(o => o !== u && o.team !== u.team && o.col === u.col && o.row === u.row && o.dying === null);
+    if (mate && ty.ranged && tgt !== mate) { hint('Fighting on the same tile: only that enemy', here); return true; }
+    if (!p || p.kind === 'stair' || (tgt && !(p.kind === 'gate' && tgt.team === u.team))) return false;
+    if (p.kind === 'gate' && u.team === s2.def) {
+      if (hexDist(here, h) > 1) { hint('Stand next to the gate', h); return true; }
+      if (u.attacked) { hint('Already acted', here); return true; }
+      if (s2.gateChanged === `${game.round}:${game.turn}`) { hint("Can't open and close it in the same turn", h); return true; }
+      wallChoice = { id: u.id, gate: !s2.gateOpen };
+      showModal(`<div class="mbox"><div class="t">🚪 ${s2.gateOpen ? 'Close' : 'Open'} the gate?</div><div>${s2.gateOpen ? 'Anyone standing in the gateway will be crushed.' : 'The gate stays open until one of your units next to it closes it again.'}</div>
+        <div class="row"><button data-wall="gate">Yes, ${s2.gateOpen ? 'close' : 'open'} it</button><button data-wall="no">No</button></div></div>`); return true; }
+    if (p.kind === 'gate' && s2.gateOpen) return false;
+    if (u.attacked) { hint('Already attacked', here); return true; }
+    const d = hexDist(here, h);
+    if (d === 1 && p.kind === 'wall' && canLadder && !onWall(u) && !lad) { wallChoice = { id: u.id, col: h[0], row: h[1] };
+      showModal(`<div class="mbox"><div class="t">🧱 The wall</div><div>Put a wooden ladder against it (climbing takes 2 turns, double damage while on it), or hit the wall (${WALL_HP} HP a piece)?</div>
+        <div class="row"><button data-wall="ladder">Put up a ladder</button><button data-wall="hit">Attack the wall</button><button data-wall="no">Cancel</button></div></div>`); return true; }
+    if (ty.ranged && ty.ranged !== 'mark' && d <= ty.range && !(noMoveShoot(u) && u.moved)) { go({ type: 'hitwall', id: u.id, col: h[0], row: h[1] }); return true; }
+    if (d === 1) { go({ type: 'hitwall', id: u.id, col: h[0], row: h[1] }); return true; }
+    if (u.moved) { hint('Too far', h); return true; }
+    const b = reach(u); let best = null;
+    for (const [k, dd] of b.dist) { if (dd === 0) continue; const t = k.split(',').map(Number); if (unitAt(t) || hexDist(t, h) !== 1) continue; if (!best || dd < best.d) best = { t, d: dd }; }
+    if (!best) { hint('Out of reach', h); return true; }
+    go({ type: 'hitwall', id: u.id, col: h[0], row: h[1], path: pathTo(b, best.t) }); return true;
+  }
+  modalEl.addEventListener('click', e => { const b = e.target.closest('button[data-wall]'); if (!b || !wallChoice) return; const w = wallChoice; wallChoice = null; hideModal();
+    const run = a => { a.rng = Math.floor(Math.random() * 4e9); play(a, () => commit(a)); };
+    if (b.dataset.wall === 'gate') run({ type: 'gate', id: w.id, open: w.gate });
+    if (b.dataset.wall === 'ladder') run({ type: 'ladder', id: w.id, col: w.col, row: w.row });
+    if (b.dataset.wall === 'hit') run({ type: 'hitwall', id: w.id, col: w.col, row: w.row }); });
   // ---------- UI ----------
   const hovEl = document.getElementById('hov'), selEl = document.getElementById('sel'), infoEl = document.getElementById('info');
   const turnEl = document.getElementById('turn'), topEl = document.getElementById('top'), flashEl = document.getElementById('flash'), vicEl = document.getElementById('victory');
@@ -3230,7 +3391,7 @@
         ${a ? `<div class="sub">${teamName(a.team)} army · ${a.troops.length} troop${a.troops.length === 1 ? '' : 's'} (first 7 fight) · click to remove</div>
           <div class="grid">${a.troops.map((t, i) => `<button data-rmtroop="${i}">${UNIT_TYPES[t.type].name} ✕</button>`).join('') || '<span class="na">empty</span>'}</div>
           <div class="sub">Add a troop</div>
-          <div class="grid">${Object.keys(UNIT_TYPES).filter(ty => ty !== 'army').map(ty => `<button data-addtroop="${ty}">+ ${UNIT_TYPES[ty].name}</button>`).join('')}</div>
+          <div class="grid">${Object.keys(UNIT_TYPES).filter(ty => ty !== 'army' && ty !== 'tower').map(ty => `<button data-addtroop="${ty}">+ ${UNIT_TYPES[ty].name}</button>`).join('')}</div>
           <div class="row"><button data-act="remove">Remove army</button></div>` : '<div class="sub">Click an army to change its troops</div>'}
         <div class="k">${placing ? 'Click empty tiles to place an army · Esc to stop' : 'Drag any army to move it · Del removes the army under the mouse.'}</div>`;
       if (dmEl.dataset.h !== html) { dmEl.dataset.h = html; dmEl.innerHTML = html; }
@@ -3240,7 +3401,7 @@
       const pb = type => `<button data-place="${type}:${dmSide}" class="${placing && placing.type === type && placing.team === dmSide ? 'on' : ''}">${UNIT_TYPES[type].name}</button>`;
       const html = `<div class="t">🧙 Dungeon Master tools</div>
         <div class="row"><span class="lbl">Place for</span>${sideBtn('blue', 'Heroes')}${sideBtn('red', 'Enemies')}</div>
-        <div class="grid">${Object.keys(UNIT_TYPES).filter(ty => ty !== 'army').map(pb).join('')}</div>
+        <div class="grid">${Object.keys(UNIT_TYPES).filter(ty => ty !== 'army' && ty !== 'tower').map(pb).join('')}</div>
         <div class="row"><button data-act="heal">❤ Heal all heroes</button></div>
         <div class="sub">Unit types · values for new units (mana: hero units only)</div>
         <table class="st"><tr><th></th><th>HP</th><th>Mana</th></tr>
@@ -3447,7 +3608,7 @@
   cv.addEventListener('contextmenu', e => {
     if (!selUnit || busy()) return;
     const h = pick(e.clientX, e.clientY); if (!h) return;
-    const u = selUnit, ty = T(u), tgt0 = liveUnitAt(h), tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, here = [u.col, u.row], dist = hexDist(here, h);
+    const u = selUnit, ty = T(u), tgt0 = units.filter(o => o.col === h[0] && o.row === h[1] && o.dying === null && o.hp > 0).sort((x, y) => (x === selUnit) - (y === selUnit) || (x.team === selUnit.team) - (y.team === selUnit.team))[0], tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, here = [u.col, u.row], dist = hexDist(here, h);
     if (game.view === 'battle' && game.bt && game.bt.phase !== 'fight') { if (u.placing && u.team === viewer()) requestOp({ op: 'place', id: u.id, col: h[0], row: h[1] }); return; }
     const hint = (txt, hh) => { const m = center(...hh); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
     const go = a => { a.rng = Math.floor(Math.random() * 4e9); play(a, () => { commit(a); if (a.skill === 'rain' && armed && armed.skill === 'rain' && (u.mana || 0) < 1) { armed = null; refreshUI(); } }); };
@@ -3536,6 +3697,7 @@
       if (armed.skill === 'chains') { armed.stage = 'place'; armed.target = tgt.id; refreshUI(); return; }
       go({ type: 'skill', id: u.id, skill: armed.skill, target: tgt.id }); armed = null; return;
     }
+    if (sg() && siegeOrder(u, h, tgt, hint, go)) return;
     if (tgt === u) return;
     const moveTo = () => {
       if (u.moved) { hint(ty.noMoveShoot && u.attacked ? 'Already shot' : 'Already moved', here); return; }
