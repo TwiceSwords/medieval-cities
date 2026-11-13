@@ -78,7 +78,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v0.8</div>
+  <div class="t">Medieval Cities · v0.9</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1644,11 +1644,14 @@
   const key = (c, r) => c + ',' + r;
   const neighbors = (c, r) => { const [q, rr] = toAx(c, r);
     return DIRS.map(([dq, dr]) => fromAx(q + dq, rr + dr)).filter(([a, b]) => a >= 0 && a < COLS && b >= 0 && b < ROWS); };
+  // zone of control: no army can walk past another faction's army (also one that is in a battle)
+  const zoc = (h, u) => units.some(o => o.troops && o !== u && o.team !== u.team && o.dying === null && hexDist(h, [o.col, o.row]) === 1);
   function reach(u) {
     const dist = new Map([[key(u.col, u.row), 0]]), prev = new Map(), q = [[u.col, u.row]];
     while (q.length) {
       const h = q.shift(), d = dist.get(key(...h));
       if (d >= moveOf(u)) continue;
+      if (d > 0 && u.troops && game.view === 'campaign' && zoc(h, u)) continue;          // next to another army: the march stops here
       for (const n of neighbors(...h)) {
         const k = key(...n); if (dist.has(k)) continue;
         const o = unitAt(n); if (o && o !== u) continue; if (blockedTile(n) || !canStep(h, n)) continue;
@@ -1658,8 +1661,8 @@
     }
     if (u.troops && game.view === 'campaign' && moveOf(u) === 2) {   // both steps on road (or own city): one more step anywhere
       const onRoad = t => hasRoad(t) || (cityAt(t) && cityAt(t).owner === u.team), free = t => !impassable(t) && !(unitAt(t) && unitAt(t) !== u) && !(cityAt(t) && cityAt(t).owner !== u.team);
-      for (const a1 of neighbors(u.col, u.row)) { if (!onRoad(a1) || !free(a1)) continue;
-        for (const a2 of neighbors(...a1)) { if (!onRoad(a2) || !free(a2) || (a2[0] === u.col && a2[1] === u.row)) continue;
+      for (const a1 of neighbors(u.col, u.row)) { if (!onRoad(a1) || !free(a1) || zoc(a1, u)) continue;
+        for (const a2 of neighbors(...a1)) { if (!onRoad(a2) || !free(a2) || (a2[0] === u.col && a2[1] === u.row) || zoc(a2, u)) continue;
           for (const a3 of neighbors(...a2)) { const k3 = key(...a3); if (dist.has(k3) || !free(a3)) continue;
             dist.set(k3, 3); prev.set(k3, a2); if (!prev.has(key(...a2)) || dist.get(key(...a2)) !== 2) { dist.set(key(...a2), 2); prev.set(key(...a2), a1); } if (!dist.has(key(...a1))) { dist.set(key(...a1), 1); prev.set(key(...a1), [u.col, u.row]); } } } }
     }
