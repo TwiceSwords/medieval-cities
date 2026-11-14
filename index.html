@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.18</div>
+  <div class="t">Medieval Cities · v1.19</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1224,7 +1224,8 @@
   const bt = () => game.bt || null;
   const inBattleSides = fid => !!(game.bt && (game.bt.sides.includes(fid) || (game.bt.waiting || []).includes(fid)));
   const allyInBattle = fid => !!(fid && game.bt && game.opts && game.opts.coop && [...game.bt.sides, ...(game.bt.waiting || [])].some(s => !hostile(s, fid)));   // co-op: your team's battles are shown to you too
-  const spectating = () => game.view === 'battle' && !!game.bt && !(game.opts && game.opts.god) && !inBattleSides(viewer()) && !allyInBattle(viewer());
+  const hostRunsBattle = () => mode === 'online' && p2p.role === 'host' && !!game.bt && [...game.bt.sides, ...(game.bt.waiting || [])].some(f => { const x = faction(f); return x && x.ai; });
+  const spectating = () => game.view === 'battle' && !!game.bt && !(game.opts && game.opts.god) && !inBattleSides(viewer()) && !allyInBattle(viewer()) && !hostRunsBattle();
   const localView = () => spectating() ? 'campaign' : game.view;
   let shadowSt = null;
   // battle board: terrain of the campaign tile it happens on, a little variety, and rock clusters
@@ -2287,7 +2288,14 @@
 
   // play one action (your own click AND the other player's replay), then call done when everything settles
   const ACTIONS = ['move', 'attack', 'shoot', 'bolt', 'pierce', 'charge', 'mark', 'skill', 'hitwall', 'ladder', 'climb', 'gate'];
+  function offImpassable() {                           // safety net: an army found on a mountain / water / the wall steps onto the nearest open land
+    if (game.view !== 'campaign') return;
+    for (const u of units) if (u.troops && u.dying === null && impassable([u.col, u.row])) { let best = null;
+      for (let r = 0; r < CROWS; r++) for (let c = 0; c < CCOLS; c++) { const t = [c, r]; if (impassable(t) || unitAt(t) || (cityAt(t) && hostile(cityAt(t).owner || u.team, u.team))) continue; const d = hexDist(t, [u.col, u.row]); if (!best || d < best.d) best = { t, d }; }
+      if (best) { u.col = best.t[0]; u.row = best.t[1]; } }
+  }
   function play(a, done) {
+    if (a && a.type === 'move' && a.path && game.view === 'campaign') { const i = a.path.findIndex(t => impassable(t)); if (i >= 0) a = { ...a, path: a.path.slice(0, i) }; }
     seedRng(a.rng || 7);
     const u = units.find(x => x.id === a.id);
     if (!u || !ACTIONS.includes(a.type)) { done(); return; }
@@ -3013,6 +3021,13 @@
       ctx.strokeStyle = free ? 'rgba(220,190,100,0.9)' : 'rgba(230,80,60,0.9)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
     }
     drawUnits(t); drawChains(t); drawProjectiles(); drawLabels();
+    if (hostRunsBattle() && !(game.opts && game.opts.god) && !inBattleSides(viewer()) && !allyInBattle(viewer())) {   // the host runs an AI battle it is not part of: it only gets the news, like any spectator
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = 'rgb(16,18,14)'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.fillStyle = '#cdbf94'; ctx.textAlign = 'center'; ctx.font = `600 ${22 * dpr}px Georgia, serif`;
+      ctx.fillText(`⚔ A battle rages: ${game.bt.sides.map(f => faction(f).name).join(' vs ')}`, cv.width / 2, cv.height / 2 - 10 * dpr);
+      ctx.font = `${14 * dpr}px system-ui, sans-serif`; ctx.fillStyle = '#9a9278'; ctx.fillText(`battle round ${game.round} · the campaign resumes when it ends`, cv.width / 2, cv.height / 2 + 20 * dpr); ctx.restore();
+      if (typeof R3 !== 'undefined' && R3.on) for (const o of R3.pool.values()) o.group.visible = false;
+    }
     { const want = (game.view === 'campaign' || game.view === 'battle') && game.turn === 'undead' ? 0.42 : 0; nightA += (want - nightA) * 0.04;   // night falls on the undead turns
       if (nightA > 0.01) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = `rgba(6,12,38,${nightA})`; ctx.fillRect(0, 0, cv.width, cv.height);
         const g2 = ctx.createRadialGradient(cv.width * 0.8, cv.height * 0.1, 0, cv.width * 0.8, cv.height * 0.1, cv.width * 0.5); g2.addColorStop(0, `rgba(150,180,230,${nightA * 0.25})`); g2.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g2; ctx.fillRect(0, 0, cv.width, cv.height); ctx.restore(); } }
@@ -3148,6 +3163,7 @@
   }
   function commit(action) {
     game.seq += 1;
+    try { offImpassable(); } catch (e) {}
     if (game.view === 'campaign' && fogOn()) markExplored();
     let volley = null;
     if (action.type === 'end') {
@@ -3381,23 +3397,23 @@
   // right-click orders for an army on the campaign map
   // fog: every realm only sees land its armies and cities have been near
   const SIGHT = 5;
-  const fogOn = () => game.view === 'campaign' ? !(game.opts && game.opts.fogCamp === false) : game.view === 'battle' ? !(game.opts && game.opts.fogBattle === false) : false;
+  const fogOn = () => localView() === 'campaign' ? !(game.opts && game.opts.fogCamp === false) : localView() === 'battle' ? !(game.opts && game.opts.fogBattle === false) : false;
   let visCache = { k: '', m: new Map() };
   function visionOf(fid) {                           // tiles a realm can see right now (a Set of keys)
-    const camp = game.view === 'campaign', cols = camp ? CCOLS : BCOLS, rows = camp ? CROWS : BROWS;
+    const lv = localView(), camp = lv === 'campaign', cols = camp ? CCOLS : BCOLS, rows = camp ? CROWS : BROWS;
     const eyes = units.filter(u => !hostile(u.team, fid) && u.dying === null && (camp ? u.troops : u.hp > 0 && !(u.enter > game.round))).map(u => [u.col, u.row]);
     if (camp) for (const c of game.cities) if (c.owner && !hostile(c.owner, fid)) eyes.push([c.col, c.row]);
-    const k = game.view + '|' + fid + '|' + eyes.map(e => e.join(',')).join(';');
-    if (visCache.k !== game.view + game.seq) visCache = { k: game.view + game.seq, m: new Map() };
+    const k = lv + '|' + fid + '|' + eyes.map(e => e.join(',')).join(';');
+    if (visCache.k !== lv + game.seq) visCache = { k: lv + game.seq, m: new Map() };
     if (visCache.m.has(k)) return visCache.m.get(k);
     const set = new Set();
     for (const [c0, r0] of eyes) for (let r = Math.max(0, r0 - SIGHT); r <= Math.min(rows - 1, r0 + SIGHT); r++) for (let c = Math.max(0, c0 - SIGHT - 1); c <= Math.min(cols - 1, c0 + SIGHT + 1); c++) if (hexDist([c0, r0], [c, r]) <= SIGHT) set.add(r * cols + c);
     visCache.m.set(k, set); return set;
   }
   // can realm fid see this tile now? (no fog, or no realm = sees everything)
-  const sees = (fid, h) => { if (!fid || !fogOn() || (localView() !== game.view)) return true; const f = faction(fid); if (f && f.undead && game.view === 'campaign') return true;
-    return visionOf(fid).has(h[1] * (game.view === 'campaign' ? CCOLS : BCOLS) + h[0]); };
-  const fogHides = u => !!u && hostile(u.team, viewer()) && !!viewer() && (game.view === 'campaign' ? !!u.troops : true) && !sees(viewer(), [u.col, u.row]);
+  const sees = (fid, h) => { if (!fid || !fogOn()) return true; const lv = localView(), f = faction(fid); if (f && f.undead && lv === 'campaign') return true;
+    return visionOf(fid).has(h[1] * (lv === 'campaign' ? CCOLS : BCOLS) + h[0]); };
+  const fogHides = u => !!u && hostile(u.team, viewer()) && !!viewer() && (localView() === 'campaign' ? !!u.troops : true) && !sees(viewer(), [u.col, u.row]);
   const seenTile = h => { if (localView() !== 'campaign' || !game.explored || !fogOn()) return true; const ex = game.explored[viewer()]; return !ex || ex[h[1] * CCOLS + h[0]] === '1'; };
   const knowsTile = (fid, h) => { if (game.view !== 'campaign' || !fogOn() || !game.explored) return true; const ex = game.explored[fid]; return !ex || ex[h[1] * CCOLS + h[0]] === '1'; };
   function markExplored() {
@@ -3410,7 +3426,7 @@
   }
   function drawFog(t) {
     if (!fogOn() || !viewer()) return;
-    if (game.view === 'battle') { const v = visionOf(viewer());
+    if (localView() === 'battle') { const v = visionOf(viewer());
       for (let r = 0; r < BROWS; r++) for (let c = 0; c < BCOLS; c++) if (!v.has(r * BCOLS + c)) { ctx.beginPath(); hexPath(c, r, ctx); ctx.fillStyle = `rgba(14,16,24,${0.5 + 0.03 * Math.sin(t * 0.6 + c * 0.7 + r * 0.4)})`; ctx.fill(); }
       return; }
     const ex = game.explored && game.explored[viewer()]; if (!ex) return; const v = visionOf(viewer());
