@@ -78,7 +78,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.5</div>
+  <div class="t">Medieval Cities · v1.6</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1080,8 +1080,16 @@
     b.restore();
     gridCv = document.createElement('canvas'); gridCv.width = cw; gridCv.height = ch;
     const gc = gridCv.getContext('2d'); gc.scale(sc, sc);
-    gc.beginPath(); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) hexPath(c, r, gc);
-    gc.lineJoin = 'round'; gc.strokeStyle = 'rgba(8,12,5,0.55)'; gc.lineWidth = 2.4; gc.stroke();
+    gc.lineJoin = 'round'; gc.strokeStyle = 'rgba(8,12,5,0.55)'; gc.lineWidth = 2.4;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {       // back to front, like the ground: a raised tile hides the lines behind it
+      const m = center(c, r), e = elevPx(c, r);
+      if (e > 0) { const p = corners(m.x + OX, m.y + OY);
+        gc.globalCompositeOperation = 'destination-out'; gc.beginPath(); hexPath(c, r, gc);
+        gc.moveTo(p[0][0], p[0][1] - e); gc.lineTo(p[1][0], p[1][1] - e); gc.lineTo(p[2][0], p[2][1] - e); gc.lineTo(p[2][0], p[2][1]); gc.lineTo(p[1][0], p[1][1]); gc.lineTo(p[0][0], p[0][1]); gc.closePath();
+        gc.fillStyle = '#000'; gc.fill('nonzero'); gc.globalCompositeOperation = 'source-over'; }
+      else if (r > 0) { gc.globalCompositeOperation = 'destination-out'; gc.beginPath(); hexPath(c, r, gc); gc.fillStyle = '#000'; gc.fill(); gc.globalCompositeOperation = 'source-over'; }
+      gc.beginPath(); hexPath(c, r, gc); gc.stroke();
+    }
   }
   let layerKey = null, layersReady = false; const layerCache = {};
   function ensureLayers() {
