@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.9-preview</div>
+  <div class="t">Medieval Cities 3D · v2.10-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1386,7 +1386,8 @@
   const BCOLS = 28, BROWS = 28, ZONE_R = 4, POCKET_R = 3, REINF_ROUND = 15;
   const bt = () => game.bt || null;
   const inBattleSides = fid => !!(game.bt && (game.bt.sides.includes(fid) || (game.bt.waiting || []).includes(fid)));
-  const spectating = () => game.view === 'battle' && !!game.bt && !(game.opts && game.opts.god) && !inBattleSides(viewer());
+  const allyInBattle = fid => !!(fid && game.bt && game.opts && game.opts.coop && [...game.bt.sides, ...(game.bt.waiting || [])].some(s => !hostile(s, fid)));   // co-op: your team's battles are shown to you too
+  const spectating = () => game.view === 'battle' && !!game.bt && !(game.opts && game.opts.god) && !inBattleSides(viewer()) && !allyInBattle(viewer());
   const localView = () => spectating() ? 'campaign' : game.view;
   let shadowSt = null;
   // battle board: terrain of the campaign tile it happens on, a little variety, and rock clusters
@@ -2270,7 +2271,7 @@
   });
   HERO_CARDS.assassin = { passive: ['backstab', 'bloodthirst', 'flurry'], skill: ['eviscerate', 'shadowstep', 'vanish'] };
   const combo = u => hasPassive(u, 'quickdraw') || hasPassive(u, 'flurry');
-  const hiddenFromMe = u => u.team !== viewer() && (!!u.invis || (game.view !== 'lobby' && fogHides(u)) || (!!game.bt && game.view === 'battle' && (u.placing || (game.bt.phase !== 'fight' && placingSides().includes(viewer())))));
+  const hiddenFromMe = u => u.team !== viewer() && hostile(u.team, viewer()) && (!!u.invis || (game.view !== 'lobby' && fogHides(u)) || (!!game.bt && game.view === 'battle' && (u.placing || (game.bt.phase !== 'fight' && placingSides().includes(viewer())))));
   function facingDir(u) {                                    // nearest of the 6 hex directions to where the unit faces
     const a = center(u.col, u.row); let best = 0, bd = 9;
     for (let d = 0; d < 6; d++) { const b = center(...step([u.col, u.row], d)); let x = Math.abs(Math.atan2(b.x - a.x, (b.y - a.y) / SQ) - u.want); x = x % (Math.PI * 2); x = Math.min(x, Math.PI * 2 - x); if (x < bd) { bd = x; best = d; } }
