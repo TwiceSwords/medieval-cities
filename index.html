@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.15</div>
+  <div class="t">Medieval Cities · v1.16</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1263,6 +1263,7 @@
   }
   // ---------- start: gather armies around the clash, ask third parties ----------
   function engage(att, target) {
+    if (target.troops) { const home = game.cities.find(c => c.col === target.col && c.row === target.row && c.owner && !hostile(c.owner, target.team)); if (home) target = home; }   // an army inside its own (or an ally's) city is defended as a siege: walls, gate, towers and garrison
     const city = target.troops ? null : target, tgtArmy = target.troops ? target : units.find(u => u.troops && city && u.col === city.col && u.row === city.row && u.dying === null) || null;
     const defFid = target.troops ? target.team : city.owner, here = [att.col, att.row], there = [target.col, target.row];
     const D = h => Math.min(hexDist(h, here), hexDist(h, there));
