@@ -90,7 +90,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.25-preview</div>
+  <div class="t">Medieval Cities 3D · v2.26-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -4065,7 +4065,7 @@
     el.style.display = 'block';
   }
   function testAct(t, b) {
-    if (!isHost()) return; const done = msg => { if (msg) toast('🧪 ' + msg); commit({ type: 'edit' }); refreshUI(); };
+    if (!isHost()) return; const done = msg => { if (msg) toast('🧪 ' + msg); game.seq += 20; commit({ type: 'edit' }); refreshUI(); };   // jump ahead so a friend's in-flight moves can't overwrite the edit
     if (t === 'fogc' || t === 'fogb') { const k = t === 'fogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: game.opts && game.opts[k] === false }; if (k === 'fogCamp' && game.opts.fogCamp !== false) markExplored(); return done(`${k === 'fogCamp' ? 'Campaign' : 'Battle'} fog ${game.opts[k] === false ? 'off' : 'on'}`); }
     if (t === 'gold') { const n = Math.round(Number(testUI.gold) || 0); game.points = { ...game.points, [testUI.fid]: Math.max(0, (game.points[testUI.fid] || 0) + n) }; return done(`${faction(testUI.fid).name}: ${n >= 0 ? '+' : ''}${n} gold`); }
     if (t === 'seat') { const f = faction(b.dataset.f); if (!f) return; f.ai = !f.ai; f.kind = f.ai ? 'ai' : 'human'; if (f.ai) f.joined = false; aiState = null; return done(`${f.name} is now ${f.ai ? 'played by the AI' : 'a Player seat · share your code to let a friend take it'}`); }
@@ -4323,7 +4323,7 @@
       } else {
         if (placingArmy && game.view === 'campaign') { placeNewArmy(h); down = null; dragging = false; cv.classList.remove('drag'); return; }
         sel = (h && sel && h[0] === sel[0] && h[1] === sel[1]) ? null : h;
-        selUnit = unitAt(sel) || null; if (selUnit && hiddenFromMe(selUnit)) selUnit = null; selCity = game.view === 'campaign' ? cityAt(sel) : null; if (sel && !seenTile(sel)) { selUnit = null; selCity = null; } refreshUI();
+        selUnit = unitAt(sel) || null; const godSel = testOn && isHost(); if (selUnit && hiddenFromMe(selUnit) && !godSel) selUnit = null; selCity = game.view === 'campaign' ? cityAt(sel) : null; if (sel && !seenTile(sel) && !godSel) { selUnit = null; selCity = null; } refreshUI();
       }
     }
     down = null; dragging = false; cv.classList.remove('drag');
