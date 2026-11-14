@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.15-preview</div>
+  <div class="t">Medieval Cities 3D · v2.16-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1341,6 +1341,14 @@
     const spots = w.spots.slice(); for (let i = spots.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }
     const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai' || (game.opts && game.opts.god), alive: true, style: ['aggressive', 'builder', 'balanced'][(R() * 3) | 0] }));
     if (game.opts && game.opts.blessed) factions[(Math.random() * factions.length) | 0].blessed = true;   // a secret: one realm gets 3 passive gold a turn
+    if (game.opts && game.opts.coop) {                 // co-op: each team starts together, the two teams at opposite ends of the land
+      const team = side => factions.map((f, i) => i).filter(i => !!factions[i].ai === side), H = team(false), A = team(true);
+      const byRow = spots.slice().sort((x, y) => x[1] - y[1]), south = R() < 0.5, aH = south ? byRow[byRow.length - 1] : byRow[0], aA = south ? byRow[0] : byRow[byRow.length - 1];
+      const left = spots.slice(), take = (anchor, n) => { const out = []; for (let k = 0; k < n; k++) { left.sort((x, y) => hexDist(x, anchor) - hexDist(y, anchor)); out.push(left.shift()); } return out; };
+      const hs = take(aH, H.length), as = take(aA, A.length), order = new Array(factions.length);
+      H.forEach((fi, k) => { order[fi] = hs[k]; }); A.forEach((fi, k) => { order[fi] = as[k]; });
+      spots.splice(0, spots.length, ...order, ...left);
+    }
     const cities = spots.map((h, i) => ({ id: 'city' + i, col: h[0], row: h[1], name: names[i], owner: i < factions.length ? factions[i].id : null, buildings: [], acted: false }));
     cities.push({ id: 'citywall', col: w.wallSpot[0], row: w.wallSpot[1], name: 'Frostgate', owner: null, buildings: [], acted: false, wall: true });
     const T = w.terrain, armies = [];
