@@ -28,6 +28,10 @@
   #goldhud{position:fixed;right:12px;top:118px;display:none;align-items:center;gap:8px;background:linear-gradient(#2a2412ee,#17140cee);border:1px solid #8a6d2c;border-radius:20px;padding:5px 14px 5px 7px;color:#f6dc8a;font:600 17px Georgia,serif;box-shadow:0 2px 10px #0008;pointer-events:none}
   #goldhud #goldinc{font:500 13px system-ui,sans-serif;color:#cdbb86}
   #goldhud .coin{width:24px;height:24px;margin:0;vertical-align:middle}
+  #tst{position:fixed;left:12px;top:150px;width:310px;max-height:calc(100vh - 250px);overflow-y:auto;background:rgba(14,12,20,.94);color:#d6d2e4;padding:10px 12px;border-radius:8px;font-size:13px;border:1px solid #7a5fb0;display:none;z-index:25}
+  #tst .t{font-weight:700;color:#c9b2ff;margin-bottom:4px} #tst .sub{margin-top:8px;color:#b9a8e0;font-weight:600} #tst .row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:3px 0}
+  #tst select,#tst input{background:#221d2e;color:#e6e0f4;border:1px solid #5d4c84;border-radius:4px;padding:2px 4px;font-size:12px} #tst input{width:64px}
+  #tst button{font-size:12px;padding:2px 7px} #tst .tr{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2c2540;padding:1px 0} #tst .k{color:#9d94b4;font-size:12px}
   #toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:rgba(20,22,14,.92);color:#eadfb4;padding:8px 16px;border-radius:8px;border:1px solid #6b5d36;font-size:14px;opacity:0;pointer-events:none}
   #toast.show{animation:toast 2.6s ease-out}@keyframes toast{0%{opacity:0;transform:translate(-50%,8px)}10%{opacity:1;transform:translate(-50%,0)}75%{opacity:1}100%{opacity:0}}
   #dm{position:fixed;left:12px;top:190px;background:rgba(10,12,8,.85);color:#c9cdbd;padding:10px 12px;border-radius:8px;font-size:13px;border:1px solid #6b5d36;user-select:none;display:none;width:290px;max-height:calc(100vh - 290px);overflow:auto}
@@ -83,7 +87,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.29</div>
+  <div class="t">Medieval Cities · v1.30</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -92,8 +96,9 @@
 </div>
 <div id="top"><span id="turn"></span><button id="endturn" title="Space">End turn</button></div>
 <div id="dm"></div><div id="camp"></div><div id="facs"></div><div id="lobby"></div><div id="modal"></div>
-<div id="savebar"><button id="bdm">🧙 Dungeon Master: Off</button><button id="bsave" title="Ctrl+S">💾 Save file</button><button id="bload">📂 Load file</button><input type="file" id="fload" accept=".json,application/json" hidden><button id="breset" title="Hold for 2 seconds">⟲ Reset (hold)</button><span class="k">autosaves in this browser</span></div>
+<div id="savebar"><button id="btest">🧪 Test: Off</button><button id="bdm" style="display:none">🧙 Dungeon Master: Off</button><button id="bsave" title="Ctrl+S">💾 Save file</button><button id="bload">📂 Load file</button><input type="file" id="fload" accept=".json,application/json" hidden><button id="breset" title="Hold for 2 seconds">⟲ Reset (hold)</button><span class="k">autosaves in this browser</span></div>
 <div id="toast"></div>
+<div id="tst"></div>
 <div id="goldhud"><span class="coin"></span><b id="goldv">0</b><span id="goldinc"></span></div>
 <div id="cards"></div>
 <div id="teams"><div class="team" id="tb"></div><div class="team" id="tr"></div></div>
@@ -3801,7 +3806,67 @@
     if (fc && getComputedStyle(fc).display !== 'none') { const ft = fc.getBoundingClientRect().top; if (ft > 0) y = Math.min(y, ft - el.offsetHeight - 8); }
     const top = Math.max(106, y) + 'px'; if (el.style.top !== top) el.style.top = top;
   }
+  // ===================== TEST MODE (host only): change anything to try things out =====================
+  let testOn = false; const testUI = { fid: null, type: 'swordsman', count: 1, gold: 50, passive: '', skills: ['', '', ''], lvls: [1, 1, 1] };
+  const testFactions = () => (game.factions || []);
+  function renderTest() {
+    const el = document.getElementById('tst'), bt = document.getElementById('btest');
+    const can = isHost() && game.view !== 'lobby' && (game.factions || []).length;
+    bt.style.display = isHost() ? '' : 'none'; const lbl = `🧪 Test: ${testOn && can ? 'On' : 'Off'}`; if (bt.textContent !== lbl) bt.textContent = lbl; bt.classList.toggle('on', testOn && !!can);
+    if (!testOn || !can) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+    const fs = testFactions(); if (!testUI.fid || !faction(testUI.fid)) testUI.fid = fs[0].id;
+    const fOpt = (sel, inc = () => true) => fs.filter(inc).map(f => `<option value="${f.id}" ${f.id === sel ? 'selected' : ''}>${f.name}</option>`).join('');
+    const camp = game.view === 'campaign', a = camp && selUnit && selUnit.troops ? selUnit : null, c = camp && !a && sel ? cityAt(sel) : (camp && a ? cityAt([a.col, a.row]) : null);
+    const fogC = !(game.opts && game.opts.fogCamp === false), fogB = !(game.opts && game.opts.fogBattle === false);
+    let h = `<div class="t">🧪 Test mode · host only</div><div class="k">Click a city, an army or an empty tile on the map, then use the tools below.</div>`;
+    h += `<div class="sub">Fog of war</div><div class="row"><button data-t="fogc" class="${fogC ? 'on' : ''}">Campaign fog: ${fogC ? 'On' : 'Off'}</button><button data-t="fogb" class="${fogB ? 'on' : ''}">Battle fog: ${fogB ? 'On' : 'Off'}</button></div>`;
+    h += `<div class="sub">Gold</div><div class="row"><select data-v="fid">${fOpt(testUI.fid, f => !f.undead)}</select><input data-v="gold" type="number" value="${testUI.gold}"><button data-t="gold">Give</button><span class="k">(negative takes)</span></div>`;
+    h += `<div class="sub">Who plays each faction</div>` + fs.filter(f => !f.undead).map(f => `<div class="tr"><span style="color:rgb(${f.col.map(v => Math.min(255, v + 70))})">${f.name}${f.joined ? ' · connected' : ''}${f.id === hostSeat() ? ' · you' : ''}</span><span>${f.id === hostSeat() ? '' : `<button data-t="seat" data-f="${f.id}">${f.ai ? '→ Player seat' : '→ AI'}</button>`}</span></div>`).join('');
+    if (camp) {
+      if (c) h += `<div class="sub">City · ${c.name}${c.wall ? ' (Frostgate)' : ''}</div><div class="row">Owner: <select data-v="cityowner">${fOpt(c.owner || '', f => !f.undead)}<option value="" ${!c.owner ? 'selected' : ''}>— free spot —</option></select><button data-t="cityset" data-c="${c.id}">Set</button></div>`;
+      if (a) { const fa = faction(a.team);
+        h += `<div class="sub">Army · ${fa ? fa.name : a.team} · ${a.troops.length} troop${a.troops.length === 1 ? '' : 's'}</div>` + a.troops.map((t, i) => { const cd = t.cards; const extra = cd ? ` <span class="k">${[cd.passive && CARDS[cd.passive] ? CARDS[cd.passive].name : null, ...(cd.skills || []).filter(Boolean).map(k => `${CARDS[k.id] ? CARDS[k.id].name : k.id} ${k.lvl}`)].filter(Boolean).join(', ')}</span>` : '';
+            return `<div class="tr"><span>${UNIT_TYPES[t.type] ? UNIT_TYPES[t.type].name : t.type} <span class="k">${t.hp}/${t.maxHp}</span>${extra}</span><button data-t="deltroop" data-i="${i}">✕</button></div>`; }).join('') +
+          `<div class="row"><button data-t="delarmy">Delete this army</button></div>`; }
+      const types = Object.keys(UNIT_TYPES).filter(t => !UNIT_TYPES[t].structure && t !== 'army');
+      const hc = HERO_CARDS[testUI.type];
+      h += `<div class="sub">${a ? 'Add to this army' : sel && !unitAt(sel) && !impassable(sel) && !cityAt(sel) ? 'New army on this tile' : 'Add units'}</div>`;
+      if (!a && !(sel && !unitAt(sel) && !impassable(sel) && !cityAt(sel))) h += `<div class="k">Select an army, or an empty land tile for a new army.</div>`;
+      else {
+        h += `<div class="row">${a ? '' : `<select data-v="fid">${fOpt(testUI.fid)}</select>`}<select data-v="type">${types.map(t => `<option value="${t}" ${t === testUI.type ? 'selected' : ''}>${UNIT_TYPES[t].name}${HEROES.includes(t) ? ' (hero)' : ''}</option>`).join('')}</select>×<input data-v="count" type="number" min="1" max="40" value="${testUI.count}"></div>`;
+        if (hc) { const card = (v, list, i) => `<select data-v="${i === undefined ? 'passive' : 'skill' + i}"><option value="">— none —</option>${list.map(id => `<option value="${id}" ${id === v ? 'selected' : ''}>${CARDS[id] ? CARDS[id].name : id}</option>`).join('')}</select>`;
+          h += `<div class="row">Passive ${card(testUI.passive, hc.passive)}</div>` + [0, 1, 2].map(i => `<div class="row">Skill ${i + 1} ${card(testUI.skills[i], hc.skill, i)} lvl <select data-v="lvl${i}">${[1, 2, 3, 4, 5].map(l => `<option ${l === testUI.lvls[i] ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join(''); }
+        h += `<div class="row"><button data-t="add">${a ? 'Add' : 'Create army'}</button></div>`;
+      }
+    } else h += `<div class="k" style="margin-top:6px">Army, unit and city tools work on the campaign map.</div>`;
+    if (el.dataset.h !== h) { el.dataset.h = h; el.innerHTML = h; }
+    el.style.display = 'block';
+  }
+  function testAct(t, b) {
+    if (!isHost()) return; const done = msg => { if (msg) toast('🧪 ' + msg); commit({ type: 'edit' }); refreshUI(); };
+    if (t === 'fogc' || t === 'fogb') { const k = t === 'fogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: game.opts && game.opts[k] === false }; if (k === 'fogCamp' && game.opts.fogCamp !== false) markExplored(); return done(`${k === 'fogCamp' ? 'Campaign' : 'Battle'} fog ${game.opts[k] === false ? 'off' : 'on'}`); }
+    if (t === 'gold') { const n = Math.round(Number(testUI.gold) || 0); game.points = { ...game.points, [testUI.fid]: Math.max(0, (game.points[testUI.fid] || 0) + n) }; return done(`${faction(testUI.fid).name}: ${n >= 0 ? '+' : ''}${n} gold`); }
+    if (t === 'seat') { const f = faction(b.dataset.f); if (!f) return; f.ai = !f.ai; f.kind = f.ai ? 'ai' : 'human'; if (f.ai) f.joined = false; aiState = null; return done(`${f.name} is now ${f.ai ? 'played by the AI' : 'a Player seat · share your code to let a friend take it'}`); }
+    if (t === 'cityset') { const c = game.cities.find(x => x.id === b.dataset.c); if (!c) return; const o = document.querySelector('#tst select[data-v="cityowner"]').value || null;
+      c.owner = o; if (!o) c.buildings = []; c.acted = false; checkDefeats(); return done(o ? `${c.name} now belongs to ${faction(o).name}` : `${c.name} is a free city spot again`); }
+    const a = game.view === 'campaign' && selUnit && selUnit.troops ? selUnit : null;
+    if (t === 'deltroop' && a) { a.troops = a.troops.filter((_, i) => i !== Number(b.dataset.i)); if (!a.troops.length) { units = units.filter(u => u !== a); selUnit = null; } heroSel = null; checkDefeats(); return done('Troop removed'); }
+    if (t === 'delarmy' && a) { units = units.filter(u => u !== a); selUnit = null; heroSel = null; checkDefeats(); return done('Army removed'); }
+    if (t === 'add') {
+      const make = () => { const tr = troop(testUI.type), hc = HERO_CARDS[testUI.type];
+        if (hc) { tr.cards = emptyCards(); if (testUI.passive) tr.cards.passive = testUI.passive; const sk = []; testUI.skills.forEach((id, i) => { if (id && !sk.some(x => x && x.id === id)) sk.push({ id, lvl: testUI.lvls[i] }); }); tr.cards.skills = [sk[0] || null, sk[1] || null, sk[2] || null]; }
+        return tr; };
+      const n = Math.max(1, Math.min(40, Math.round(Number(testUI.count) || 1)));
+      let tgt = a;
+      if (!tgt) { if (!sel || unitAt(sel) || impassable(sel) || cityAt(sel)) return; const f = faction(testUI.fid); if (!f) return;
+        tgt = runtimeUnit({ id: `army-${f.id}-t${Date.now().toString(36)}`, type: 'army', team: f.id, col: sel[0], row: sel[1], hp: 1, maxHp: 1, face: 0, moved: false, attacked: false, troops: [], ...(f.undead ? { released: true } : {}) }); units.push(tgt); selUnit = tgt; }
+      const cap = tgt.team === 'undead' ? UNDEAD_CAP : MAX_TROOPS, room = Math.max(0, cap - tgt.troops.length), k = Math.min(n, room);
+      tgt.troops = [...tgt.troops, ...Array.from({ length: k }, make)];
+      return done(k < n ? `Added ${k} (army is full at ${cap})` : `Added ${k} × ${UNIT_TYPES[testUI.type].name}`);
+    }
+  }
   function refreshUI() {
+    try { renderTest(); } catch (e) { console.error(e); }
     try { goldHud(); } catch (e) {}
     renderLobby(); renderFactions(); renderCamp(); renderPending();
     if (armed && (!selUnit || armed.id !== selUnit.id)) armed = null;
@@ -3945,6 +4010,15 @@
   endBtn.addEventListener('click', endTurn);
   document.getElementById('bsave').addEventListener('click', saveFile);
   document.getElementById('bdm').addEventListener('click', toggleDM);
+  document.getElementById('btest').addEventListener('click', () => { if (!isHost()) return; testOn = !testOn; refreshUI(); });
+  { const tst = document.getElementById('tst');
+    tst.addEventListener('click', e => { const b = e.target.closest('button[data-t]'); if (b) testAct(b.dataset.t, b); });
+    tst.addEventListener('change', e => { const v = e.target.dataset.v; if (!v) return; const x = e.target.value;
+      if (v === 'fid' || v === 'type' || v === 'passive') testUI[v] = x; else if (v === 'count' || v === 'gold') testUI[v] = x;
+      else if (v.startsWith('skill')) testUI.skills[Number(v.slice(5))] = x; else if (v.startsWith('lvl')) testUI.lvls[Number(v.slice(3))] = Number(x);
+      if (v === 'type') { testUI.passive = ''; testUI.skills = ['', '', '']; }
+      if (v !== 'cityowner') refreshUI(); });
+    tst.addEventListener('keydown', e => e.stopPropagation()); }
   document.getElementById('teams').addEventListener('click', e => {      // host adjusts points until earning rules exist
     const b = e.target.closest('button[data-pt]'); if (!b || !isHost() || busy()) return;
     const [team, d] = b.dataset.pt.split(':'); game.points = { ...game.points, [team]: Math.max(0, (game.points[team] || 0) + Number(d)) };
