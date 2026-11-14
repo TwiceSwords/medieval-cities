@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.16-preview</div>
+  <div class="t">Medieval Cities 3D · v2.17-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1043,7 +1043,7 @@
   const troop = type => ({ type, hp: typeMax(type), maxHp: typeMax(type), mana: typeStat(type, 'manaMax'), manaMax: typeStat(type, 'manaMax') });
   function freshState(seq) {                     // a new campaign starts in the lobby
     return { seq, turn: 'f0', round: 1, last: null, dm: !!game.dm, battle: false, types: game.types, points: {}, view: 'lobby', campaign: null,
-      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { god: !!(game.opts && game.opts.god), coop: !!(game.opts && game.opts.coop), blessed: !!(game.opts && game.opts.blessed), fogCamp: !(game.opts && game.opts.fogCamp === false), fogBattle: !(game.opts && game.opts.fogBattle === false) } };
+      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { god: !!(game.opts && game.opts.god), coop: !!(game.opts && game.opts.coop), coopLayout: (game.opts && game.opts.coopLayout) || 'ends', blessed: !!(game.opts && game.opts.blessed), fogCamp: !(game.opts && game.opts.fogCamp === false), fogBattle: !(game.opts && game.opts.fogBattle === false) } };
   }
   function freshBattleState(seq) {
     return { seq, turn: 'blue', round: 1, last: null, dm: !!game.dm, battle: false,
@@ -1343,9 +1343,16 @@
     if (game.opts && game.opts.blessed) factions[(Math.random() * factions.length) | 0].blessed = true;   // a secret: one realm gets 3 passive gold a turn
     if (game.opts && game.opts.coop) {                 // co-op: each team starts together, the two teams at opposite ends of the land
       const team = side => factions.map((f, i) => i).filter(i => !!factions[i].ai === side), H = team(false), A = team(true);
-      const byRow = spots.slice().sort((x, y) => x[1] - y[1]), south = R() < 0.5, aH = south ? byRow[byRow.length - 1] : byRow[0], aA = south ? byRow[0] : byRow[byRow.length - 1];
+      const byRow = spots.slice().sort((x, y) => x[1] - y[1]), south = R() < 0.5, west = R() < 0.5, side = game.opts.coopLayout === 'side';
+      const nw = [0, WALL_ROW + 2], ne = [CCOLS - 1, WALL_ROW + 2];            // side by side: both teams up north by the wall, one west and one east
+      const aH = side ? (west ? nw : ne) : south ? byRow[byRow.length - 1] : byRow[0], aA = side ? (west ? ne : nw) : south ? byRow[0] : byRow[byRow.length - 1];
       const left = spots.slice(), take = (anchor, n) => { const out = []; for (let k = 0; k < n; k++) { left.sort((x, y) => hexDist(x, anchor) - hexDist(y, anchor)); out.push(left.shift()); } return out; };
-      const hs = take(aH, H.length), as = take(aA, A.length), order = new Array(factions.length);
+      let hs, as;
+      if (side) {                                      // the two teams pick in turn; staying on your own side matters more than staying north
+        const sd = (h, an, mine) => mine.length ? Math.min(...mine.map(m => hexDist(h, m))) + Math.abs(h[0] - an[0]) * 1.5 : Math.abs(h[0] - an[0]) * 3 + Math.abs(h[1] - an[1]), pick = (an, mine) => { left.sort((x, y) => sd(x, an, mine) - sd(y, an, mine)); return left.shift(); };
+        hs = []; as = []; while (hs.length < H.length || as.length < A.length) { if (hs.length < H.length) hs.push(pick(aH, hs)); if (as.length < A.length) as.push(pick(aA, as)); }
+      } else { hs = take(aH, H.length); as = take(aA, A.length); }
+      const order = new Array(factions.length);
       H.forEach((fi, k) => { order[fi] = hs[k]; }); A.forEach((fi, k) => { order[fi] = as[k]; });
       spots.splice(0, spots.length, ...order, ...left);
     }
@@ -3462,6 +3469,7 @@
       <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 3 passive gold a turn instead of 1</div>
       <div class="lsub">${host ? `<button id="lgod" class="${game.opts && game.opts.god ? 'on' : ''}">👁 God mode: ${game.opts && game.opts.god ? 'On' : 'Off'}</button>` : `👁 God mode: ${game.opts && game.opts.god ? 'On' : 'Off'}`} · every realm (yours too) is played by the AI; you watch everything with no fog, battles are fought out on the board and the camera follows the action</div>
       <div class="lsub">${host ? `<button id="lcoop" class="${game.opts && game.opts.coop ? 'on' : ''}">🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}</button>` : `🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}`} · all players are one team against all AI realms; each team shares its sight</div>
+      ${game.opts && game.opts.coop ? `<div class="lsub">Teams start: ${[['ends', '↕ North vs South'], ['side', '↔ Side by side, both by the wall']].map(([k, l]) => host ? `<button data-coopl="${k}" class="${((game.opts.coopLayout || 'ends') === k) ? 'on' : ''}">${l}</button>` : ((game.opts.coopLayout || 'ends') === k ? `<b>${l}</b>` : '')).join(' ')}</div>` : ''}
       ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
         return `<div class="lsub">${host ? `<button id="${id}" class="${on ? 'on' : ''}">${lab}: ${on ? 'On' : 'Off'}</button>` : `${lab}: ${on ? 'On' : 'Off'}`} · ${txt} · the AI plays by the same fog</div>`; }).join('')}
       ${host ? `<button id="lstart" ${n < 2 ? 'disabled' : ''}>Start the campaign</button>` : '<div class="lsub">Waiting for the host to start…</div>'}`;
@@ -3473,6 +3481,7 @@
     if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
     if ((b.id === 'lfogc' || b.id === 'lfogb') && isHost()) { const k = b.id === 'lfogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: !!(game.opts && game.opts[k] === false) }; commit({ type: 'setup' }); return; }
     if (b.id === 'lgod' && isHost()) { game.opts = { ...(game.opts || {}), god: !(game.opts && game.opts.god) }; commit({ type: 'setup' }); return; }
+    if (b.dataset && b.dataset.coopl && isHost()) { game.opts = { ...(game.opts || {}), coopLayout: b.dataset.coopl }; commit({ type: 'setup' }); return; }
     if (b.id === 'lcoop' && isHost()) { game.opts = { ...(game.opts || {}), coop: !(game.opts && game.opts.coop) }; commit({ type: 'setup' }); return; }
     if (b.id === 'lbless' && isHost()) { game.opts = { ...(game.opts || {}), blessed: !(game.opts && game.opts.blessed) }; commit({ type: 'setup' }); return; }
     if (b.dataset.kind && isHost()) { const [i, k] = b.dataset.kind.split(':'); game.factions[i].kind = k; commit({ type: 'setup' }); }
