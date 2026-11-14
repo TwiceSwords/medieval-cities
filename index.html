@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.19</div>
+  <div class="t">Medieval Cities · v1.20</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -3146,8 +3146,14 @@
       else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'socket-closed') { p2pStop('Could not reach the connection server (' + e.type + '). Check internet / firewall and try again.'); }
       else { p2p.status = 'Error: ' + e.type + ' · still hosting'; refreshUI(); } });
   }
+  const codeFrom = t => { t = String(t || ''); const m = t.match(/[?&]join=([A-Za-z0-9]{5})/) || t.trim().match(/^([A-Za-z0-9]{5})$/); return m ? m[1].toUpperCase() : null; };
+  const inviteLink = () => location.origin + location.pathname + '?join=' + p2p.code;
+  function copyText(t, msg) {
+    const done = () => toast(msg), fall = () => { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('Copy failed · select the code and press Ctrl+C'); } a.remove(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, fall); else fall();
+  }
   function p2pJoin(code) {
-    code = (code || '').trim().toUpperCase();
+    code = codeFrom(code) || (code || '').trim().toUpperCase();
     if (!/^[A-Z0-9]{5}$/.test(code)) { p2p.status = 'Enter the 5-character code from the host.'; refreshUI(); return; }
     if (!p2pAvailable()) { p2p.status = 'Direct connection needs the downloaded game file opened in Chrome/Edge/Firefox.'; refreshUI(); return; }
     p2p.role = 'join'; p2p.code = code; p2p.status = 'Connecting…'; refreshUI();
@@ -3787,13 +3793,13 @@
     }
     if (!room) {                                           // direct-connection panel
       let html;
-      if (p2p.conn || p2p.conns.length) html = `<div>🟢 ${p2p.role === 'host' ? `Hosting · code <b style="letter-spacing:2px;color:#f0e2a8">${p2p.code}</b> · ${p2p.conns.length} friend${p2p.conns.length === 1 ? '' : 's'}` : 'Connected to the host'} · you are <b style="color:rgb(${(TEAM[mySeat] || [200, 200, 200]).map(c => Math.min(255, c + 70))})">${teamName(mySeat)}</b></div>
-        <div class="seats"><button data-act="leave">Disconnect</button></div>`;
-      else if (p2p.role === 'host') html = `<div>Game code: <b style="font-size:17px;letter-spacing:2px;color:#f0e2a8">${p2p.ready ? p2p.code : '·····'}</b></div>
-        <div class="k">${p2p.status}</div><div class="seats"><button data-act="leave">Cancel</button></div>`;
+      if (p2p.conn || p2p.conns.length) html = `<div>🟢 ${p2p.role === 'host' ? `Hosting · code <b style="letter-spacing:2px;color:#f0e2a8;user-select:all">${p2p.code}</b> · ${p2p.conns.length} friend${p2p.conns.length === 1 ? '' : 's'}` : 'Connected to the host'} · you are <b style="color:rgb(${(TEAM[mySeat] || [200, 200, 200]).map(c => Math.min(255, c + 70))})">${teamName(mySeat)}</b></div>
+        <div class="seats">${p2p.role === 'host' ? '<button data-act="copycode">📋 Copy code</button><button data-act="copylink">🔗 Invite link</button>' : ''}<button data-act="leave">Disconnect</button></div>`;
+      else if (p2p.role === 'host') html = `<div>Game code: <b style="font-size:17px;letter-spacing:2px;color:#f0e2a8;user-select:all">${p2p.ready ? p2p.code : '·····'}</b></div>
+        <div class="k">${p2p.status}</div>${p2p.ready ? '<div class="seats"><button data-act="copycode">📋 Copy code</button><button data-act="copylink">🔗 Copy invite link</button></div><div class="k">Send the code or the invite link · the link joins with one click</div>' : ''}<div class="seats"><button data-act="leave">Cancel</button></div>`;
       else html = `<div>Play with a friend (direct connection)</div>
         <div class="seats"><button data-act="host">Host game</button>
-        <input id="code" maxlength="5" placeholder="CODE" autocomplete="off"><button data-act="join">Join</button></div>
+        <input id="code" maxlength="300" placeholder="CODE or link" autocomplete="off"><button data-act="paste" title="Paste from clipboard">📋</button><button data-act="join">Join</button></div>
         ${p2p.status ? `<div class="k" style="margin-top:6px">${p2p.status}</div>` : ''}`;
       if (lastNetHtml !== html) {
         const old = document.getElementById('code'), v = old ? old.value : '';
@@ -3809,11 +3815,17 @@
       <div class="seats">${btn('blue', 'Play Blue', taken.blue)}${btn('red', 'Play Red', taken.red)}${btn('local', 'Local (both)', false)}</div>`;
     if (lastNetHtml !== netHtml) { lastNetHtml = netHtml; netEl.innerHTML = netHtml; }
   }
+  document.getElementById('net').addEventListener('keydown', e => { if (e.target.id === 'code' && e.key === 'Enter') { e.preventDefault(); p2pJoin(e.target.value); } e.stopPropagation(); });
+  document.getElementById('net').addEventListener('paste', e => { if (e.target.id !== 'code') return; const t = (e.clipboardData || window.clipboardData).getData('text'); const c = codeFrom(t); if (c) { e.preventDefault(); e.target.value = c; setTimeout(() => p2pJoin(c), 50); } });
   document.getElementById('net').addEventListener('click', e => {
     const act = e.target.closest('button[data-act]');
     if (act) {
       if (act.dataset.act === 'host') p2pHost();
       if (act.dataset.act === 'join') p2pJoin(document.getElementById('code').value);
+      if (act.dataset.act === 'copycode' || act.dataset.act === 'copylink') copyText(act.dataset.act === 'copylink' ? inviteLink() : p2p.code, act.dataset.act === 'copylink' ? 'Invite link copied · send it to your friend' : `Code ${p2p.code} copied`);
+      if (act.dataset.act === 'paste') { const inp = document.getElementById('code');
+        if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(t => { inp.value = codeFrom(t) || t.trim(); if (codeFrom(t)) p2pJoin(inp.value); }).catch(() => { inp.focus(); toast('Press Ctrl+V to paste the code'); });
+        else { inp.focus(); toast('Press Ctrl+V to paste the code'); } }
       if (act.dataset.act === 'leave') p2pStop('');
       return;
     }
@@ -4121,6 +4133,7 @@
 
   // ---------- Start ----------
   if (loadLocal()) setTimeout(() => toast(`Continuing your saved game · Round ${game.round}`), 600); else applyState(freshState(0));
+  { const jc = codeFrom(location.search); if (jc) { try { history.replaceState(null, '', location.pathname); } catch (e) {} setTimeout(() => { toast(`Joining game ${jc}…`); p2pJoin(jc); }, 900); } }
   let stuckSince = 0;
   setInterval(() => {
     if (lastRemote && busy() && document.hidden) { stuckSince = stuckSince || Date.now(); if (Date.now() - stuckSince > 1500) { for (const u of units) { u.path = null; u.atk = null; } units = units.filter(u => u.dying === null); projectiles = []; afterIdle = null; } } else stuckSince = 0;
