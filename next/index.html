@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.36-preview</div>
+  <div class="t">Medieval Cities 3D · v2.37-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1583,7 +1583,7 @@
     const b = bt(), src = j.kind === 'army' ? (game.campaign.armies.find(u => u.id === j.id) || units.find(u => u.id === j.id)) : game.cities.find(c => c.id === j.id);
     if (!src || !zone) return;
     const list = j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : garrisonOf(src).map(t => ({ ...troop(t), garrison: true }));
-    const mid = [BCOLS >> 1, BROWS >> 1], free = zoneTiles(zone).filter(h => b.grid[h[1] * BCOLS + h[0]] !== 'r' && !unitAt(h)).sort((x, y) => hexDist(x, mid) - hexDist(y, mid));
+    const mid = [BCOLS >> 1, BROWS >> 1], free = zoneTiles(zone).filter(h => b.grid[h[1] * BCOLS + h[0]] !== 'r' && !unitAt(h) && !(b.siege && (b.siege.pieces[key(...h)] || {}).kind === 'gate')).sort((x, y) => hexDist(x, mid) - hexDist(y, mid));
     const order = list.map((t, i) => ({ t, i, back: !!(UNIT_TYPES[t.type] || {}).ranged })).sort((x, y) => x.back - y.back);
     const prefix = j.kind === 'army' ? j.id : 'g:' + j.id;
     order.forEach(({ t, i }) => { let h;
@@ -1733,10 +1733,26 @@
     b.zones[fid] = { a: z.a, r: 99, siege: { th, W } };
   }
   const inSiegeZone = (z, h) => projAt(h, z.siege.th) >= z.siege.W && !(wallAt(h) && wallAt(h).kind === 'gate');
-  function canStep(from, to) {                        // walls are reached by stairs, ladders, or from other wall tiles
+  // the gate opens by itself for the city's own side (it vanishes while one of them stands in it) and shuts again once the gateway is empty
+  const isGateTile = h => { const p = wallAt(h); return !!p && p.kind === 'gate'; };
+  const shooterSide = (team, mine) => units.some(o => o.dying === null && o.hp > 0 && !o.placing && !(o.enter > game.round) && (mine ? !hostile(o.team, team) : hostile(o.team, team)) && !!(T(o).ranged || T(o).magic));
+  function gateMine(u, h) {                           // may this unit walk into the (closed) gate?
+    const s2 = sg(); if (!s2 || !u || !isGateTile(h) || hostile(u.team, s2.def)) return false;
+    if (faction(ownerOfTeam(u.team))?.ai) return !shooterSide(u.team, true) && shooterSide(u.team, false);   // the AI only goes out when it can't shoot back from the walls
+    return true;
+  }
+  function syncGate() {
+    const s2 = sg(); if (!s2) return;
+    let own = false, any = false;
+    for (const o of units) { if (o.dying !== null || o.hp <= 0 || o.climb) continue;
+      const on = isGateTile([o.col, o.row]) || (o.path && o.path.length && isGateTile(o.path[0])); if (!on) continue;
+      any = true; if (!hostile(o.team, s2.def)) own = true; }
+    s2.gateOpen = own || (s2.gateOpen && any);       // only the city's side opens it; it stays open while anyone is still in the gateway
+  }
+  function canStep(from, to, u) {                     // walls are reached by stairs, ladders, or from other wall tiles
     const s2 = sg(); if (!s2) return true;
     const pf = s2.pieces[key(...from)], pt = s2.pieces[key(...to)];
-    if (pt && pt.kind === 'gate') return s2.gateOpen && !(pf && pf.kind === 'wall');
+    if (pt && pt.kind === 'gate') return (s2.gateOpen || gateMine(u, to)) && !(pf && pf.kind === 'wall');
     if (pt && pt.kind === 'wall') return !!pf && (pf.kind === 'wall' || pf.kind === 'stair');
     if (pf && pf.kind === 'wall') return !!pt && pt.kind === 'stair';
     return true;
@@ -1998,6 +2014,17 @@
       for (const [k, d] of b.dist) { if (!d) continue; const t = k.split(',').map(Number); if (unitAt(t) || !gates.some(g => hexDist(t, g) === 1)) continue; if (!best || d < best.d) best = { u, b, t, d }; } }
     return best ? { type: 'move', id: best.u.id, path: pathTo(best.b, best.t) } : null;
   }
+  // a route over several turns (down the stairs, through the gate...); other units only block the part walked this turn
+  function farPath(u, goal) {
+    const mv = moveOf(u), gh = ghostFor(u), start = [u.col, u.row], dist = new Map([[key(...start), 0]]), prev = new Map(), q = [start];
+    while (q.length) { const h = q.shift(), d = dist.get(key(...h));
+      if (d > 0 && hexDist(h, goal) <= 1) { const p = []; let c = h; while (prev.has(key(...c))) { p.unshift(c); c = prev.get(key(...c)); } return p; }
+      if (d > 80) continue;
+      for (const n of neighbors(...h)) { const k = key(...n); if (dist.has(k)) continue;
+        if (d + 1 <= mv) { const o = unitAt(n); if (o && o !== u && !gh(o)) continue; }
+        if ((blockedTile(n) && !gateMine(u, n)) || !canStep(h, n, u)) continue; dist.set(k, d + 1); prev.set(k, h); q.push(n); } }
+    return null;
+  }
   // battle AI: units far from any enemy march together in one go; the close ones still think one by one
   function aiHorde(mine, foes) {
     const nearest = t => { let b = null; for (const o of foes) { const d = hexDist(t, [o.col, o.row]); if (!b || d < b.d) b = { o, d }; } return b; };
@@ -2020,19 +2047,24 @@
       const goal = zs[0] || [BCOLS >> 1, BROWS >> 1]; foes = [{ col: goal[0], row: goal[1], hp: 99, id: null, ghost: true }]; }
     const mine = units.filter(u => u.team === team && u.dying === null && u.hp > 0 && !unitDone(u) && !aiState.skip.has(u.id) && !isStunned(u));
     if (!mine.length || !foes.length) { aiBusyUntil = Date.now() + 400; commit({ type: 'end' }); return; }
-    { const so = aiSally(team, mine); if (so) { aiGo(so); return; } }       // melee-only defenders under fire: open the gate and go out
     if (!aiState.horde) { aiState.horde = true; const hm = aiHorde(mine, foes); if (hm) { for (const m of hm) aiState.skip.add(m.id); aiGo({ type: 'gmove', moves: hm }); return; } }   // far from the fight: march as one horde
     const u = mine[0], ty = T(u), here = [u.col, u.row]; aiState.skip.add(u.id);
     const taunt = tauntSet(u, here); if (taunt.length) foes = taunt;                  // Challenged: only the Paladin(s) may be attacked
     const okAt = (t, target) => tauntOk(u, t, target);
     const near = (from) => foes.slice().sort((a, b) => hexDist(from, [a.col, a.row]) - hexDist(from, [b.col, b.row]))[0];
     const tgt = near(here), dT = hexDist(here, [tgt.col, tgt.row]);
+    const sallying = !!sg() && !hostile(team, sg().def) && !shooterSide(team, true) && shooterSide(team, false);
+    const sallyStep = () => { if (!sallying || u.moved) return false; const fp = farPath(u, [tgt.col, tgt.row]);   // defenders going out: follow the whole way (stairs, gate) a turn at a time
+      if (!fp || !fp.length) return false; let k = Math.min(fp.length, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--;
+      if (k <= 0) return false; aiGo({ type: 'move', id: u.id, path: fp.slice(0, k) }); return true; };
+    if (tgt.ghost && sallyStep()) return;
     if (tgt.ghost) { const b0 = reach(u), tl = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t)); let best = null;
       if (!u.moved) for (const t of tl) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
       if (best && best.d < dT) { aiGo({ type: 'move', id: u.id, path: pathTo(b0, best.t) }); return; } aiBusyUntil = Date.now() + 60; return; }
     const b = reach(u), tiles = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) || (t[0] === u.col && t[1] === u.row));
     const closest = (pred) => { let best = null; for (const t of tiles) { if (!pred(t)) continue; const d = b.dist.get(key(...t)); if (!best || d < best.d) best = { t, d }; } return best; };
     const walkToward = () => { if (u.moved) return false; let best = null;
+      if (sallyStep()) return true;
       for (const t of tiles) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
       if (!best || (best.t[0] === u.col && best.t[1] === u.row)) return false; aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return true; };
     if (ty.ranged === 'arc' || ty.magic) {
@@ -2241,7 +2273,7 @@
       if (d > 0 && u.troops && game.view === 'campaign' && zoc(h, u, gh)) continue;          // next to another army: the march stops here
       for (const n of neighbors(...h)) {
         const k = key(...n); if (dist.has(k)) continue;
-        const o = uAt(n); if (o && o !== u) continue; if (blockedTile(n) || !canStep(h, n)) continue;
+        const o = uAt(n); if (o && o !== u) continue; if ((blockedTile(n) && !gateMine(u, n)) || !canStep(h, n, u)) continue;
         if (T(u).big && !footprint(n, u).every(t => onBoard(t) && !blockedTile(t) && (!uAt(t) || uAt(t) === u))) continue;
         if (u.troops && game.view === 'campaign') { if (impassable(n)) continue; const c = cityAt(n); if (c && c.owner !== u.team && !(u.team === 'undead' && !c.owner)) continue; }
         dist.set(k, d + 1); prev.set(k, h); q.push(n);
@@ -2996,6 +3028,7 @@
   }
 
   function updateUnits(dt) {
+    try { syncGate(); } catch (e) {}
     for (const u of units) {
       if (u.path && !u.wait) {
         if (!u.path.length) {                                // arrived (and no overwatch shot pending)
@@ -3050,6 +3083,7 @@
     for (const { u, p, city, piece, h, mine } of list) {
       if (mine) { R3.tag = { key: 'mine:' + mine.join(','), gy: center(...mine).y - 1, static: true, gold: true }; drawMesh(ctx, goldMesh(), p.x, p.y, 0.3, 0, 0); continue; }
       if (u && hiddenFromMe(u)) continue;
+      if (piece && piece.kind === 'gate' && sg().gateOpen) continue;   // an open gate is simply not there
       if (piece) { R3.tag = { key: 'piece:' + h.join(',') + ':' + piece.kind + (piece.kind === 'gate' && sg().gateOpen ? 'o' : ''), gy: center(...h).y - 0.5, static: true }; drawMesh(ctx, pieceMesh(piece.kind, piece.kind === 'gate' && sg().gateOpen), p.x, p.y, 0, 0, 0);
         const hp = piece.kind === 'gate' ? sg().gateHp / GATE_HP : piece.kind === 'wall' ? piece.hp / WALL_HP : 1;
         if (hp < 1) { ctx.fillStyle = 'rgba(8,10,6,0.85)'; ctx.fillRect(p.x - 16, p.y - WALL_PX - 10, 32, 5); ctx.fillStyle = '#c9a25a'; ctx.fillRect(p.x - 15, p.y - WALL_PX - 9, 30 * Math.max(0, hp), 3); }
@@ -3619,6 +3653,7 @@
       if (volley.treb.length || volley.rain.length) action = { ...action, impacts: volley.treb.map(g => ({ tile: g.tile, from: g.from.map(u => u.id) })), rain: volley.rain };
     }
     if (['attack', 'shoot', 'bolt', 'pierce', 'charge', 'impact'].includes(action.type)) game.battle = true; if (action.type === 'edit') game.battle = false;
+    try { syncGate(); } catch (e) {}
     publish({ ...action, seq: game.seq }); saveLocal(); refreshUI();
     if (volley && (volley.treb.length || volley.rain.length)) { seedRng(game.seq * 7919 + 13); launchBoulders(volley.treb, true); launchRain(volley.rain, true); afterIdle = () => commit({ type: 'impact' }); return; }
     // hand the turn over automatically once every unit of this side has nothing left to do
@@ -4026,13 +4061,7 @@
     const mate = units.find(o => o !== u && hostile(o.team, u.team) && o.col === u.col && o.row === u.row && o.dying === null);
     if (mate && ty.ranged && tgt !== mate) { hint('Fighting on the same tile: only that enemy', here); return true; }
     if (!p || p.kind === 'stair' || (tgt && !(p.kind === 'gate' && tgt.team === u.team))) return false;
-    if (p.kind === 'gate' && u.team === s2.def) {
-      if (hexDist(here, h) > 1) { hint('Stand next to the gate', h); return true; }
-      if (u.attacked) { hint('Already acted', here); return true; }
-      if (s2.gateChanged === `${game.round}:${game.turn}`) { hint("Can't open and close it in the same turn", h); return true; }
-      wallChoice = { id: u.id, gate: !s2.gateOpen };
-      showModal(`<div class="mbox"><div class="t">🚪 ${s2.gateOpen ? 'Close' : 'Open'} the gate?</div><div>${s2.gateOpen ? 'Anyone standing in the gateway will be crushed.' : 'The gate stays open until one of your units next to it closes it again.'}</div>
-        <div class="row"><button data-wall="gate">Yes, ${s2.gateOpen ? 'close' : 'open'} it</button><button data-wall="no">No</button></div></div>`); return true; }
+    if (p.kind === 'gate' && !hostile(u.team, s2.def)) return false;   // your own gate: just walk into it (it opens for you)
     if (p.kind === 'gate' && s2.gateOpen) return false;
     if (u.attacked) { hint('Already attacked', here); return true; }
     const d = hexDist(here, h);
