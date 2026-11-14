@@ -78,7 +78,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.1</div>
+  <div class="t">Medieval Cities · v1.2</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -868,7 +868,7 @@
   const troop = type => ({ type, hp: typeMax(type), maxHp: typeMax(type), mana: typeStat(type, 'manaMax'), manaMax: typeStat(type, 'manaMax') });
   function freshState(seq) {                     // a new campaign starts in the lobby
     return { seq, turn: 'f0', round: 1, last: null, dm: !!game.dm, battle: false, types: game.types, points: {}, view: 'lobby', campaign: null,
-      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [] };
+      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { blessed: !!(game.opts && game.opts.blessed) } };
   }
   function freshBattleState(seq) {
     return { seq, turn: 'blue', round: 1, last: null, dm: !!game.dm, battle: false,
@@ -877,7 +877,7 @@
   function exportState(last) {
     if (shadowSt && spectating()) return { ...shadowSt, last: last || shadowSt.last };
     return { seq: game.seq, turn: game.turn, round: game.round, dm: !!game.dm, battle: !!game.battle, types: game.types, last: last || null,
-      view: game.view, cities: game.cities, campaign: game.campaign, factions: game.factions, roads: game.roads, terrain: game.terrain, bt: game.bt, pending: game.pending, cwinner: game.cwinner, undead: game.undead,
+      view: game.view, cities: game.cities, campaign: game.campaign, factions: game.factions, roads: game.roads, terrain: game.terrain, bt: game.bt, pending: game.pending, cwinner: game.cwinner, undead: game.undead, opts: game.opts,
       ...(game.water && game.water.length ? { water: game.water } : {}), units: units.filter(u => u.dying === null && u.hp > 0).map(u => ({ id: u.id, type: u.type, team: u.team, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, sta: u.sta, staMax: u.staMax, mana: u.mana, manaMax: u.manaMax,
         face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked,
         ...(u.stun ? { stun: u.stun } : {}), ...(u.stunActive ? { stunActive: true } : {}), ...(u.mark ? { mark: u.mark } : {}),
@@ -898,7 +898,7 @@
       points: { blue: 0, red: 0, ...(st.points && typeof st.points === 'object' ? st.points : {}) }, water: Array.isArray(st.water) ? st.water : [],
       view: ['campaign', 'lobby'].includes(st.view) ? st.view : 'battle', cities: Array.isArray(st.cities) ? st.cities : [], campaign: st.campaign || null,
       factions: Array.isArray(st.factions) ? st.factions : [], roads: Array.isArray(st.roads) ? st.roads : [], terrain: typeof st.terrain === 'string' ? st.terrain : null,
-      bt: st.bt || null, pending: st.pending || null, cwinner: st.cwinner || null, undead: st.undead || null };
+      bt: st.bt || null, pending: st.pending || null, cwinner: st.cwinner || null, undead: st.undead || null, opts: st.opts || {} };
     if (spectating()) { shadowSt = st; units = ((st.campaign && st.campaign.armies) || []).map(runtimeUnit); } else shadowSt = null;
     syncTeams(); ensureLayers();
     if (prevView !== game.view) { setTimeout(centerOnUnits, 0); selCity = null; placingArmy = null; }
@@ -1104,8 +1104,8 @@
   const connectedCities = (city, comp = roadComponents()) => { const me = comp.get(key(city.col, city.row));
     return (game.cities || []).filter(o => o !== city && o.owner && comp.get(key(o.col, o.row)) === me && hasRoadLink(o, comp) && hasRoadLink(city, comp)); };
   const hasRoadLink = (city, comp) => nbIn(city.col, city.row, CCOLS, CROWS).some(n => (game.roads || []).includes(key(...n)));   // a city counts once a road touches it
-  function incomeOf(fid) {                          // passive 1 + 1 per city + trade posts + road connections
-    const comp = roadComponents(); let pts = 1; const lines = [['Passive', 1]];
+  function incomeOf(fid, shown) {                   // passive 1 (2 for the secretly blessed realm) + 1 per city + trade posts + road connections
+    const f0 = faction(fid), comp = roadComponents(); let pts = 1 + (f0 && f0.blessed && !shown ? 1 : 0); const lines = [['Passive', 1]];
     for (const c of game.cities || []) if (c.owner === fid) {
       const tp = (c.buildings || []).includes('tradepost'), links = connectedCities(c, comp).length;
       const v = 1 + (tp ? 1 : 0) + links * (1 + (tp ? 1 : 0)); pts += v; lines.push([c.name, v]);
@@ -1137,6 +1137,7 @@
     const R = w.R, names = CITY_NAMES.slice(); for (let i = names.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [names[i], names[j]] = [names[j], names[i]]; }
     const spots = w.spots.slice(); for (let i = spots.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }
     const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai', alive: true, style: ['aggressive', 'builder', 'balanced'][(R() * 3) | 0] }));
+    if (game.opts && game.opts.blessed) factions[(Math.random() * factions.length) | 0].blessed = true;   // a secret: one realm gets 2 passive points a turn
     const cities = spots.map((h, i) => ({ id: 'city' + i, col: h[0], row: h[1], name: names[i], owner: i < factions.length ? factions[i].id : null, buildings: [], acted: false }));
     cities.push({ id: 'citywall', col: w.wallSpot[0], row: w.wallSpot[1], name: 'Frostgate', owner: null, buildings: [], acted: false, wall: true });
     const T = w.terrain, armies = [];
@@ -3126,6 +3127,7 @@
       <div class="lsub">Up to 5 factions. Pick who plays and each faction's colour. Friends join with the code (top right) and take the "Player" seats.</div>
       ${rows}
       <div class="lsub">${n} faction${n === 1 ? '' : 's'} · 10 city spots · each faction starts with 1 city and 1 army of 1 swordsman.</div>
+      <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 2 passive points a turn instead of 1</div>
       ${host ? `<button id="lstart" ${n < 2 ? 'disabled' : ''}>Start the campaign</button>` : '<div class="lsub">Waiting for the host to start…</div>'}`;
     if (lobbyEl.dataset.h !== html) { lobbyEl.dataset.h = html; lobbyEl.innerHTML = html; }
     lobbyEl.style.display = 'block';
@@ -3133,6 +3135,7 @@
   lobbyEl.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || game.view !== 'lobby') return;
     if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
+    if (b.id === 'lbless' && isHost()) { game.opts = { ...(game.opts || {}), blessed: !(game.opts && game.opts.blessed) }; commit({ type: 'setup' }); return; }
     if (b.dataset.kind && isHost()) { const [i, k] = b.dataset.kind.split(':'); game.factions[i].kind = k; commit({ type: 'setup' }); }
     if (b.dataset.color) { const [i, k] = b.dataset.color.split(':'), f = game.factions[i], p = PALETTE.find(x => x.key === k);
       if (!(isHost() || f.id === mySeat) || game.factions.some(o => o !== f && o.color === k)) return;
@@ -3152,7 +3155,7 @@
     const me = viewer();
     const html = game.factions.map(f => {
       const nc = game.cities.filter(c => c.owner === f.id).length, na = units.filter(u => u.troops && u.team === f.id && u.dying === null).length;
-      const cur = f.id === game.turn, inc = f.id === me ? incomeOf(f.id).pts : null;
+      const cur = f.id === game.turn, inc = f.id === me ? incomeOf(f.id, true).pts : null;
       return `<div class="frow ${cur ? 'cur' : ''} ${f.alive ? '' : 'dead'}" style="--fc:rgb(${f.col.map(v => Math.min(255, v + 60))})"><span class="fsw" style="background:rgb(${f.col})"></span>
         <b>${f.undead ? '🧟 ' : ''}${f.name}</b>${f.id === me ? ' (you)' : f.ai && !f.undead ? ' · AI' : ''}${f.alive ? '' : ' · ✝ defeated'} · ${f.undead ? '' : `🏰 ${nc} · `}⚑ ${na}${f.id === me ? ` · <b style="color:#e8c25a">${pts(f.id)} pts</b> <span class="k">(+${inc}/turn)</span>` : ''}</div>`;
     }).join('');
