@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.17</div>
+  <div class="t">Medieval Cities · v1.18</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1121,7 +1121,7 @@
         SIEGE = ['trebuchet', 'ballista'], HEROES = ['knight', 'ranger', 'mage', 'assassin', 'warrior'];
   const unitCost = t => HEROES.includes(t) ? 20 : MOUNT.includes(t) ? 18 : SIEGE.includes(t) ? 20 : 10;
   const BUILDINGS = {
-    tradepost: { name: 'Trade post', cost: 20, text: '+1 gold per turn for this city (doubled, tripled… by its road links like the city itself)' },
+    tradepost: { name: 'Trade post', cost: 20, text: '+1 gold per turn for this city (multiplied by its road links like the city itself)' },
     garrison:  { name: 'Garrison', cost: 10, text: '+1 swordsman defender, +1 defender of each unit type this city can recruit' },
     nightswatch: { name: "Night's Watch", cost: 40, wallOnly: true, text: 'Defenders of this city deal double damage to the undead' },
     walls:     { name: 'Walls', cost: 20, text: 'Stone walls with a 3-tile gate and stairs when this city is besieged' },
@@ -1152,11 +1152,11 @@
     return (game.cities || []).filter(o => o !== city && o.owner && [...roadsAt(o, comp)].some(v => mine.has(v))); };
   const hasRoadLink = (city, comp) => nbIn(city.col, city.row, CCOLS, CROWS).some(n => (game.roads || []).includes(key(...n)));   // a city counts once a road touches it
   const START_GOLD = 20;
-  function incomeOf(fid, shown) {                   // passive 1 (3 for the secretly blessed realm) + each city: (1, +1 with a trade post) x (1 + cities its roads lead to)
+  function incomeOf(fid, shown) {                   // passive 1 (3 for the secretly blessed realm) + each city: (1, +1 with a trade post) x (2 if road-linked, +1 per other realm it links to)
     const f0 = faction(fid), comp = roadComponents(); const passive = 1 + (f0 && f0.blessed && !shown ? 2 : 0); let pts = passive; const lines = [['Passive', passive]];
     for (const c of game.cities || []) if (c.owner === fid) {
-      const tp = (c.buildings || []).includes('tradepost'), links = connectedCities(c, comp).length;
-      const v = (1 + (tp ? 1 : 0)) * (1 + links); pts += v; lines.push([c.name, v, 1 + links]);
+      const tp = (c.buildings || []).includes('tradepost'), linked = connectedCities(c, comp), foreign = new Set(linked.map(o => o.owner).filter(o => o !== c.owner)).size;
+      const mult = linked.length ? 2 + foreign : 1, v = (1 + (tp ? 1 : 0)) * mult; pts += v; lines.push([c.name, v, mult, linked.length, foreign]);
     }
     return { pts, lines };
   }
@@ -1548,7 +1548,7 @@
       for (let i = 1; i < 6; i++) { const f = i / 6; ctx.moveTo(a.x + dx * f + px, a.y + dy * f + py); ctx.lineTo(a.x + dx * f - px, a.y + dy * f - py); } ctx.stroke(); }
   }
   // ===================== THE UNDEAD =====================
-  const WALL_ROW = 12, UNDEAD_CAP = 40, WAVE_EVERY = 20, FINAL_WAVE = 100, UNDEAD_COL = [150, 162, 178];
+  const WALL_ROW = 12, UNDEAD_CAP = 40, WAVE_EVERY = 50, FINAL_WAVE = 250, WAVE_SIZE = T => Math.round(Math.min(T, FINAL_WAVE) / WAVE_EVERY) * 20, UNDEAD_COL = [150, 162, 178];
   const isUndeadFid = fid => fid === 'undead';
   const undeadArmies = () => units.filter(u => u.troops && u.team === 'undead' && u.dying === null);
   const halfTroop = t => { const mx = Math.max(1, Math.ceil(typeMax(t) / 2)); return { type: t, hp: mx, maxHp: mx, mana: typeStat(t, 'manaMax'), manaMax: typeStat(t, 'manaMax') }; };
@@ -1569,10 +1569,10 @@
     if (game.undead) game.undead.pool.push(...out);
   }
   function flushPool() { if (!game.undead || !game.undead.pool.length) return; const p = game.undead.pool; game.undead.pool = []; addUndeadTroops(p.map(halfTroop), false); }
-  function undeadWave(T) {                           // every 20 turns: T new skeletons; 80: a mammoth; 100: 2 mammoths, the King and the Queen
+  function undeadWave(T) {                           // every 50 turns: 20 more skeletons each wave; 200: a mammoth; 250: 2 mammoths, the King and the Queen
     const ud = game.undead; if (ud.waves.includes(T)) return; ud.waves.push(T);
-    const mobs = Array.from({ length: Math.min(T, FINAL_WAVE) }, () => troop('skeleton'));
-    if (T >= 80) mobs.unshift(troop('mammoth'));
+    const mobs = Array.from({ length: WAVE_SIZE(T) }, () => troop('skeleton'));
+    if (T >= WAVE_EVERY * 4) mobs.unshift(troop('mammoth'));
     if (T >= FINAL_WAVE) { mobs.unshift(troop('mammoth'), troop('uking'), troop('uqueen')); ud.final = true; }
     addUndeadTroops(mobs, true);
     if (ud.final) for (const a of undeadArmies()) a.released = true;   // the risen dead wait up north for the last wave
@@ -1582,7 +1582,7 @@
     const ud = game.undead; if (!ud) return;
     flushPool();
     const living = game.factions.filter(f => f.alive && !isUndeadFid(f.id));
-    if (living.length === 1 && game.round < 80 && !ud.countdownEnd && !ud.final) { ud.countdownEnd = game.round + 40; toast('Only one realm stands · the undead come in 40 turns'); }
+    if (living.length === 1 && game.round < WAVE_EVERY * 4 && !ud.countdownEnd && !ud.final) { ud.countdownEnd = game.round + WAVE_EVERY * 2; toast(`Only one realm stands · the undead come in ${WAVE_EVERY * 2} turns`); }
     if (ud.countdownEnd && game.round >= ud.countdownEnd && !ud.final) undeadWave(FINAL_WAVE);
     else if (game.round % WAVE_EVERY === 0 && game.round <= FINAL_WAVE) undeadWave(game.round);
   }
@@ -3315,7 +3315,7 @@
       html += `<div class="t" style="margin-top:${a ? 10 : 0}px;color:${fo ? `rgb(${fo.col.map(v => Math.min(255, v + 70))})` : '#c8b98a'}">🏰 ${city.name}${fo ? ` · ${fo.name}` : ' · free land'}</div>`;
       if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} gold (right-click it).</div>`;
       else {
-        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn${inc && inc[2] > 1 ? ` (×${inc[2]}, road-linked to ${inc[2] - 1} cit${inc[2] > 2 ? 'ies' : 'y'})` : ''}</div><div class="k">🛡 Garrison (defends the city in every battle): ${(() => { const n = {}; for (const t of garrisonOf(city)) n[t] = (n[t] || 0) + 1; return Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', '); })()}</div>`; }
+        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn${inc && inc[2] > 1 ? ` (×${inc[2]} · road-linked to ${inc[3]} cit${inc[3] > 1 ? 'ies' : 'y'}${inc[4] ? `, ${inc[4]} other realm${inc[4] > 1 ? 's' : ''}` : ''})` : ''}</div><div class="k">🛡 Garrison (defends the city in every battle): ${(() => { const n = {}; for (const t of garrisonOf(city)) n[t] = (n[t] || 0) + 1; return Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', '); })()}</div>`; }
         if (sees) {
           html += `<div class="sub">Buildings ${city.buildings.length}/${CITY_SLOTS}${!own ? ' (seen through the road link)' : ''}</div><div class="blist">${city.buildings.map((b, i) => `<span class="bld">${BUILDINGS[b].name}${own ? btn(`data-unbuild="${i}"`, '✕', my && !city.acted && p >= DESTROY_COST, `Destroy (${DESTROY_COST} gold)`) : ''}</span>`).join('') || '<span class="k">none</span>'}</div>`;
         } else html += '<div class="k">Its buildings are unknown. Connect a road to it to see them.</div>';
