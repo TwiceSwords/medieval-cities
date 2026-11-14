@@ -78,7 +78,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.4</div>
+  <div class="t">Medieval Cities · v1.5</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1801,29 +1801,47 @@
   const neighbors = (c, r) => { const [q, rr] = toAx(c, r);
     return DIRS.map(([dq, dr]) => fromAx(q + dq, rr + dr)).filter(([a, b]) => a >= 0 && a < COLS && b >= 0 && b < ROWS); };
   // zone of control: no army can walk past another faction's army (also one that is in a battle)
-  const zoc = (h, u) => units.some(o => o.troops && o !== u && o.dying === null && hexDist(h, [o.col, o.row]) === 1);
+  const ghostFor = u => o => !!o && o !== u && u.team === viewer() && !faction(u.team)?.ai && hiddenFromMe(o);   // hidden from the one giving orders
+  const zoc = (h, u, plan) => units.some(o => o.troops && o !== u && o.dying === null && hexDist(h, [o.col, o.row]) === 1 && !(plan && plan(o)));
   function reach(u) {
+    const gh = ghostFor(u), uAt = t => { const o = unitAt(t); return o && !gh(o) ? o : null; };
     const dist = new Map([[key(u.col, u.row), 0]]), prev = new Map(), q = [[u.col, u.row]];
     while (q.length) {
       const h = q.shift(), d = dist.get(key(...h));
       if (d >= moveOf(u)) continue;
-      if (d > 0 && u.troops && game.view === 'campaign' && zoc(h, u)) continue;          // next to another army: the march stops here
+      if (d > 0 && u.troops && game.view === 'campaign' && zoc(h, u, gh)) continue;          // next to another army: the march stops here
       for (const n of neighbors(...h)) {
         const k = key(...n); if (dist.has(k)) continue;
-        const o = unitAt(n); if (o && o !== u) continue; if (blockedTile(n) || !canStep(h, n)) continue;
-        if (T(u).big && !footprint(n, u).every(t => onBoard(t) && !blockedTile(t) && (!unitAt(t) || unitAt(t) === u))) continue;
+        const o = uAt(n); if (o && o !== u) continue; if (blockedTile(n) || !canStep(h, n)) continue;
+        if (T(u).big && !footprint(n, u).every(t => onBoard(t) && !blockedTile(t) && (!uAt(t) || uAt(t) === u))) continue;
         if (u.troops && game.view === 'campaign') { if (impassable(n)) continue; const c = cityAt(n); if (c && c.owner !== u.team && !(u.team === 'undead' && !c.owner)) continue; }
         dist.set(k, d + 1); prev.set(k, h); q.push(n);
       }
     }
     if (u.troops && game.view === 'campaign' && moveOf(u) === 2) {   // both steps on road (or own city): one more step anywhere
-      const onRoad = t => hasRoad(t) || (cityAt(t) && cityAt(t).owner === u.team), free = t => !impassable(t) && !(unitAt(t) && unitAt(t) !== u) && !(cityAt(t) && cityAt(t).owner !== u.team);
-      for (const a1 of neighbors(u.col, u.row)) { if (!onRoad(a1) || !free(a1) || zoc(a1, u)) continue;
-        for (const a2 of neighbors(...a1)) { if (!onRoad(a2) || !free(a2) || (a2[0] === u.col && a2[1] === u.row) || zoc(a2, u)) continue;
+      const onRoad = t => hasRoad(t) || (cityAt(t) && cityAt(t).owner === u.team), free = t => !impassable(t) && !(uAt(t) && uAt(t) !== u) && !(cityAt(t) && cityAt(t).owner !== u.team);
+      for (const a1 of neighbors(u.col, u.row)) { if (!onRoad(a1) || !free(a1) || zoc(a1, u, gh)) continue;
+        for (const a2 of neighbors(...a1)) { if (!onRoad(a2) || !free(a2) || (a2[0] === u.col && a2[1] === u.row) || zoc(a2, u, gh)) continue;
           for (const a3 of neighbors(...a2)) { const k3 = key(...a3); if (dist.has(k3) || !free(a3)) continue;
             dist.set(k3, 3); prev.set(k3, a2); if (!prev.has(key(...a2)) || dist.get(key(...a2)) !== 2) { dist.set(key(...a2), 2); prev.set(key(...a2), a1); } if (!dist.has(key(...a1))) { dist.set(key(...a1), 1); prev.set(key(...a1), [u.col, u.row]); } } } }
     }
     return { dist, prev };
+  }
+  function fogTrim(u, path) {
+    if (!path || !path.length) return { path, cut: false };
+    const gh = ghostFor(u); if (!units.some(gh)) return { path, cut: false };
+    for (let i = 0; i < path.length; i++) { const t = path[i], o = unitAt(t), big = T(u).big && footprint(t, u).some(f => unitAt(f) && unitAt(f) !== u);
+      if ((o && o !== u) || big) return { path: path.slice(0, i), cut: true };
+      if (u.troops && game.view === 'campaign' && i < path.length - 1 && zoc(t, u)) return { path: path.slice(0, i + 1), cut: true }; }
+    return { path, cut: false };
+  }
+  // send a human order that walks first: if the fog was hiding something on the way, the unit stops early and the rest of the order is dropped
+  function fogOrder(u, a) {
+    if (!a.path || !a.path.length) return a;
+    const r = fogTrim(u, a.path); if (!r.cut) return a;
+    const m = center(...(r.path.length ? r.path[r.path.length - 1] : [u.col, u.row])); addFloat(m.x + OX, m.y + OY - 26, 'Halt! Something in the fog', '#e8d9a8', 14);
+    if (!r.path.length) { u.moved = true; return null; }
+    return { type: 'move', id: a.id, path: r.path, rng: a.rng };
   }
   function pathTo(b, h) { const p = []; let cur = h; while (b.prev.has(key(...cur))) { p.unshift(cur); cur = b.prev.get(key(...cur)); } return p; }
 
@@ -2785,7 +2803,7 @@
   function drawRanges(t) {
     previewLabels = [];
     if (busy()) return;
-    const hu = unitAt(hover), shown = new Set();
+    const hu0 = unitAt(hover), hu = hu0 && hiddenFromMe(hu0) ? null : hu0, shown = new Set();
     for (const u of [selUnit, hu]) {
       if (!u || shown.has(u) || u.dying !== null) continue; shown.add(u);
       const ty = T(u); if (!ty.ranged && !ty.charge) continue;
@@ -2794,7 +2812,7 @@
     }
     // aim preview for the selected unit
     const u = selUnit; if (!u || !hover || !canCommand(u) || u.attacked || u.watch) return;
-    const ty = T(u), here = [u.col, u.row], tgt = liveUnitAt(hover), ld = lineDir(here, hover);
+    const tgt0 = liveUnitAt(hover), ty = T(u), here = [u.col, u.row], tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, ld = lineDir(here, hover);
     if ((ty.ranged === 'line' || ty.ranged === 'pierce') && ld && ld.n <= ty.range && !u.moved && (tgt || !reach(u).dist.has(key(...hover)))) {
       if (ty.ranged === 'line') {
         const f = firstInLine(here, ld.d, ty.range); if (!f) return;
@@ -2880,7 +2898,7 @@
       }
       return;
     }
-    if (armed.skill === 'blink') { for (const k of areaAround(here, card.range(L))) { const hh = k.split(',').map(Number); if (!unitAt(hh) && !blockedTile(hh)) { tintHex(hh, 'rgba(160,200,255,0.18)'); } } if (hover && !unitAt(hover) && hexDist(here, hover) <= card.range(L)) outlineHex(hover, 'rgba(170,210,255,0.95)', 4); return; }
+    if (armed.skill === 'blink') { for (const k of areaAround(here, card.range(L))) { const hh = k.split(',').map(Number); if (!(unitAt(hh) && !hiddenFromMe(unitAt(hh))) && !blockedTile(hh)) { tintHex(hh, 'rgba(160,200,255,0.18)'); } } if (hover && !(unitAt(hover) && !hiddenFromMe(unitAt(hover))) && hexDist(here, hover) <= card.range(L)) outlineHex(hover, 'rgba(170,210,255,0.95)', 4); return; }
     if (armed.skill === 'dash') { const zone = areaAround(here, card.range(L)); zone.delete(key(...here)); drawZone(zone, 'rgba(255,210,110,0.08)', 'rgba(255,215,120,0.85)', false);
       if (hover && zone.has(key(...hover))) { outlineHex(hover, 'rgba(255,215,120,0.95)', 4); const o = liveUnitAt(hover); if (o && o.team !== u.team && !hiddenFromMe(o)) label(o, `-${baseDmg(u)}`); } return; }
     if (armed.skill === 'pstrike') { for (const o of units) if (o.team !== u.team && o.dying === null && !hiddenFromMe(o) && warriorAim(u, here, [o.col, o.row]) !== null) { outlineHex([o.col, o.row], 'rgba(255,70,50,0.95)', 4); label(o, `-${baseDmg(u) * (antiCavOf(u) && isMounted(o) ? 2 : 1)}`); } return; }
@@ -3364,7 +3382,7 @@
         ctx.beginPath(); ctx.moveTo(x - 22 + dx, yy); ctx.quadraticCurveTo(x - 11 + dx, yy - 5, x + dx, yy); ctx.quadraticCurveTo(x + 11 + dx, yy + 5, x + 22 + dx, yy); ctx.stroke(); } }
   }
   function campaignOrder(u, h) {
-    const tgt = unitAt(h), city = cityAt(h), here = [u.col, u.row];
+    const tgt0 = unitAt(h), tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, city = cityAt(h), here = [u.col, u.row];
     const hint = txt => { const m = center(...h); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
     if (impassable(h)) { hint('Impassable'); return; }
     const foeArmy = tgt && tgt.troops && tgt.team !== u.team ? tgt : null, foeCity = city && city.owner && city.owner !== u.team ? city : null, freeSpot = city && !city.owner ? city : null;
@@ -3372,9 +3390,10 @@
       if (hexDist(here, h) === 1) { then(); return; }
       if (u.moved) { hint('Already moved'); return; }
       const b = reach(u); let best = null;
-      for (const [k, d] of b.dist) { if (d === 0) continue; const t = k.split(',').map(Number); if (unitAt(t) || hexDist(t, h) !== 1) continue; if (!best || d < best.d) best = { t, d }; }
+      for (const [k, d] of b.dist) { if (d === 0) continue; const t = k.split(',').map(Number); if ((unitAt(t) && !hiddenFromMe(unitAt(t))) || hexDist(t, h) !== 1) continue; if (!best || d < best.d) best = { t, d }; }
       if (!best) { hint('Too far'); return; }
-      const mv = { type: 'move', id: u.id, path: pathTo(b, best.t) }; mv.rng = 1; play(mv, () => { commit(mv); then(); });
+      const mv0 = { type: 'move', id: u.id, path: pathTo(b, best.t), rng: 1 }, mv = fogOrder(u, mv0); if (!mv) { commit({ type: 'ai' }); return; }
+      play(mv, () => { commit(mv); if (mv === mv0) then(); });
     };
     if (u.inBattle) { hint('This army is in a battle'); return; }
     if (foeArmy && foeArmy.inBattle) { hint('That army is in a battle · use Join'); return; }
@@ -3386,7 +3405,7 @@
     if (tgt) return;
     if (u.moved) { hint('Already moved'); return; }
     const b = reach(u); if (!b.dist.has(key(...h))) { hint('Too far'); return; }
-    const mv = { type: 'move', id: u.id, path: pathTo(b, h) }; mv.rng = 1; play(mv, () => commit(mv));
+    const mv = fogOrder(u, { type: 'move', id: u.id, path: pathTo(b, h), rng: 1 }); if (!mv) { commit({ type: 'ai' }); return; } play(mv, () => commit(mv));
   }
   // drawing: roads, free land markers, cities in their owner's colour, spawn highlights
   const cityMeshCache = {};
@@ -3470,7 +3489,7 @@
     if (d === 1) { go({ type: 'hitwall', id: u.id, col: h[0], row: h[1] }); return true; }
     if (u.moved) { hint('Too far', h); return true; }
     const b = reach(u); let best = null;
-    for (const [k, dd] of b.dist) { if (dd === 0) continue; const t = k.split(',').map(Number); if (unitAt(t) || hexDist(t, h) !== 1) continue; if (!best || dd < best.d) best = { t, d: dd }; }
+    for (const [k, dd] of b.dist) { if (dd === 0) continue; const t = k.split(',').map(Number); if ((unitAt(t) && !hiddenFromMe(unitAt(t))) || hexDist(t, h) !== 1) continue; if (!best || dd < best.d) best = { t, d: dd }; }
     if (!best) { hint('Out of reach', h); return true; }
     go({ type: 'hitwall', id: u.id, col: h[0], row: h[1], path: pathTo(b, best.t) }); return true;
   }
@@ -3848,7 +3867,7 @@
     const u = selUnit, ty = T(u), tgt0 = units.filter(o => o.col === h[0] && o.row === h[1] && o.dying === null && o.hp > 0).sort((x, y) => (x === selUnit) - (y === selUnit) || (x.team === selUnit.team) - (y.team === selUnit.team))[0], tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, here = [u.col, u.row], dist = hexDist(here, h);
     if (game.view === 'battle' && game.bt && game.bt.phase !== 'fight') { if (u.placing && u.team === viewer()) requestOp({ op: 'place', id: u.id, col: h[0], row: h[1] }); return; }
     const hint = (txt, hh) => { const m = center(...hh); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
-    const go = a => { a.rng = Math.floor(Math.random() * 4e9); play(a, () => { commit(a); if (a.skill === 'rain' && armed && armed.skill === 'rain' && (u.mana || 0) < 1) { armed = null; refreshUI(); } }); };
+    const go = a0 => { const a = fogOrder(u, a0); if (!a) { commit({ type: 'ai' }); refreshUI(); return; } a.rng = Math.floor(Math.random() * 4e9); play(a, () => { commit(a); if (a.skill === 'rain' && armed && armed.skill === 'rain' && (u.mana || 0) < 1) { armed = null; refreshUI(); } }); };
     if (!canCommand(u)) { hint(winner() ? 'Game over' : isStunned(u) ? 'Stunned' : u.team !== game.turn || !myTurn() ? 'Not your turn' : 'Already acted', here); return; }
     if (game.view === 'campaign') { if (u.troops && !game.pending && !(game.bt && !game.bt.saved)) campaignOrder(u, h); return; }
     const lock = tauntLock(u, here), lockedOut = (from, target) => { const p = tauntLock(u, from); return p && p !== target; };
@@ -3938,14 +3957,14 @@
     if (tgt === u) return;
     const moveTo = () => {
       if (u.moved) { hint(ty.noMoveShoot && u.attacked ? 'Already shot' : 'Already moved', here); return; }
-      if (unitAt(h)) return;
+      if (unitAt(h) && !hiddenFromMe(unitAt(h))) return;
       const b = reach(u); if (!b.dist.has(key(...h))) { hint('Too far', h); return; }
       go({ type: 'move', id: u.id, path: pathTo(b, h) });
     };
     // approach: best reachable tile from which the target is within r
     const approach = (r, target) => {
       const b = reach(u); let best = null;
-      for (const [k, d] of b.dist) { if (d === 0) continue; const tile = k.split(',').map(Number); if (unitAt(tile)) continue;
+      for (const [k, d] of b.dist) { if (d === 0) continue; const tile = k.split(',').map(Number); if (unitAt(tile) && !hiddenFromMe(unitAt(tile))) continue;
         if (target && lockedOut(tile, target)) continue;           // a taunted unit may only walk out and then attack someone else
         if (hexDist(tile, h) <= r && (!best || d < best.d)) best = { tile, d }; }
       return best ? pathTo(b, best.tile) : null;
@@ -3977,7 +3996,7 @@
         if (dist <= ty.range) { go({ type: 'shoot', id: u.id, target: tgt.id }); return; }
         if (u.moved) { hint('Out of range', h); return; }
         const b = reach(u); let best = null;
-        for (const [k, d] of b.dist) { if (d === 0) continue; const tile = k.split(',').map(Number); if (unitAt(tile)) continue; if (hexDist(tile, h) <= ty.range && (!best || d < best.d)) best = { tile, d }; }
+        for (const [k, d] of b.dist) { if (d === 0) continue; const tile = k.split(',').map(Number); if (unitAt(tile) && !hiddenFromMe(unitAt(tile))) continue; if (hexDist(tile, h) <= ty.range && (!best || d < best.d)) best = { tile, d }; }
         if (!best) { hint('Out of reach', h); return; }
         go({ type: 'shoot', id: u.id, path: pathTo(b, best.tile), target: tgt.id }); return;
       }
@@ -3994,7 +4013,7 @@
       if (d === null || lockedOut(here, tgt)) {
         if (u.moved) { hint(lockedOut(here, tgt) ? 'Taunted: must target the Paladin' : 'Already moved', here); return; }
         const b = reach(u); let best = null;
-        for (const [k, dd] of b.dist) { if (dd === 0) continue; const tile = k.split(',').map(Number); if (unitAt(tile)) continue;
+        for (const [k, dd] of b.dist) { if (dd === 0) continue; const tile = k.split(',').map(Number); if (unitAt(tile) && !hiddenFromMe(unitAt(tile))) continue;
           if (lockedOut(tile, tgt)) continue; if (warriorAim(u, tile, h) !== null && (!best || dd < best.d)) best = { tile, d: dd }; }
         if (!best) { hint(lock ? 'Taunted: must target the Paladin' : 'Out of reach', h); return; }
         path = pathTo(b, best.tile); from = best.tile; d = warriorAim(u, from, h);
