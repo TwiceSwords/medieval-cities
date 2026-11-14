@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.13</div>
+  <div class="t">Medieval Cities · v1.14</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -3310,7 +3310,7 @@
       html += `<div class="t" style="margin-top:${a ? 10 : 0}px;color:${fo ? `rgb(${fo.col.map(v => Math.min(255, v + 70))})` : '#c8b98a'}">🏰 ${city.name}${fo ? ` · ${fo.name}` : ' · free land'}</div>`;
       if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} gold (right-click it).</div>`;
       else {
-        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn${inc && inc[2] > 1 ? ` (×${inc[2]}, road-linked to ${inc[2] - 1} cit${inc[2] > 2 ? 'ies' : 'y'})` : ''} · defended by ${garrisonOf(city).map(t => UNIT_TYPES[t].name).join(', ')}</div>`; }
+        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn${inc && inc[2] > 1 ? ` (×${inc[2]}, road-linked to ${inc[2] - 1} cit${inc[2] > 2 ? 'ies' : 'y'})` : ''}</div><div class="k">🛡 Garrison (defends the city in every battle): ${(() => { const n = {}; for (const t of garrisonOf(city)) n[t] = (n[t] || 0) + 1; return Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', '); })()}</div>`; }
         if (sees) {
           html += `<div class="sub">Buildings ${city.buildings.length}/${CITY_SLOTS}${!own ? ' (seen through the road link)' : ''}</div><div class="blist">${city.buildings.map((b, i) => `<span class="bld">${BUILDINGS[b].name}${own ? btn(`data-unbuild="${i}"`, '✕', my && !city.acted && p >= DESTROY_COST, `Destroy (${DESTROY_COST} gold)`) : ''}</span>`).join('') || '<span class="k">none</span>'}</div>`;
         } else html += '<div class="k">Its buildings are unknown. Connect a road to it to see them.</div>';
