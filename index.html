@@ -23,6 +23,11 @@
   #savebar{position:fixed;left:12px;bottom:14px;display:flex;gap:6px;align-items:center;background:rgba(10,12,8,.8);padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.07);font-size:12px;user-select:none}
   #breset{background:linear-gradient(90deg,#8a3a2a var(--p,0%),#3b3524 var(--p,0%))}
   #savebar .k{color:#8f9682;margin-left:4px}
+  .coin{display:inline-block;width:13px;height:13px;border-radius:50%;vertical-align:-2px;margin-right:4px;background:radial-gradient(circle at 35% 30%,#fff6c4 0,#f5cf5a 32%,#c8921f 72%,#8a5f10 100%);box-shadow:inset 0 0 0 1px #e6b23c,0 0 6px #ffcf5aaa;animation:coinglow 2.4s ease-in-out infinite}
+  @keyframes coinglow{0%,100%{box-shadow:inset 0 0 0 1px #e6b23c,0 0 4px #ffcf5a88}50%{box-shadow:inset 0 0 0 1px #e6b23c,0 0 9px #ffd86acc}}
+  #goldhud{position:fixed;left:12px;top:150px;display:none;align-items:center;gap:8px;background:linear-gradient(#2a2412ee,#17140cee);border:1px solid #8a6d2c;border-radius:20px;padding:5px 14px 5px 7px;color:#f6dc8a;font:600 17px Georgia,serif;box-shadow:0 2px 10px #0008;pointer-events:none}
+  #goldhud #goldinc{font:500 13px system-ui,sans-serif;color:#cdbb86}
+  #goldhud .coin{width:24px;height:24px;margin:0;vertical-align:middle}
   #toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:rgba(20,22,14,.92);color:#eadfb4;padding:8px 16px;border-radius:8px;border:1px solid #6b5d36;font-size:14px;opacity:0;pointer-events:none}
   #toast.show{animation:toast 2.6s ease-out}@keyframes toast{0%{opacity:0;transform:translate(-50%,8px)}10%{opacity:1;transform:translate(-50%,0)}75%{opacity:1}100%{opacity:0}}
   #dm{position:fixed;left:12px;top:190px;background:rgba(10,12,8,.85);color:#c9cdbd;padding:10px 12px;border-radius:8px;font-size:13px;border:1px solid #6b5d36;user-select:none;display:none;width:290px;max-height:calc(100vh - 290px);overflow:auto}
@@ -78,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.6</div>
+  <div class="t">Medieval Cities · v1.7</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -89,6 +94,7 @@
 <div id="dm"></div><div id="camp"></div><div id="facs"></div><div id="lobby"></div><div id="modal"></div>
 <div id="savebar"><button id="bdm">🧙 Dungeon Master: Off</button><button id="bsave" title="Ctrl+S">💾 Save file</button><button id="bload">📂 Load file</button><input type="file" id="fload" accept=".json,application/json" hidden><button id="breset" title="Hold for 2 seconds">⟲ Reset (hold)</button><span class="k">autosaves in this browser</span></div>
 <div id="toast"></div>
+<div id="goldhud"><span class="coin"></span><b id="goldv">0</b><span id="goldinc"></span></div>
 <div id="cards"></div>
 <div id="teams"><div class="team" id="tb"></div><div class="team" id="tr"></div></div>
 <div id="flash"></div>
@@ -1107,14 +1113,14 @@
         SIEGE = ['trebuchet', 'ballista'], HEROES = ['knight', 'ranger', 'mage', 'assassin', 'warrior'];
   const unitCost = t => HEROES.includes(t) ? 20 : MOUNT.includes(t) ? 18 : SIEGE.includes(t) ? 20 : 10;
   const BUILDINGS = {
-    tradepost: { name: 'Trade post', cost: 20, text: '+1 point per turn (+1 more per city it is road-connected to)' },
+    tradepost: { name: 'Trade post', cost: 20, text: '+1 gold per turn (+1 more per city it is road-connected to)' },
     garrison:  { name: 'Garrison', cost: 10, text: '+1 swordsman defender, +1 defender of each unit type this city can recruit' },
     nightswatch: { name: "Night's Watch", cost: 40, wallOnly: true, text: 'Defenders of this city deal double damage to the undead' },
     walls:     { name: 'Walls', cost: 20, text: 'Stone walls with a 3-tile gate and stairs when this city is besieged' },
     tower:     { name: 'Tower', cost: 20, text: 'A defence tower (24 HP, range 5, 3 damage) placed like a unit when besieged · up to 2' },
     heroes:    { name: "Heroes' hall", cost: 20, text: 'Recruit any hero (base stats, no cards)', units: HEROES },
   };
-  for (const t of [...FOOT, ...ARCH, ...MOUNT, ...SIEGE]) BUILDINGS[t] = { name: `${UNIT_TYPES[t].name} ${MOUNT.includes(t) ? 'stables' : ARCH.includes(t) ? 'range' : SIEGE.includes(t) ? 'workshop' : 'barracks'}`, cost: 10, text: `Recruit ${UNIT_TYPES[t].name}s here (${unitCost(t)} pts each)`, units: [t], cost: 20 };
+  for (const t of [...FOOT, ...ARCH, ...MOUNT, ...SIEGE]) BUILDINGS[t] = { name: `${UNIT_TYPES[t].name} ${MOUNT.includes(t) ? 'stables' : ARCH.includes(t) ? 'range' : SIEGE.includes(t) ? 'workshop' : 'barracks'}`, cost: 10, text: `Recruit ${UNIT_TYPES[t].name}s here (${unitCost(t)} gold each)`, units: [t], cost: 20 };
   const CITY_SLOTS = 6, FOUND_COST = 20, ROAD_COST = 5, DESTROY_COST = 10, MAX_TROOPS = 20, MAX_DEFENDERS = 10;
   const recruitable = city => [...new Set((city.buildings || []).flatMap(b => (BUILDINGS[b] && BUILDINGS[b].units) || []))];
   const cityValue = city => FOUND_COST + (city.buildings || []).reduce((s, b) => s + (BUILDINGS[b] ? BUILDINGS[b].cost : 0), 0);
@@ -1188,7 +1194,7 @@
     const f = faction(fid); if (!f || f.undead) return;
     const inc = incomeOf(fid); game.points = { ...game.points, [fid]: (game.points[fid] || 0) + inc.pts };
     for (const c of game.cities) if (c.owner === fid) c.acted = false;
-    if (!quiet && fid === viewer()) toast(`${f.name}: +${inc.pts} points`);
+    if (!quiet && fid === viewer()) toast(`${f.name}: +${inc.pts} gold`);
   }
   function campaignEndTurn() { if (game.bt && game.bt.saved && game.turn === game.bt.P) { resumeBattle(); return; } advanceCampaignTurn(); }
   function advanceCampaignTurn() {                  // next living faction; a full lap = a new round
@@ -1626,7 +1632,7 @@
     if (!city) return;
     if (keep) { city.owner = p.by; city.acted = true; toast(`${faction(p.by).name} captured ${city.name}`); }
     else { const gain = Math.floor(cityValue(city) / 2); game.points = { ...game.points, [p.by]: (game.points[p.by] || 0) + gain };
-      toast(`${city.name} was razed · +${gain} points`); city.owner = null; city.buildings = []; }
+      toast(`${city.name} was razed · +${gain} gold`); city.owner = null; city.buildings = []; }
     checkDefeats(); commit({ type: 'capture' });
   }
   function syncTeams() {
@@ -3209,7 +3215,7 @@
       <div class="lsub">Up to 5 factions. Pick who plays and each faction's colour. Friends join with the code (top right) and take the "Player" seats.</div>
       ${rows}
       <div class="lsub">${n} faction${n === 1 ? '' : 's'} · 10 city spots · each faction starts with 1 city and 1 army of 1 swordsman.</div>
-      <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 2 passive points a turn instead of 1</div>
+      <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 2 passive gold a turn instead of 1</div>
       ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
         return `<div class="lsub">${host ? `<button id="${id}" class="${on ? 'on' : ''}">${lab}: ${on ? 'On' : 'Off'}</button>` : `${lab}: ${on ? 'On' : 'Off'}`} · ${txt} · the AI plays by the same fog</div>`; }).join('')}
       ${host ? `<button id="lstart" ${n < 2 ? 'disabled' : ''}>Start the campaign</button>` : '<div class="lsub">Waiting for the host to start…</div>'}`;
@@ -3242,7 +3248,7 @@
       const nc = game.cities.filter(c => c.owner === f.id).length, na = units.filter(u => u.troops && u.team === f.id && u.dying === null).length;
       const cur = f.id === game.turn, inc = f.id === me ? incomeOf(f.id, true).pts : null;
       return `<div class="frow ${cur ? 'cur' : ''} ${f.alive ? '' : 'dead'}" style="--fc:rgb(${f.col.map(v => Math.min(255, v + 60))})"><span class="fsw" style="background:rgb(${f.col})"></span>
-        <b>${f.undead ? '🧟 ' : ''}${f.name}</b>${f.id === me ? ' (you)' : f.ai && !f.undead ? ' · AI' : ''}${f.alive ? '' : ' · ✝ defeated'} · ${f.undead ? '' : `🏰 ${nc} · `}⚑ ${na}${f.id === me ? ` · <b style="color:#e8c25a">${pts(f.id)} pts</b> <span class="k">(+${inc}/turn)</span>` : ''}</div>`;
+        <b>${f.undead ? '🧟 ' : ''}${f.name}</b>${f.id === me ? ' (you)' : f.ai && !f.undead ? ' · AI' : ''}${f.alive ? '' : ' · ✝ defeated'} · ${f.undead ? '' : `🏰 ${nc} · `}⚑ ${na}${f.id === me ? ` · <i class="coin"></i><b style="color:#f2cf62">${pts(f.id)} gold</b> <span class="k">(+${inc}/turn)</span>` : ''}</div>`;
     }).join('');
     if (facsEl.dataset.h !== html) { facsEl.dataset.h = html; facsEl.innerHTML = html; }
     facsEl.style.display = 'block';
@@ -3266,7 +3272,7 @@
         html += `<div>${Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', ') || 'no troops'} <span class="k">(${a.troops.length}/${MAX_TROOPS})</span></div>`;
         html += `<div class="k">${a.moved ? 'Has moved this turn' : 'Can move 2 (3 if both steps are on road)'}</div>`;
         const here = [a.col, a.row], road = hasRoad(here);
-        html += `<div class="row">${!road && !cityAt(here) ? btn('data-ca="road"', `Build road here · ${ROAD_COST} pts`, my && p >= ROAD_COST) : ''}${road ? btn('data-ca="unroad"', 'Destroy road here', my) : ''}</div>`;
+        html += `<div class="row">${!road && !cityAt(here) ? btn('data-ca="road"', `Build road here · ${ROAD_COST} gold`, my && p >= ROAD_COST) : ''}${road ? btn('data-ca="unroad"', 'Destroy road here', my) : ''}</div>`;
         const homes = game.cities.filter(c => c.owner === me && hexDist(here, [c.col, c.row]) <= 1);
         for (const c of homes) { const types = recruitable(c);
           html += `<div class="sub">Recruit from ${c.name}</div>` + (types.length ? `<div class="grid">${types.map(t => btn(`data-recruit="${c.id}:${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t)}`, my && p >= unitCost(t) && a.troops.length < MAX_TROOPS)).join('')}</div>` : '<div class="k">No unit buildings in this city yet.</div>'); }
@@ -3275,11 +3281,11 @@
     if (city) {
       const own = city.owner === me, fo = faction(city.owner), sees = seesCity(city, me);
       html += `<div class="t" style="margin-top:${a ? 10 : 0}px;color:${fo ? `rgb(${fo.col.map(v => Math.min(255, v + 70))})` : '#c8b98a'}">🏰 ${city.name}${fo ? ` · ${fo.name}` : ' · free land'}</div>`;
-      if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} pts (right-click it).</div>`;
+      if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} gold (right-click it).</div>`;
       else {
-        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} pts/turn · defended by ${garrisonOf(city).map(t => UNIT_TYPES[t].name).join(', ')}</div>`; }
+        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn · defended by ${garrisonOf(city).map(t => UNIT_TYPES[t].name).join(', ')}</div>`; }
         if (sees) {
-          html += `<div class="sub">Buildings ${city.buildings.length}/${CITY_SLOTS}${!own ? ' (seen through the road link)' : ''}</div><div class="blist">${city.buildings.map((b, i) => `<span class="bld">${BUILDINGS[b].name}${own ? btn(`data-unbuild="${i}"`, '✕', my && !city.acted && p >= DESTROY_COST, `Destroy (${DESTROY_COST} pts)`) : ''}</span>`).join('') || '<span class="k">none</span>'}</div>`;
+          html += `<div class="sub">Buildings ${city.buildings.length}/${CITY_SLOTS}${!own ? ' (seen through the road link)' : ''}</div><div class="blist">${city.buildings.map((b, i) => `<span class="bld">${BUILDINGS[b].name}${own ? btn(`data-unbuild="${i}"`, '✕', my && !city.acted && p >= DESTROY_COST, `Destroy (${DESTROY_COST} gold)`) : ''}</span>`).join('') || '<span class="k">none</span>'}</div>`;
         } else html += '<div class="k">Its buildings are unknown. Connect a road to it to see them.</div>';
         if (own) {
           html += city.acted ? '<div class="k">Already built or destroyed something here this turn.</div>' : '';
@@ -3314,7 +3320,7 @@
   function placeNewArmy(h) {                                          // left-click on a highlighted tile
     const pa = placingArmy, city = pa && game.cities.find(c => c.id === pa.city), me = viewer();
     if (!city || !h || !armySpawnTiles(city).some(n => n[0] === h[0] && n[1] === h[1])) { toast('Pick a highlighted tile next to the city'); return; }
-    if (pts(me) < unitCost(pa.type)) { toast('Not enough points'); placingArmy = null; refreshUI(); return; }
+    if (pts(me) < unitCost(pa.type)) { toast('Not enough gold'); placingArmy = null; refreshUI(); return; }
     const a = runtimeUnit({ id: `army-${me}-${Date.now().toString(36)}`, type: 'army', team: me, col: h[0], row: h[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [troop(pa.type)] });
     units.push(a); game.points = { ...game.points, [me]: pts(me) - unitCost(pa.type) }; placingArmy = null; selUnit = a; sel = h; selCity = null;
     commit({ type: 'recruit' }); toast('New army raised · it can move next turn');
@@ -3336,8 +3342,8 @@
     if (p && p.type === 'capture' && p.by === viewer() && (mode === 'local' || mySeat === p.by) && !faction(p.by).ai) {
       const c = game.cities.find(x => x.id === p.city);
       if (c && modalEl.dataset.p !== c.id) { modalEl.dataset.p = c.id;
-        showModal(`<div class="mbox"><div class="t">🏰 ${c.name} has fallen</div><div>Keep it with everything inside, or raze it to the ground for ${Math.floor(cityValue(c) / 2)} points (it becomes free land)?</div>
-          <div class="row"><button data-m="keep">Capture it</button><button data-m="raze">Raze it · +${Math.floor(cityValue(c) / 2)} pts</button></div></div>`); }
+        showModal(`<div class="mbox"><div class="t">🏰 ${c.name} has fallen</div><div>Keep it with everything inside, or raze it to the ground for ${Math.floor(cityValue(c) / 2)} gold (it becomes free land)?</div>
+          <div class="row"><button data-m="keep">Capture it</button><button data-m="raze">Raze it · +${Math.floor(cityValue(c) / 2)} gold</button></div></div>`); }
     } else if (modalEl.dataset.p && (!p || p.type !== 'capture')) { modalEl.dataset.p = ''; if (!modalEl.querySelector('[data-m=found]')) hideModal(); }
   }
   // right-click orders for an army on the campaign map
@@ -3407,9 +3413,9 @@
     if (foeArmy && foeArmy.inBattle) { hint('That army is in a battle · use Join'); return; }
     if (foeArmy || foeCity) { if (u.attacked) { hint('Already fought this turn'); return; } goAdj(() => engage(u, foeArmy || foeCity)); return; }
     if (freeSpot) { goAdj(() => { const me = viewer();
-      if (pts(me) < FOUND_COST) { toast(`Founding a city costs ${FOUND_COST} points (you have ${pts(me)})`); return; }
-      showModal(`<div class="mbox"><div class="t">🏰 Found ${freeSpot.name}?</div><div>Turn this free land into your city for ${FOUND_COST} points. It will give +1 point every turn.</div>
-        <div class="row"><button data-m="found" data-city="${freeSpot.id}">Found it · ${FOUND_COST} pts</button><button data-m="no">Not now</button></div></div>`); }); return; }
+      if (pts(me) < FOUND_COST) { toast(`Founding a city costs ${FOUND_COST} gold (you have ${pts(me)})`); return; }
+      showModal(`<div class="mbox"><div class="t">🏰 Found ${freeSpot.name}?</div><div>Turn this free land into your city for ${FOUND_COST} gold. It will give +1 gold every turn.</div>
+        <div class="row"><button data-m="found" data-city="${freeSpot.id}">Found it · ${FOUND_COST} gold</button><button data-m="no">Not now</button></div></div>`); }); return; }
     if (tgt) return;
     if (u.moved) { hint('Already moved'); return; }
     const b = reach(u); if (!b.dist.has(key(...h))) { hint('Too far'); return; }
@@ -3554,8 +3560,8 @@
     const next = c.kind === 'skill' && l < 5 ? `<div class="nx">Next (Lv ${l + 1}): ${c.text(l + 1)}${c.cost(l + 1) !== c.cost(l) ? ` · ${c.cost(l + 1)} mana` : ''}</div>` : '';
     return `<div class="card ${c.kind}${o.armed ? ' armed' : ''}"${o.slot !== undefined ? ` data-slot="${o.slot}"` : ''}>
       <div class="ct">${c.name}${stars}</div>${cost}<div class="cd">${c.text(l)}</div>${o.showNext ? next : ''}
-      ${o.buy ? `<button data-buy="${id}" ${o.can ? '' : 'disabled'}>Buy · ${CARD_PRICE} pt</button>` : ''}
-      ${o.upgrade ? `<button data-up="${o.slot}" ${o.can ? '' : 'disabled'}>Upgrade · ${UPGRADE_PRICE} pt</button>` : ''}</div>`;
+      ${o.buy ? `<button data-buy="${id}" ${o.can ? '' : 'disabled'}>Buy · ${CARD_PRICE} gold</button>` : ''}
+      ${o.upgrade ? `<button data-up="${o.slot}" ${o.can ? '' : 'disabled'}>Upgrade · ${UPGRADE_PRICE} gold</button>` : ''}</div>`;
   }
   function slotHtml(u, slot) {
     const mine = canManage(u), pts = game.points[u.team] || 0;
@@ -3570,10 +3576,10 @@
     const hc = heroCards(u), mine = canManage(u), pts = game.points[u.team] || 0;
     const owned = new Set([u.cards.passive, ...u.cards.skills.filter(Boolean).map(k => k.id)]);
     const hpCap = T(u).hpCap || 40, manaCost = 1 + (u.manaBought || 0);
-    const statBtns = mine ? ` <button data-stat="hp" ${pts >= 1 && u.maxHp < hpCap ? '' : 'disabled'}>+${HP_PER_POINT} HP · 1 pt</button>` +
-      ` <button data-stat="mana" ${pts >= manaCost && u.manaMax < MANA_CAP ? '' : 'disabled'}>+1 Max mana · ${manaCost} pt</button>` +
-      (T(u).dmgCap ? ` <button data-stat="dmg" ${pts >= DMG_PRICE && u.dmg < T(u).dmgCap ? '' : 'disabled'}>+1 Damage · ${DMG_PRICE} pt</button>` : '') : '';
-    let html = `<div class="chd"><b style="color:rgb(${TEAM[u.team].map(v => v + 80)})">${teamName(u.team)} ${u.name}</b> · HP ${u.hp}/${u.maxHp} <span class="cap">(max ${hpCap})</span> ·${T(u).dmgCap ? ` Damage ${u.dmg} <span class="cap">(max ${T(u).dmgCap})</span> ·` : ''} Mana ${u.mana}/${u.manaMax} <span class="cap">(max ${MANA_CAP})</span> · Points: <b>${pts}</b>${mine ? '' : ' · view only'}${statBtns}</div>`;
+    const statBtns = mine ? ` <button data-stat="hp" ${pts >= 1 && u.maxHp < hpCap ? '' : 'disabled'}>+${HP_PER_POINT} HP · 1 gold</button>` +
+      ` <button data-stat="mana" ${pts >= manaCost && u.manaMax < MANA_CAP ? '' : 'disabled'}>+1 Max mana · ${manaCost} gold</button>` +
+      (T(u).dmgCap ? ` <button data-stat="dmg" ${pts >= DMG_PRICE && u.dmg < T(u).dmgCap ? '' : 'disabled'}>+1 Damage · ${DMG_PRICE} gold</button>` : '') : '';
+    let html = `<div class="chd"><b style="color:rgb(${TEAM[u.team].map(v => v + 80)})">${teamName(u.team)} ${u.name}</b> · HP ${u.hp}/${u.maxHp} <span class="cap">(max ${hpCap})</span> ·${T(u).dmgCap ? ` Damage ${u.dmg} <span class="cap">(max ${T(u).dmgCap})</span> ·` : ''} Mana ${u.mana}/${u.manaMax} <span class="cap">(max ${MANA_CAP})</span> · <i class="coin"></i> Gold: <b>${pts}</b>${mine ? '' : ' · view only'}${statBtns}</div>`;
     if (shopFor && shopFor.id === u.id) {
       const list = shopFor.slot === 'p' ? hc.passive : hc.skill.filter(id => !owned.has(id));
       html += `<div class="chd2">Choose a ${shopFor.slot === 'p' ? 'passive' : 'skill'} card</div><div class="crow">${list.map(id => cardHtml(id, 1, { buy: true, can: mine && pts >= CARD_PRICE })).join('')}</div><button data-act="closeshop">Cancel</button>`;
@@ -3627,7 +3633,14 @@
     return { self: 'right-click anywhere', friend: 'right-click a friendly unit', enemy: 'right-click an enemy', line: 'right-click along a straight line',
       tile: cd === CARDS.rain ? 'right-click tiles to mark them (1 mana each)' : 'right-click a tile', empty: 'right-click an empty tile', unit: 'right-click any unit (friend or foe)', any: 'right-click a unit next to her', cone: 'aim with the mouse, right-click to set the cone' }[cd.target] || 'right-click a target';
   }
+  function goldHud() {
+    const el = document.getElementById('goldhud'), me = viewer(), f = me && faction(me);
+    if (!f || f.undead || !(game.view === 'campaign' || game.view === 'battle') || !(game.factions || []).length) { el.style.display = 'none'; return; }
+    el.style.display = 'flex'; document.getElementById('goldv').textContent = (game.points && game.points[me]) || 0;
+    document.getElementById('goldinc').textContent = `+${incomeOf(me, true).pts}/turn`;
+  }
   function refreshUI() {
+    try { goldHud(); } catch (e) {}
     renderLobby(); renderFactions(); renderCamp(); renderPending();
     if (armed && (!selUnit || armed.id !== selUnit.id)) armed = null;
     if (shopFor && (!selUnit || shopFor.id !== selUnit.id)) shopFor = null;
@@ -3687,7 +3700,7 @@
       const active = team === game.turn && !w, left = active ? alive.filter(u => !unitDone(u)).length : alive.length;
       const pips = alive.map(u => `<span class="pip ${!active ? 'on' : unitDone(u) ? '' : u.moved ? 'half' : 'on'}"></span>`).join('');
       const you = mode === 'online' && mySeat === team ? ' (you)' : '';
-      const pts = (game.points && game.points[team]) || 0, ptsHtml = (game.factions || []).length && ownerOfTeam(team) !== viewer() ? '' : ` · <b style="color:#e8c25a">${pts} pt${pts === 1 ? '' : 's'}</b>${isHost() && !(game.factions || []).length ? `<button data-pt="${team}:-1">−</button><button data-pt="${team}:1">+</button>` : ''}`;
+      const pts = (game.points && game.points[team]) || 0, ptsHtml = (game.factions || []).length && ownerOfTeam(team) !== viewer() ? '' : ` · <i class="coin"></i><b style="color:#f2cf62">${pts} gold</b>${isHost() && !(game.factions || []).length ? `<button data-pt="${team}:-1">−</button><button data-pt="${team}:1">+</button>` : ''}`;
       const html = `<span class="nm" style="color:rgb(${TEAM[team].map(v => v + 80)})">${teamName(team)}${you}</span> · ` +
         (active ? `${left}/${alive.length} ${game.view === 'campaign' ? 'armies' : 'units'} left to act` : `${alive.length} ${game.view === 'campaign' ? (alive.length === 1 ? 'army' : 'armies') : (alive.length === 1 ? 'unit' : 'units')} · waiting`) + `<span class="pips">${pips}</span>` + ptsHtml;
       if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
