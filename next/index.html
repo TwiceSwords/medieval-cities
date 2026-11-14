@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.4-preview</div>
+  <div class="t">Medieval Cities 3D · v2.5-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1135,7 +1135,7 @@
       const gapC = CCOLS >> 1;                                   // the frozen north, the great ice wall and its single gate-city
       if (r < WALL_ROW) k = m > 0.52 ? 's' : 'x'; else if (r === WALL_ROW) k = c === gapC ? 's' : 'i'; else if (r <= WALL_ROW + 1 && Math.abs(c - gapC) <= 1) k = 's';      // mountain ridges with gaps: chokepoints
       T[r * CCOLS + c] = k;
-      HT[r * CCOLS + c] = k === 'w' ? 0 : k === 'm' ? 3 : k === 'i' ? 3 : 1 + (e > 0.56 ? 1 : 0) + (e > 0.7 ? 1 : 0);
+      HT[r * CCOLS + c] = k === 'w' ? 0 : k === 'm' ? 3 : k === 'i' ? 5 : 1 + (e > 0.56 ? 1 : 0) + (e > 0.7 ? 1 : 0);
     }
     // keep only the biggest land mass so every city can reach every other
     const seen = new Uint8Array(T.length); let best = [];
@@ -1154,7 +1154,7 @@
     const spots = [], far = h => spots.every(p => hexDist(p, h) >= 6);
     for (const [pool, n] of [[shuffle(land.filter(edge)), 2], [shuffle(land.filter(h => hexDist(h, mid) <= 7)), 2], [shuffle(land.slice()), 10]])
       { let got = 0; for (const h of pool) { if (spots.length >= 10 || got >= n) break; if (far(h)) { spots.push(h); got++; } } }
-    for (let i = 0; i < T.length; i++) if (T[i] === 'm' || T[i] === 'w') HT[i] = T[i] === 'w' ? 0 : 3;
+    for (let i = 0; i < T.length; i++) if (T[i] === 'm' || T[i] === 'w' || T[i] === 'i') HT[i] = T[i] === 'w' ? 0 : T[i] === 'i' ? 5 : 3;
     return { heights: HT.join(''), terrain: T.join(''), spots, wallSpot: [CCOLS >> 1, WALL_ROW], ok: spots.length === 10 && pass(T[(WALL_ROW + 1) * CCOLS + (CCOLS >> 1)]), R };
   }
   // ---------- campaign board layers: terrain painted at half resolution ----------
@@ -1190,21 +1190,26 @@
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {       // back to front: hill sides, then the textured top
       const m = center(c, r), cx = m.x + OX, cy = m.y + OY, e = elevPx(c, r), p = corners(cx, cy), base = TERRAIN[tAt(c, r)].col;
       if (e > 0) { b.beginPath(); b.moveTo(p[0][0], p[0][1] - e); b.lineTo(p[1][0], p[1][1] - e); b.lineTo(p[2][0], p[2][1] - e); b.lineTo(p[2][0], p[2][1]); b.lineTo(p[1][0], p[1][1]); b.lineTo(p[0][0], p[0][1]); b.closePath();
-        b.fillStyle = `rgb(${base.map(v => v * 0.5 | 0)})`; b.fill(); b.strokeStyle = 'rgba(0,0,0,0.25)'; b.lineWidth = 1.5; b.stroke(); }
+        b.fillStyle = `rgb(${base.map(v => v * 0.5 | 0)})`; b.fill(); b.strokeStyle = 'rgba(0,0,0,0.25)'; b.lineWidth = 1.5; b.stroke();
+        if (tAt(c, r) === 'i') {                                       // the great ice wall: pale blue cliffs with frozen layers
+          b.save(); b.clip(); const gi = b.createLinearGradient(0, cy - e - S * SQ, 0, cy + S * SQ); gi.addColorStop(0, '#e8f6ff'); gi.addColorStop(0.55, '#a9cfe2'); gi.addColorStop(1, '#6f9ab3');
+          b.fillStyle = gi; b.fillRect(cx - S - 2, cy - e - S, 2 * S + 4, e + 2 * S);
+          b.strokeStyle = 'rgba(90,130,160,0.55)'; b.lineWidth = 1.6;
+          for (let i = 1; i < 6; i++) { const dy = e * i / 6; b.beginPath(); b.moveTo(p[2][0], p[2][1] - e + dy); b.lineTo(p[1][0], p[1][1] - e + dy + (rnd() - 0.5) * 3); b.lineTo(p[0][0], p[0][1] - e + dy); b.stroke(); }
+          b.fillStyle = 'rgba(255,255,255,0.35)'; b.beginPath(); b.moveTo(p[2][0], p[2][1] - e); b.lineTo(p[1][0], p[1][1] - e); b.lineTo(p[1][0], p[1][1] - e + 6); b.lineTo(p[2][0], p[2][1] - e + 6); b.closePath(); b.fill();
+          b.restore(); } }
       b.save(); b.beginPath(); hexPath(c, r, b); b.clip();
       const x0 = cx - S - 4, y0 = cy - S * SQ - 4, w0 = 2 * S + 8, h0 = 2 * S * SQ + 8;
       b.drawImage(low, x0 / ls, y0 / ls, w0 / ls, h0 / ls, x0, y0 - e, w0, h0);
-      if (e > 0) { b.fillStyle = `rgba(255,250,230,${0.03 * e / LEVEL})`; b.fill(); }            // a touch of sunlight on high ground
+      if (e > 0) { b.fillStyle = tAt(c, r) === 'i' ? 'rgba(170,215,240,0.6)' : `rgba(255,250,230,${0.03 * e / LEVEL})`; b.fill(); }            // a touch of sunlight on high ground (ice: frost)
       b.restore();
     }
     b.beginPath(); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) hexPath(c, r, b); b.clip();
     // decorations per tile
     for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
       const k = tAt(c, r), m = center(c, r), cx = m.x + OX, cy = m.y + OY - elevPx(c, r), spot = () => { const a = rnd() * 7, rr = Math.sqrt(rnd()) * S * 0.7; return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * SQ]; };
-      if (k === 'i') {                                                // the great ice wall
-        const top = cy - 70; b.fillStyle = 'rgba(0,0,0,0.3)'; b.fillRect(cx - S * 0.87, cy + 4, S * 1.74, 10);
-        const gr = b.createLinearGradient(0, top, 0, cy); gr.addColorStop(0, '#f2fbff'); gr.addColorStop(1, '#9cc4d8'); b.fillStyle = gr; b.fillRect(cx - S * 0.88, top, S * 1.76, 74);
-        b.strokeStyle = 'rgba(120,160,190,0.6)'; b.lineWidth = 2; for (let i = 0; i < 4; i++) { b.beginPath(); b.moveTo(cx - S * 0.88, top + 14 + i * 16); b.lineTo(cx + S * 0.88, top + 12 + i * 16 + (rnd() - 0.5) * 6); b.stroke(); }
+      if (k === 'i') {                                                // the great ice wall: a few crystals on top
+        for (let i = 0; i < 3; i++) { const [x, y] = spot(); b.fillStyle = 'rgba(255,255,255,0.8)'; b.beginPath(); b.moveTo(x, y - 9); b.lineTo(x + 3, y); b.lineTo(x - 3, y); b.closePath(); b.fill(); }
       } else if (k === 'm' || k === 'r') {                                  // mountains / rocks: grey peaks
         const n = k === 'm' ? 3 : 2;
         for (let i = 0; i < n; i++) { const x = cx + (i - (n - 1) / 2) * 24 + (rnd() - 0.5) * 8, y = cy + (rnd() - 0.3) * 10, hh = k === 'm' ? 46 + rnd() * 18 : 22 + rnd() * 10, w = k === 'm' ? 30 : 20;
