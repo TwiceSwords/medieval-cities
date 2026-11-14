@@ -87,7 +87,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.31</div>
+  <div class="t">Medieval Cities · v1.32</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -2171,7 +2171,7 @@
     applyDot(t, Math.max(dmg, old ? old.dmg : 0), Math.max(turns, old ? old.turns : 0), 'burn');
     floatOn(t, '🔥 BURNING', '#ffb050', 18, 15);
   }
-  const canCastCard = (u, c) => c && c.id === 'vanish' && u.invis ? false : c && c.id === 'blink' && c.lvl >= 4 ? !u.stunActive && !u.watch : canSkillNow(u);
+  const canCastCard = (u, c) => c && c.id === 'pstrike' ? !!T(u).hero && !u.skillUsed && !u.watch && !u.stunActive : c && c.id === 'vanish' && u.invis ? false : c && c.id === 'blink' && c.lvl >= 4 ? !u.stunActive && !u.watch : canSkillNow(u);
   // Assassin cards
   Object.assign(CARDS, {
     backstab:    { kind: 'passive', name: 'Backstab', text: () => 'Hits from behind: ×2 from the two back-side tiles, ×3 from right behind (counts for his skills too).' },
@@ -2222,7 +2222,7 @@
     dash:   { kind: 'skill', name: 'Dash', cost: () => 4, target: 'tile', range: l => l,
       text: l => `Dash to a tile within ${l}. If an enemy is there, he stops next to it and hits it with his basic attack.` },
     pstrike: { kind: 'skill', name: 'Power Strike', cost: l => 8 - l, target: 'enemy', range: () => 1,
-      text: () => 'An extra hit with his basic attack damage (no bleed or mark), on an enemy in his reach.' },
+      text: () => 'An extra hit with his basic attack damage (no bleed or mark), on an enemy in his reach. It does not use up his turn: he can still make his basic attack, before or after.' },
   });
   HERO_CARDS.warrior = { passive: WEAPONS, skill: ['dash', 'pstrike'] };
   const weaponOf = u => WEAPONS.includes(u.cards && u.cards.passive) ? u.cards.passive : 'greatsword';
@@ -2274,6 +2274,7 @@
     const foeIn = units.some(o => o.dying === null && o.hp > 0 && (healer ? o !== u && (o.team === u.team ? o.hp < o.maxHp : !!T(o).undead) : hostile(o.team, u.team)) && hexDist([u.col, u.row], [o.col, o.row]) <= r);
     if (canShootNow(u) && (!strict || foeIn)) return true;
     if (!strict && u.cards && u.cards.skills.some(c => c && canCastCard(u, c) && (u.mana || 0) >= CARDS[c.id].cost(c.lvl))) return true;
+    if (foeIn && u.cards && u.cards.skills.some(c => c && c.id === 'pstrike' && canCastCard(u, c) && (u.mana || 0) >= CARDS.pstrike.cost(c.lvl))) return true;   // Power Strike is still free
     return canSkillNow(u) && (!strict || (u.cards && u.cards.skills.some(c => c && (u.mana || 0) >= CARDS[c.id].cost(c.lvl))));
   }
   // a hit can be dodged (Evasion) or caught on a shield (Shield Wall); area attacks can't be avoided either way
@@ -2385,7 +2386,7 @@
       const card = CARDS[a.skill], c = u.cards && u.cards.skills.find(k => k && k.id === a.skill), L = c ? c.lvl : 1;
       const tgt = a.target && units.find(x => x.id === a.target && x.dying === null);
       const was = { attacked: u.attacked, skillUsed: u.skillUsed };
-      u.mana = Math.max(0, (u.mana || 0) - card.cost(L)); if (!combo(u)) u.attacked = true; u.skillUsed = true;
+      u.mana = Math.max(0, (u.mana || 0) - card.cost(L)); if (!combo(u) && a.skill !== 'pstrike') u.attacked = true; u.skillUsed = true;   // Power Strike doesn't use up his attack
       if (a.skill === 'blink' && L >= 4) Object.assign(u, was);     // Blink Lv 4+: costs only mana
       if (mageSkill(u, a, card, L, tgt) || assassinSkill(u, a, card, L, tgt) || warriorSkill(u, a, card, L, tgt)) return;   // the hero's action this turn (Quick Draw keeps the shot); may still move
       if (rangerSkill(u, a, card, L, tgt)) return;
