@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.20-preview</div>
+  <div class="t">Medieval Cities 3D · v2.21-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -4399,6 +4399,7 @@
   let stuckSince = 0;
   setInterval(() => {
     if (lastRemote && busy() && document.hidden) { stuckSince = stuckSince || Date.now(); if (Date.now() - stuckSince > 1500) { for (const u of units) { u.path = null; u.atk = null; } units = units.filter(u => u.dying === null); projectiles = []; afterIdle = null; } } else stuckSince = 0;
+    if (document.hidden && busy()) { try { for (let i = 0; i < 12; i++) { updateUnits(0.05); turnUnits(0.05); } } catch (e) { console.error(e); } }   // a background tab gets no animation frames: keep the moves (and the AI that waits for them) going
     if (lastRemote && !busy()) { const st = lastRemote; lastRemote = null; onRemoteState(st); } try { aiTick(); } catch (e) { console.error(e); } refreshUI(); }, 250);
   setTimeout(() => {
     layersReady = true; ensureLayers(); R3.init();
