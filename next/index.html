@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.22-preview</div>
+  <div class="t">Medieval Cities 3D · v2.23-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -3386,6 +3386,7 @@
   }
   function commit(action) {
     game.seq += 1;
+    try { syncHero(); } catch (e) {}
     try { offImpassable(); } catch (e) {}
     if (game.view === 'campaign' && fogOn()) markExplored();
     let volley = null;
@@ -3544,6 +3545,9 @@
         const n = {}; for (const t of a.troops) n[t.type] = (n[t.type] || 0) + 1;
         html += `<div>${Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', ') || 'no troops'} <span class="k">(${a.troops.length}/${MAX_TROOPS})</span></div>`;
         html += `<div class="k">${a.moved ? 'Has moved this turn' : 'Can move 2 (3 if both steps are on road)'}</div>`;
+        const heroes = a.troops.map((t, i) => ({ t, i })).filter(({ t }) => HERO_CARDS[t.type]);
+        if (heroes.length) html += `<div class="sub">Heroes</div><div class="grid">${heroes.map(({ t, i }) => { const cd = t.cards || {}, nCards = (cd.passive ? 1 : 0) + (cd.skills || []).filter(Boolean).length;
+          return btn(`data-hero="${i}"`, `🃏 ${UNIT_TYPES[t.type].name} · ${nCards} card${nCards === 1 ? '' : 's'}${heroSel && heroSel.troopOf.army === a.id && heroSel.troopOf.idx === i ? ' ✓' : ''}`, true); }).join('')}</div>`;
         const here = [a.col, a.row], road = hasRoad(here);
         html += `<div class="row">${!road && !cityAt(here) ? btn('data-ca="road"', `Build road here · ${ROAD_COST} gold`, my && p >= ROAD_COST) : ''}${road ? btn('data-ca="unroad"', 'Destroy road here', my) : ''}</div>`;
         const homes = game.cities.filter(c => c.owner === me && hexDist(here, [c.col, c.row]) <= 1);
@@ -3574,6 +3578,7 @@
     campEl.style.display = 'block';
   }
   campEl.addEventListener('click', e => {
+    { const hb = e.target.closest('button[data-hero]'); if (hb) { openHero(selUnit, Number(hb.dataset.hero)); return; } }
     const b = e.target.closest('button'); if (!b || b.disabled || !myCampaignTurn()) return;
     const me = viewer(), a = selUnit && selUnit.troops ? selUnit : null, city = selCity || (a && cityAt([a.col, a.row]));
     const spend = n => { game.points = { ...game.points, [me]: pts(me) - n }; };
@@ -3879,10 +3884,23 @@
     return cardHtml(c.id, c.lvl, { slot, armed: armed && armed.id === u.id && armed.skill === c.id, showNext: mine,
       upgrade: slot !== 'p' && mine && c.lvl < 5, can: pts >= UPGRADE_PRICE });
   }
+  let heroSel = null;
+  function openHero(a, idx) {
+    if (!a || !a.troops || !a.troops[idx] || !HERO_CARDS[a.troops[idx].type]) return;
+    if (heroSel && heroSel.troopOf.army === a.id && heroSel.troopOf.idx === idx) { heroSel = null; shopFor = null; refreshUI(); return; }
+    const t = a.troops[idx], u = runtimeUnit({ ...t, id: 'hero:' + a.id + ':' + idx, team: a.team, col: a.col, row: a.row, face: 0, cards: t.cards || emptyCards() });
+    u.troopOf = { army: a.id, idx, type: t.type }; heroSel = u; shopFor = null; refreshUI();
+  }
+  function syncHero() {                               // write the managed hero back into its army
+    if (!heroSel) return; const o = heroSel.troopOf, a = units.find(x => x.id === o.army && x.troops);
+    if (!a || !a.troops[o.idx] || a.troops[o.idx].type !== o.type || game.view !== 'campaign') { heroSel = null; return; }
+    const u = heroSel; a.troops = a.troops.map((t, i) => i !== o.idx ? t : { ...t, hp: u.hp, maxHp: u.maxHp, mana: u.mana, manaMax: u.manaMax, cards: u.cards, ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}) });
+  }
   function renderCards() {
-    const u = selUnit;
+    if (heroSel && (game.view !== 'campaign' || !selUnit || selUnit.id !== heroSel.troopOf.army)) heroSel = null;
+    const u = heroSel || selUnit;
     if (!u || !heroCards(u) || u.dying !== null || !u.cards) { if (cardsEl.dataset.h) { cardsEl.dataset.h = ''; cardsEl.innerHTML = ''; } cardsEl.style.display = 'none'; return; }
-    const hc = heroCards(u), mine = canManage(u), pts = game.points[u.team] || 0;
+    const hc = heroCards(u), mine = canManage(u) && (!heroSel || myCampaignTurn()), pts = game.points[u.team] || 0;
     const owned = new Set([u.cards.passive, ...u.cards.skills.filter(Boolean).map(k => k.id)]);
     const hpCap = T(u).hpCap || 40, manaCost = 1 + (u.manaBought || 0);
     const statBtns = mine ? ` <button data-stat="hp" ${pts >= 1 && u.maxHp < hpCap ? '' : 'disabled'}>+${HP_PER_POINT} HP · 1 gold</button>` +
@@ -3893,11 +3911,15 @@
       const list = shopFor.slot === 'p' ? hc.passive : hc.skill.filter(id => !owned.has(id));
       html += `<div class="chd2">Choose a ${shopFor.slot === 'p' ? 'passive' : 'skill'} card</div><div class="crow">${list.map(id => cardHtml(id, 1, { buy: true, can: mine && pts >= CARD_PRICE })).join('')}</div><button data-act="closeshop">Cancel</button>`;
     } else html += `<div class="crow">${slotHtml(u, 'p')}${[0, 1, 2].map(i => slotHtml(u, i)).join('')}</div>`;
+    if (heroSel) html = `<div class="k" style="display:flex;justify-content:space-between;align-items:center"><span>🏕 In the field with the army · cards and upgrades stay with the hero</span><button data-act="closehero">✕ Close</button></div>` + html;
     if (cardsEl.dataset.h !== html) { cardsEl.dataset.h = html; cardsEl.innerHTML = html; }
     cardsEl.style.display = 'block';
   }
   cardsEl.addEventListener('click', e => {
-    const u = selUnit; if (!u || !u.cards) return;
+    if (e.target.closest('button[data-act="closehero"]')) { heroSel = null; shopFor = null; refreshUI(); return; }
+    const u = heroSel || selUnit; if (!u || !u.cards) return;
+    if (heroSel && !myCampaignTurn()) { toast('Manage your heroes on your own turn'); return; }
+    if (heroSel && e.target.closest('.card') && !e.target.closest('.card').classList.contains('empty') && !e.target.closest('button')) return;   // skills are used in battle, not here
     const b = e.target.closest('button'), card = e.target.closest('.card');
     if (b && b.dataset.act === 'closeshop') { shopFor = null; refreshUI(); return; }
     if (busy()) return;
@@ -3962,7 +3984,7 @@
     try { goldHud(); } catch (e) {}
     renderLobby(); renderFactions(); renderCamp(); renderPending();
     if (armed && (!selUnit || armed.id !== selUnit.id)) armed = null;
-    if (shopFor && (!selUnit || shopFor.id !== selUnit.id)) shopFor = null;
+    if (shopFor && shopFor.id !== (heroSel || selUnit || {}).id) shopFor = null;
     renderCards();
     selEl.textContent = fmt(sel);
     const troopsText = u => { const n = {}; for (const t of u.troops) n[t.type] = (n[t.type] || 0) + 1;
