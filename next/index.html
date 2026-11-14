@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.18-preview</div>
+  <div class="t">Medieval Cities 3D · v2.19-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1062,6 +1062,7 @@
         ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.released ? { released: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
+    CCOLS = colsOf(st);
     const old = new Map(units.map(u => [u.id, u]));
     units = st.units.map(s => { const o = old.get(s.id);
       if (!o || o.type !== (UNIT_TYPES[s.type] ? s.type : 'swordsman') || o.team !== s.team) return runtimeUnit(s);
@@ -1097,7 +1098,7 @@
     off.x = innerWidth / 2 - cx * z; off.y = innerHeight / 2 - cy * z;
   }
   // ===================== CAMPAIGN WORLD (Medieval Cities) =====================
-  const CCOLS = 16, CROWS = 52;                       // the campaign map: much taller than wide
+  let CCOLS = 16; const CROWS = 52, WIDE_COLS = 28, NARROW = 16;   // the campaign map: tall; new maps widen from 16 by the wall to 28 in the far south
   const PALETTE = [
     { key: 'blue', name: 'Blue', col: [52, 86, 146] }, { key: 'red', name: 'Red', col: [152, 30, 42] },
     { key: 'green', name: 'Green', col: [44, 118, 56] }, { key: 'gold', name: 'Gold', col: [176, 136, 32] },
@@ -1105,13 +1106,13 @@
     { key: 'teal', name: 'Teal', col: [26, 126, 128] }, { key: 'white', name: 'White', col: [178, 178, 172] }, { key: 'black', name: 'Black', col: [46, 46, 52] }];
   const CITY_NAMES = ['Coldharbor', 'Southreach', 'Ironhold', 'Greywater', 'Ashford', 'Highmoor', 'Stonebridge', 'Wolfden', 'Saltmere', 'Dunmore',
     'Ravenscar', 'Goldcrest', 'Thornbury', 'Oakheart', 'Redcliff', 'Whitehaven', 'Blackfen', 'Sunspire'];
-  const TERRAIN = { i: { name: 'Ice wall', col: [196, 220, 234] }, m: { name: 'Mountains', col: [104, 100, 94] }, r: { name: 'Rocks', col: [96, 92, 86] }, g: { name: 'Grassland', col: [64, 88, 44] }, f: { name: 'Forest', col: [36, 60, 32] }, d: { name: 'Desert', col: [178, 152, 98] },
+  const TERRAIN = { v: { name: 'Edge of the world', col: [16, 18, 14] }, i: { name: 'Ice wall', col: [196, 220, 234] }, m: { name: 'Mountains', col: [104, 100, 94] }, r: { name: 'Rocks', col: [96, 92, 86] }, g: { name: 'Grassland', col: [64, 88, 44] }, f: { name: 'Forest', col: [36, 60, 32] }, d: { name: 'Desert', col: [178, 152, 98] },
     s: { name: 'Snow', col: [208, 214, 222] }, x: { name: 'Dead lands', col: [92, 86, 74] }, w: { name: 'Water', col: [38, 72, 108] } };
   const faction = id => (game.factions || []).find(f => f.id === id) || null;
   const ownerOfTeam = t => t;
   const terrainAt = h => game.terrain && localView() === 'campaign' ? game.terrain[h[1] * CCOLS + h[0]] : 'g';
   const isWater = h => terrainAt(h) === 'w';
-  const impassable = h => { const k = terrainAt(h); return k === 'w' || k === 'm' || k === 'i'; };
+  const impassable = h => { const k = terrainAt(h); return k === 'w' || k === 'm' || k === 'i' || k === 'v'; };
   const cityAt = h => h && (game.cities || []).find(c => c.col === h[0] && c.row === h[1]) || null;
   const roadSet = () => new Set(game.roads || []);
   const hasRoad = h => (game.roads || []).includes(key(...h));
@@ -1123,7 +1124,9 @@
         const A = a[yi * w + xi], B = a[yi * w + xi + 1], C = a[(yi + 1) * w + xi], D = a[(yi + 1) * w + xi + 1]; return A + (B - A) * u + (C - A) * v + (A - B - C + D) * u * v; }; };
     const e1 = vn(6), e2 = vn(2.5), mo = vn(5), lat = vn(8), ridge = vn(4.5);
     const T = new Array(CCOLS * CROWS), HT = new Array(CCOLS * CROWS).fill(1);
+    const widthAt = r => CCOLS <= NARROW ? CCOLS : r <= WALL_ROW + 2 ? NARROW : Math.round(NARROW + (CCOLS - NARROW) * (r - WALL_ROW - 2) / (CROWS - 1 - WALL_ROW - 2));
     for (let r = 0; r < CROWS; r++) for (let c = 0; c < CCOLS; c++) {
+      { const m0 = Math.floor((CCOLS - widthAt(r)) / 2); if (c < m0 || c >= m0 + widthAt(r)) { T[r * CCOLS + c] = 'v'; HT[r * CCOLS + c] = 0; continue; } }
       const x = c + 0.5 * (r & 1), y = r * 0.866;
       const e = 0.68 * e1(x, y) + 0.32 * e2(x, y), m = mo(x, y), t = r / (CROWS - 1) + (lat(x, y) - 0.5) * 0.16;
       let k;
@@ -1142,7 +1145,7 @@
     }
     // keep only the biggest land mass so every city can reach every other
     const seen = new Uint8Array(T.length); let best = [];
-    const pass = k => k !== 'w' && k !== 'm' && k !== 'i';
+    const pass = k => k !== 'w' && k !== 'm' && k !== 'i' && k !== 'v';
     for (let i = 0; i < T.length; i++) if (pass(T[i]) && !seen[i]) {
       const comp = [i]; seen[i] = 1;
       for (let j = 0; j < comp.length; j++) { const c = comp[j] % CCOLS, r = (comp[j] / CCOLS) | 0;
@@ -1153,11 +1156,11 @@
     // 10 city spots, at least 6 tiles apart (5 empty tiles between): a couple at the edge, a couple central, the rest anywhere
     const land = []; for (let i = 0; i < T.length; i++) { const c = i % CCOLS, r = (i / CCOLS) | 0; if (r > WALL_ROW + 2 && pass(T[i]) && nbIn(c, r, CCOLS, CROWS).filter(([a, b]) => pass(T[b * CCOLS + a])).length >= 4) land.push([c, r]); }
     const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
-    const edge = h => h[0] <= 1 || h[0] >= CCOLS - 2 || h[1] <= 1 || h[1] >= CROWS - 2, mid = [CCOLS >> 1, (CROWS + WALL_ROW) >> 1];
+    const edge = h => h[1] >= CROWS - 2 || nbIn(h[0], h[1], CCOLS, CROWS).length < 6 || nbIn(h[0], h[1], CCOLS, CROWS).some(([a, b]) => T[b * CCOLS + a] === 'v') || [[h[0] - 1, h[1]], [h[0] + 1, h[1]]].some(([a]) => a < 0 || a >= CCOLS || T[h[1] * CCOLS + a] === 'v'), mid = [CCOLS >> 1, (CROWS + WALL_ROW) >> 1];
     const spots = [], far = h => spots.every(p => hexDist(p, h) >= 6);
     for (const [pool, n] of [[shuffle(land.filter(edge)), 2], [shuffle(land.filter(h => hexDist(h, mid) <= 7)), 2], [shuffle(land.slice()), 10]])
       { let got = 0; for (const h of pool) { if (spots.length >= 10 || got >= n) break; if (far(h)) { spots.push(h); got++; } } }
-    for (let i = 0; i < T.length; i++) if (T[i] === 'm' || T[i] === 'w' || T[i] === 'i') HT[i] = T[i] === 'w' ? 0 : T[i] === 'i' ? 5 : 3;
+    for (let i = 0; i < T.length; i++) if (T[i] === 'm' || T[i] === 'w' || T[i] === 'i' || T[i] === 'v') HT[i] = T[i] === 'w' || T[i] === 'v' ? 0 : T[i] === 'i' ? 5 : 3;
     return { heights: HT.join(''), terrain: T.join(''), spots, wallSpot: [CCOLS >> 1, WALL_ROW], ok: spots.length === 10 && pass(T[(WALL_ROW + 1) * CCOLS + (CCOLS >> 1)]), R };
   }
   // ---------- campaign board layers: terrain painted at half resolution ----------
@@ -1191,6 +1194,7 @@
     lg.putImageData(img, 0, 0);
     b.save(); b.imageSmoothingEnabled = true; b.imageSmoothingQuality = 'high';
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {       // back to front: hill sides, then the textured top
+      if (tAt(c, r) === 'v') continue;                                   // beyond the edge of the world: nothing
       const m = center(c, r), cx = m.x + OX, cy = m.y + OY, e = elevPx(c, r), p = corners(cx, cy), base = TERRAIN[tAt(c, r)].col;
       if (e > 0) { b.beginPath(); b.moveTo(p[0][0], p[0][1] - e); b.lineTo(p[1][0], p[1][1] - e); b.lineTo(p[2][0], p[2][1] - e); b.lineTo(p[2][0], p[2][1]); b.lineTo(p[1][0], p[1][1]); b.lineTo(p[0][0], p[0][1]); b.closePath();
         b.fillStyle = `rgb(${base.map(v => v * 0.5 | 0)})`; b.fill(); b.strokeStyle = 'rgba(0,0,0,0.25)'; b.lineWidth = 1.5; b.stroke();
@@ -1207,7 +1211,7 @@
       if (e > 0) { b.fillStyle = tAt(c, r) === 'i' ? 'rgba(170,215,240,0.6)' : `rgba(255,250,230,${0.03 * e / LEVEL})`; b.fill(); }            // a touch of sunlight on high ground (ice: frost)
       b.restore();
     }
-    b.beginPath(); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) hexPath(c, r, b); b.clip();
+    b.beginPath(); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (tAt(c, r) !== 'v') hexPath(c, r, b); b.clip();
     // decorations per tile
     for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
       const k = tAt(c, r), m = center(c, r), cx = m.x + OX, cy = m.y + OY - elevPx(c, r), spot = () => { const a = rnd() * 7, rr = Math.sqrt(rnd()) * S * 0.7; return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * SQ]; };
@@ -1251,6 +1255,7 @@
     const gc = gridCv.getContext('2d'); gc.scale(sc, sc);
     gc.lineJoin = 'round'; gc.strokeStyle = 'rgba(8,12,5,0.55)'; gc.lineWidth = 2.4;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {       // back to front, like the ground: a raised tile hides the lines behind it
+      if (terr && terr[r * COLS + c] === 'v') continue;
       const m = center(c, r), e = elevPx(c, r);
       if (e > 0) { const p = corners(m.x + OX, m.y + OY);
         gc.globalCompositeOperation = 'destination-out'; gc.beginPath(); hexPath(c, r, gc);
@@ -1336,7 +1341,7 @@
   function startCampaign() {
     const setup = game.factions.filter(f => f.kind !== 'off');
     if (setup.length < 2) { toast('You need at least 2 factions'); return; }
-    let w = null; for (let i = 0; i < 40 && !(w && w.ok); i++) w = genWorld((Math.random() * 4e9) >>> 0);
+    CCOLS = WIDE_COLS; let w = null; for (let i = 0; i < 40 && !(w && w.ok); i++) w = genWorld((Math.random() * 4e9) >>> 0);
     const R = w.R, names = CITY_NAMES.slice(); for (let i = names.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [names[i], names[j]] = [names[j], names[i]]; }
     const spots = w.spots.slice(); for (let i = spots.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }
     const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai' || (game.opts && game.opts.god), alive: true, style: ['aggressive', 'builder', 'balanced'][(R() * 3) | 0] }));
@@ -1348,9 +1353,18 @@
       const aH = side ? (west ? nw : ne) : south ? byRow[byRow.length - 1] : byRow[0], aA = side ? (west ? ne : nw) : south ? byRow[0] : byRow[byRow.length - 1];
       const left = spots.slice(), take = (anchor, n) => { const out = []; for (let k = 0; k < n; k++) { left.sort((x, y) => hexDist(x, anchor) - hexDist(y, anchor)); out.push(left.shift()); } return out; };
       let hs, as;
-      if (side) {                                      // the two teams pick in turn; staying on your own side matters more than staying north
-        const sd = (h, an, mine) => mine.length ? Math.min(...mine.map(m => hexDist(h, m))) + Math.abs(h[0] - an[0]) * 1.5 : Math.abs(h[0] - an[0]) * 3 + Math.abs(h[1] - an[1]), pick = (an, mine) => { left.sort((x, y) => sd(x, an, mine) - sd(y, an, mine)); return left.shift(); };
-        hs = []; as = []; while (hs.length < H.length || as.length < A.length) { if (hs.length < H.length) hs.push(pick(aH, hs)); if (as.length < A.length) as.push(pick(aA, as)); }
+      if (side) {                                      // try every split and keep the best: teammates close, the two teams on opposite sides, both up north by the wall
+        const T0 = w.terrain, rowW = r => { let lo = CCOLS, hi = 0; for (let c = 0; c < CCOLS; c++) if (T0[r * CCOLS + c] !== 'v') { lo = Math.min(lo, c); hi = Math.max(hi, c); } return { lo, hi }; };
+        const rel = h => { const { lo, hi } = rowW(h[1]); return hi > lo ? ((h[0] - lo) / (hi - lo)) * 2 - 1 : 0; };
+        const within = g => { let m = 0; for (let a = 0; a < g.length; a++) for (let b = a + 1; b < g.length; b++) m = Math.max(m, hexDist(g[a], g[b])); return m; };
+        const mean = (g, f) => g.reduce((x, h) => x + f(h), 0) / g.length;
+        const combos = (arr, k) => { const out = []; const go = (st, cur) => { if (cur.length === k) { out.push(cur.slice()); return; } for (let q = st; q < arr.length; q++) { cur.push(arr[q]); go(q + 1, cur); cur.pop(); } }; go(0, []); return out; };
+        let best = null;
+        for (const hc of combos(spots, H.length)) { const rest = spots.filter(x => !hc.includes(x));
+          for (const ac of combos(rest, A.length)) {
+            const all = [...hc, ...ac], nr = h => Math.max(0, h[1] - WALL_ROW - 2), score = within(hc) * 1.0 + within(ac) * 0.5 + mean(all, nr) * 1.3 + Math.abs(mean(hc, nr) - mean(ac, nr)) * 1.0 - Math.abs(mean(hc, rel) - mean(ac, rel)) * 9 + R() * 0.5;
+            if (!best || score < best.score) best = { score, hc, ac }; } }
+        hs = best.hc.slice(); as = best.ac.slice(); for (const x of [...hs, ...as]) left.splice(left.indexOf(x), 1);
       } else { hs = take(aH, H.length); as = take(aA, A.length); }
       const order = new Array(factions.length);
       H.forEach((fi, k) => { order[fi] = hs[k]; }); A.forEach((fi, k) => { order[fi] = as[k]; });
@@ -1365,7 +1379,7 @@
     factions.push({ id: 'undead', name: 'Undead', col: UNDEAD_COL, ai: true, alive: true, style: 'undead', undead: true });   // the undead play last, with no city and no army yet
     const points = {}; for (const f of factions) points[f.id] = f.undead ? 0 : START_GOLD;
     const mines = [], spotsAll = cities.map(c => [c.col, c.row]), cand = [];
-    for (let r = WALL_ROW + 2; r < CROWS - 1; r++) for (let c = 1; c < CCOLS - 1; c++) { const k = T[r * CCOLS + c]; if (k === 'w' || k === 'm' || k === 'i' || k === 'x') continue;
+    for (let r = WALL_ROW + 2; r < CROWS - 1; r++) for (let c = 1; c < CCOLS - 1; c++) { const k = T[r * CCOLS + c]; if (k === 'w' || k === 'm' || k === 'i' || k === 'x' || k === 'v') continue;
       if (spotsAll.some(p => hexDist(p, [c, r]) < 4) || armies.some(a => hexDist([a.col, a.row], [c, r]) < 3)) continue; cand.push([c, r]); }
     for (let tries = 0; tries < 400 && mines.length < MINE_COUNT && cand.length; tries++) { const p = cand[(Math.random() * cand.length) | 0];
       if (mines.every(m => hexDist(m, p) >= 8 - Math.floor(tries / 100))) mines.push(p); }
@@ -1974,10 +1988,11 @@
   // ---------- Saving: autosave in this browser + save/load files ----------
   const SAVE_KEY = 'medieval-cities-3d-save-v1';
   function saveLocal() { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, savedAt: Date.now(), g: exportState(null) })); } catch (e) {} }
+  const colsOf = st => st && typeof st.terrain === 'string' && st.terrain.length % CROWS === 0 && st.terrain.length >= CROWS * NARROW ? st.terrain.length / CROWS : NARROW;
   function validState(st) {
     return st && typeof st.seq === 'number' && (st.turn === 'blue' || st.turn === 'red' || (Array.isArray(st.factions) && st.factions.some(f => f.id === st.turn))) && Array.isArray(st.units) &&
       st.units.every(u => u && typeof u.id === 'string' && (TEAM[u.team] || (Array.isArray(st.factions) && st.factions.some(f => f.id === u.team))) && (u.type === undefined || UNIT_TYPES[u.type]) && Number.isInteger(u.col) && Number.isInteger(u.row) &&
-        u.col >= 0 && u.col < (st.view === 'campaign' ? CCOLS : st.bt ? BCOLS : 22) && u.row >= 0 && u.row < (st.view === 'campaign' ? CROWS : st.bt ? BROWS : 22) && typeof u.hp === 'number');
+        u.col >= 0 && u.col < (st.view === 'campaign' ? colsOf(st) : st.bt ? BCOLS : 22) && u.row >= 0 && u.row < (st.view === 'campaign' ? CROWS : st.bt ? BROWS : 22) && typeof u.hp === 'number');
   }
   function loadLocal() {
     try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (d && validState(d.g)) { applyState(d.g); return true; } } catch (e) {}
@@ -3640,6 +3655,7 @@
       return; }
     const ex = game.explored && game.explored[viewer()]; if (!ex) return; const v = visionOf(viewer());
     for (let r = 0; r < CROWS; r++) for (let c = 0; c < CCOLS; c++) {
+      if (game.terrain && game.terrain[r * CCOLS + c] === 'v') continue;
       if (ex[r * CCOLS + c] === '1') { if (v.has(r * CCOLS + c)) continue; ctx.beginPath(); hexPath(c, r, ctx); ctx.fillStyle = 'rgba(16,18,22,0.42)'; ctx.fill(); continue; }
       ctx.beginPath(); hexPath(c, r, ctx); ctx.fillStyle = `rgba(16,18,22,${0.9 + 0.04 * Math.sin(t * 0.6 + c * 0.7 + r * 0.4)})`; ctx.fill();
       ctx.strokeStyle = 'rgba(16,18,22,0.9)'; ctx.lineWidth = 3; ctx.stroke(); }
