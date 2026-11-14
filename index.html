@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.12</div>
+  <div class="t">Medieval Cities · v1.13</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -888,7 +888,7 @@
   const troop = type => ({ type, hp: typeMax(type), maxHp: typeMax(type), mana: typeStat(type, 'manaMax'), manaMax: typeStat(type, 'manaMax') });
   function freshState(seq) {                     // a new campaign starts in the lobby
     return { seq, turn: 'f0', round: 1, last: null, dm: !!game.dm, battle: false, types: game.types, points: {}, view: 'lobby', campaign: null,
-      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { coop: !!(game.opts && game.opts.coop), blessed: !!(game.opts && game.opts.blessed), fogCamp: !(game.opts && game.opts.fogCamp === false), fogBattle: !(game.opts && game.opts.fogBattle === false) } };
+      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { god: !!(game.opts && game.opts.god), coop: !!(game.opts && game.opts.coop), blessed: !!(game.opts && game.opts.blessed), fogCamp: !(game.opts && game.opts.fogCamp === false), fogBattle: !(game.opts && game.opts.fogBattle === false) } };
   }
   function freshBattleState(seq) {
     return { seq, turn: 'blue', round: 1, last: null, dm: !!game.dm, battle: false,
@@ -1184,7 +1184,7 @@
     let w = null; for (let i = 0; i < 40 && !(w && w.ok); i++) w = genWorld((Math.random() * 4e9) >>> 0);
     const R = w.R, names = CITY_NAMES.slice(); for (let i = names.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [names[i], names[j]] = [names[j], names[i]]; }
     const spots = w.spots.slice(); for (let i = spots.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }
-    const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai', alive: true, style: ['aggressive', 'builder', 'balanced'][(R() * 3) | 0] }));
+    const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai' || (game.opts && game.opts.god), alive: true, style: ['aggressive', 'builder', 'balanced'][(R() * 3) | 0] }));
     if (game.opts && game.opts.blessed) factions[(Math.random() * factions.length) | 0].blessed = true;   // a secret: one realm gets 3 passive gold a turn
     const cities = spots.map((h, i) => ({ id: 'city' + i, col: h[0], row: h[1], name: names[i], owner: i < factions.length ? factions[i].id : null, buildings: [], acted: false }));
     cities.push({ id: 'citywall', col: w.wallSpot[0], row: w.wallSpot[1], name: 'Frostgate', owner: null, buildings: [], acted: false, wall: true });
@@ -1223,7 +1223,7 @@
   const BCOLS = 28, BROWS = 28, ZONE_R = 4, POCKET_R = 3, REINF_ROUND = 15;
   const bt = () => game.bt || null;
   const inBattleSides = fid => !!(game.bt && (game.bt.sides.includes(fid) || (game.bt.waiting || []).includes(fid)));
-  const spectating = () => game.view === 'battle' && !!game.bt && !inBattleSides(viewer());
+  const spectating = () => game.view === 'battle' && !!game.bt && !(game.opts && game.opts.god) && !inBattleSides(viewer());
   const localView = () => spectating() ? 'campaign' : game.view;
   let shadowSt = null;
   // battle board: terrain of the campaign tile it happens on, a little variety, and rock clusters
@@ -1290,7 +1290,7 @@
     for (const a of b.asks) if (a.ans) b.joined.push({ kind: a.kind, id: a.id, fid: a.fid, dist: a.dist });
     const sides = [...new Set(b.joined.filter(j => j.dist <= 1).map(j => j.fid))];
     const humans = [...new Set(b.joined.map(j => j.fid))].filter(fid => !faction(fid).ai);
-    if (!humans.length) { autoResolveBattle(); return; }
+    if (!humans.length && !(game.opts && game.opts.god)) { autoResolveBattle(); return; }
     // directions on the campaign map decide where each side stands on the battle board
     const srcTile = j => { const o = j.kind === 'army' ? units.find(u => u.id === j.id) : game.cities.find(c => c.id === j.id); return [o.col, o.row]; };
     const mid = b.center, dirOf = fid => { const ts = b.joined.filter(j => j.fid === fid && j.dist <= 1).map(srcTile); let x = 0, y = 0;
@@ -3017,8 +3017,17 @@
     }
   }
   let last = performance.now();
+  let camHand = 0, camGoal = null;
+  function godCam(dt) {
+    if (!(game.opts && game.opts.god) || held.size || performance.now() - camHand < 6000 || game.view === 'lobby') return;
+    const act = units.find(u => u.dying === null && ((u.path && u.path.length) || u.atk)) || units.find(u => u.dying !== null);
+    if (act) { const p = upos(act); camGoal = { x: p.x, y: p.y }; }
+    if (!camGoal) return;
+    const tx = innerWidth / 2 - camGoal.x * z, ty = innerHeight / 2 - camGoal.y * z, k = Math.min(1, dt * 2.2);
+    off.x += (tx - off.x) * k; off.y += (ty - off.y) * k;
+  }
   function loop(now) { now = now || performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    panKeys(dt); updateUnits(dt); turnUnits(dt); render(now / 1000); requestAnimationFrame(loop); }
+    panKeys(dt); try { godCam(dt); } catch (e) {} updateUnits(dt); turnUnits(dt); render(now / 1000); requestAnimationFrame(loop); }
   // WASD camera: hold to scroll (Shift = faster)
   const held = new Set();
   function panKeys(dt) {
@@ -3206,6 +3215,7 @@
 
   let selCity = null, placingArmy = null, lastHuman = null;
   function viewer() {
+    if (game.opts && game.opts.god && game.view !== 'lobby') return null;      // the god watches as nobody
     if (mode === 'online') return mySeat;
     const f = faction(ownerOfTeam(game.turn)); if (f && !f.ai) { lastHuman = f.id; return f.id; }
     return lastHuman || ((game.factions || []).find(x => !x.ai && x.kind !== 'ai') || {}).id || null;
@@ -3229,6 +3239,7 @@
       ${rows}
       <div class="lsub">${n} faction${n === 1 ? '' : 's'} · 10 city spots · each faction starts with 1 city and 1 army of 1 swordsman.</div>
       <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 3 passive gold a turn instead of 1</div>
+      <div class="lsub">${host ? `<button id="lgod" class="${game.opts && game.opts.god ? 'on' : ''}">👁 God mode: ${game.opts && game.opts.god ? 'On' : 'Off'}</button>` : `👁 God mode: ${game.opts && game.opts.god ? 'On' : 'Off'}`} · every realm (yours too) is played by the AI; you watch everything with no fog, battles are fought out on the board and the camera follows the action</div>
       <div class="lsub">${host ? `<button id="lcoop" class="${game.opts && game.opts.coop ? 'on' : ''}">🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}</button>` : `🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}`} · all players are one team against all AI realms; each team shares its sight</div>
       ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
         return `<div class="lsub">${host ? `<button id="${id}" class="${on ? 'on' : ''}">${lab}: ${on ? 'On' : 'Off'}</button>` : `${lab}: ${on ? 'On' : 'Off'}`} · ${txt} · the AI plays by the same fog</div>`; }).join('')}
@@ -3240,6 +3251,7 @@
     const b = e.target.closest('button'); if (!b || game.view !== 'lobby') return;
     if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
     if ((b.id === 'lfogc' || b.id === 'lfogb') && isHost()) { const k = b.id === 'lfogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: !!(game.opts && game.opts[k] === false) }; commit({ type: 'setup' }); return; }
+    if (b.id === 'lgod' && isHost()) { game.opts = { ...(game.opts || {}), god: !(game.opts && game.opts.god) }; commit({ type: 'setup' }); return; }
     if (b.id === 'lcoop' && isHost()) { game.opts = { ...(game.opts || {}), coop: !(game.opts && game.opts.coop) }; commit({ type: 'setup' }); return; }
     if (b.id === 'lbless' && isHost()) { game.opts = { ...(game.opts || {}), blessed: !(game.opts && game.opts.blessed) }; commit({ type: 'setup' }); return; }
     if (b.dataset.kind && isHost()) { const [i, k] = b.dataset.kind.split(':'); game.factions[i].kind = k; commit({ type: 'setup' }); }
@@ -3842,7 +3854,7 @@
 
   // ---------- Input ----------
   let down = null, dragging = false;
-  cv.addEventListener('pointerdown', e => {
+  cv.addEventListener('pointerdown', e => { camHand = performance.now();
     if (e.button !== 0) return;
     const h = pick(e.clientX, e.clientY), u = unitAt(h);
     down = { x: e.clientX, y: e.clientY, ox: off.x, oy: off.y, grab: dmActive() && !placing && u && !busy() ? u : null };
@@ -3882,7 +3894,7 @@
     down = null; dragging = false; cv.classList.remove('drag');
   });
   cv.addEventListener('pointerleave', () => { if (!down && hover) { hover = null; hovEl.textContent = '–'; } });
-  cv.addEventListener('wheel', e => {
+  cv.addEventListener('wheel', e => { camHand = performance.now();
     e.preventDefault();
     const nz = Math.min(3, Math.max(0.18, z * Math.exp(-e.deltaY * 0.0015)));
     off.x = e.clientX - (e.clientX - off.x) * (nz / z); off.y = e.clientY - (e.clientY - off.y) * (nz / z);
