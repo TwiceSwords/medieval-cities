@@ -78,7 +78,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.0</div>
+  <div class="t">Medieval Cities · v1.1</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1504,8 +1504,8 @@
     while (pool.length) { const h = northTile();
       units.push(runtimeUnit({ id: `army-undead-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, type: 'army', team: 'undead', col: h[0], row: h[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, released: !!released, troops: pool.splice(0, UNDEAD_CAP) })); }
   }
-  function recordDeaths(types) {                     // every living unit that dies comes back twice (siege engines: 2 swordsmen)
-    const out = []; for (const t of types) { if (t === 'tower') continue; if (SIEGE.includes(t)) out.push('swordsman', 'swordsman'); else out.push(t, t); }
+  function recordDeaths(types) {                     // every living unit that dies comes back once, at half HP (a siege engine: 2 skeleton swordsmen)
+    const out = []; for (const t of types) { if (t === 'tower') continue; if (SIEGE.includes(t)) out.push('swordsman', 'swordsman'); else out.push(t); }
     if (game.undead) game.undead.pool.push(...out);
   }
   function flushPool() { if (!game.undead || !game.undead.pool.length) return; const p = game.undead.pool; game.undead.pool = []; addUndeadTroops(p.map(halfTroop), false); }
@@ -1515,7 +1515,7 @@
     if (T >= 80) mobs.unshift(troop('mammoth'));
     if (T >= FINAL_WAVE) { mobs.unshift(troop('mammoth'), troop('uking'), troop('uqueen')); ud.final = true; }
     addUndeadTroops(mobs, true);
-    if (T >= 40 || ud.final) for (const a of undeadArmies()) a.released = true;   // from turn 40 the risen dead march too
+    if (ud.final) for (const a of undeadArmies()) a.released = true;   // the risen dead wait up north for the last wave
     toast(`🧟 The undead march south · ${mobs.length} new`);
   }
   function undeadTurnStart() {                        // called when the undead faction's campaign turn begins
