@@ -89,7 +89,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.35</div>
+  <div class="t">Medieval Cities · v1.36</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -4152,13 +4152,13 @@
     const u = selUnit, ty = T(u), tgt0 = units.filter(o => o.col === h[0] && o.row === h[1] && o.dying === null && o.hp > 0).sort((x, y) => (x === selUnit) - (y === selUnit) || (x.team === selUnit.team) - (y.team === selUnit.team))[0], tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, here = [u.col, u.row], dist = hexDist(here, h);
     if (game.view === 'battle' && game.bt && game.bt.phase !== 'fight') { if (u.placing && u.team === viewer()) requestOp({ op: 'place', id: u.id, col: h[0], row: h[1] }); return; }
     const hint = (txt, hh) => { const m = center(...hh); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
-    const go = a0 => { const a = fogOrder(u, a0); if (!a) { commit({ type: 'ai' }); refreshUI(); return; } a.rng = Math.floor(Math.random() * 4e9); play(a, () => { commit(a); if (a.skill === 'rain' && armed && armed.skill === 'rain' && (u.mana || 0) < 1) { armed = null; refreshUI(); } }); };
+    const go = a0 => { const a = fogOrder(u, a0); if (!a) { commit({ type: 'ai' }); refreshUI(); return; } a.rng = Math.floor(Math.random() * 4e9); play(a, () => { commit(a); if (a.skill === 'rain') refreshUI(); }); };   // Arrow Rain stays aimed until Esc, even out of mana, so a right-click never turns into a shot
     if (!canCommand(u)) { hint(winner() ? 'Game over' : isStunned(u) ? 'Stunned' : u.team !== game.turn || !myTurn() ? 'Not your turn' : 'Already acted', here); return; }
     if (game.view === 'campaign') { if (u.troops && !game.pending && !(game.bt && !game.bt.saved)) campaignOrder(u, h); return; }
     const lock = tauntLock(u, here), lockedOut = (from, target) => { const p = tauntLock(u, from); return p && p !== target; };
     if (armed && armed.id === u.id) {                         // casting a skill card
       const card = CARDS[armed.skill], L = armed.lvl;
-      if ((u.mana || 0) < card.cost(L)) { hint(`Needs ${card.cost(L)} mana`, here); armed = null; refreshUI(); return; }
+      if ((u.mana || 0) < card.cost(L)) { if (armed.skill === 'rain' && u.raining) { hint('No mana left · Esc to finish', h); return; } hint(`Needs ${card.cost(L)} mana`, here); armed = null; refreshUI(); return; }
       if (card.target === 'self') { go({ type: 'skill', id: u.id, skill: armed.skill }); armed = null; return; }
       if (armed.skill === 'drive') {
         const ld = lineDir(here, h); if (!ld) { hint('Not in a straight line', h); return; }
