@@ -78,7 +78,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.3</div>
+  <div class="t">Medieval Cities · v1.4</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -879,7 +879,7 @@
   const troop = type => ({ type, hp: typeMax(type), maxHp: typeMax(type), mana: typeStat(type, 'manaMax'), manaMax: typeStat(type, 'manaMax') });
   function freshState(seq) {                     // a new campaign starts in the lobby
     return { seq, turn: 'f0', round: 1, last: null, dm: !!game.dm, battle: false, types: game.types, points: {}, view: 'lobby', campaign: null,
-      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { blessed: !!(game.opts && game.opts.blessed) } };
+      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { blessed: !!(game.opts && game.opts.blessed), fogCamp: !(game.opts && game.opts.fogCamp === false), fogBattle: !(game.opts && game.opts.fogBattle === false) } };
   }
   function freshBattleState(seq) {
     return { seq, turn: 'blue', round: 1, last: null, dm: !!game.dm, battle: false,
@@ -1563,7 +1563,7 @@
     const a = undeadArmies().find(x => x.released && !x.moved && !x.inBattle && !aiState.done.has(x.id));
     if (!a) { aiBusyUntil = Date.now() + 200; commit({ type: 'end' }); return; }
     aiState.done.add(a.id);
-    const here = [a.col, a.row], foes = [...units.filter(u => u.troops && u.team !== 'undead' && u.dying === null && !u.inBattle).map(u => ({ tile: [u.col, u.row], u })),
+    const here = [a.col, a.row], uSee = fogOn() ? visionOf('undead') : null, foes = [...units.filter(u => u.troops && u.team !== 'undead' && u.dying === null && !u.inBattle && (!uSee || uSee.has(u.row * CCOLS + u.col))).map(u => ({ tile: [u.col, u.row], u })),
       ...game.cities.filter(c => c.owner).map(c => ({ tile: [c.col, c.row], c }))].sort((x, y) => hexDist(here, x.tile) - hexDist(here, y.tile));
     let goal = null, path = null;
     for (const t of foes.slice(0, 6)) { path = campPath(here, t.tile, a); if (path && path.length) { goal = t; break; } }
@@ -1637,12 +1637,19 @@
   // ---------- battle AI: every unit walks at the nearest enemy and hits it ----------
   function aiBattleStep() {
     const tk = game.turn + ':' + game.round + ':' + (game.campaign ? game.campaign.att : ''); if (!aiState || aiState.kind !== 'battle' || aiState.turn !== tk) aiState = { kind: 'battle', turn: tk, skip: new Set() };
-    const team = game.turn, foes = units.filter(o => o.team !== team && o.dying === null && o.hp > 0 && !o.invis && !o.placing && !(o.enter > game.round));
+    const team = game.turn, allFoes = units.filter(o => o.team !== team && o.dying === null && o.hp > 0 && !o.invis && !o.placing && !(o.enter > game.round));
+    let foes = allFoes.filter(o => sees(team, [o.col, o.row]));
+    if (!foes.length && allFoes.length) {              // nothing in sight: scout towards where the enemy lined up
+      const zs = Object.entries(game.bt.zones || {}).filter(([fid]) => fid !== team && allFoes.some(o => o.team === fid)).map(([, z]) => z.a);
+      const goal = zs[0] || [BCOLS >> 1, BROWS >> 1]; foes = [{ col: goal[0], row: goal[1], hp: 99, id: null, ghost: true }]; }
     const mine = units.filter(u => u.team === team && u.dying === null && u.hp > 0 && !unitDone(u) && !aiState.skip.has(u.id) && !isStunned(u));
     if (!mine.length || !foes.length) { aiBusyUntil = Date.now() + 400; commit({ type: 'end' }); return; }
     const u = mine[0], ty = T(u), here = [u.col, u.row]; aiState.skip.add(u.id);
     const near = (from) => foes.slice().sort((a, b) => hexDist(from, [a.col, a.row]) - hexDist(from, [b.col, b.row]))[0];
     const tgt = near(here), dT = hexDist(here, [tgt.col, tgt.row]);
+    if (tgt.ghost) { const b0 = reach(u), tl = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t)); let best = null;
+      if (!u.moved) for (const t of tl) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
+      if (best && best.d < dT) { aiGo({ type: 'move', id: u.id, path: pathTo(b0, best.t) }); return; } aiBusyUntil = Date.now() + 60; return; }
     const b = reach(u), tiles = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) || (t[0] === u.col && t[1] === u.row));
     const closest = (pred) => { let best = null; for (const t of tiles) { if (!pred(t)) continue; const d = b.dist.get(key(...t)); if (!best || d < best.d) best = { t, d }; } return best; };
     const walkToward = () => { if (u.moved) return false; let best = null;
@@ -1686,7 +1693,7 @@
     if (!aiState || aiState.kind !== 'camp' || aiState.fid !== f.id) aiState = { kind: 'camp', fid: f.id, econ: false, done: new Set() };
     const pts = () => game.points[f.id] || 0, spend = n => { game.points = { ...game.points, [f.id]: pts() - n }; };
     const myCities = game.cities.filter(c => c.owner === f.id), myArmies = () => units.filter(u => u.troops && u.team === f.id && u.dying === null && !u.inBattle);
-    const freeSpots = game.cities.filter(c => !c.owner);
+    const freeSpots = game.cities.filter(c => !c.owner && knowsTile(f.id, [c.col, c.row]));
     const settleTarget = myCities.length < 4 && freeSpots.length ? freeSpots.map(c => ({ c, d: Math.min(...myCities.map(m => hexDist([m.col, m.row], [c.col, c.row])), ...myArmies().map(a => hexDist([a.col, a.row], [c.col, c.row]))) })).sort((x, y) => x.d - y.d)[0] : null;
     const reserve = settleTarget && settleTarget.d <= 16 && (f.style !== 'aggressive' || myCities.length < 2) ? FOUND_COST : 0;   // save up to found a city
     if (!aiState.econ) {                                              // buildings and recruits, all at once
@@ -1711,8 +1718,8 @@
     aiState.done.add(a.id);
     const here = [a.col, a.row], str = troopStrength(a.troops), home = myCities.slice().sort((x, y) => hexDist(here, [x.col, x.row]) - hexDist(here, [y.col, y.row]))[0];
     // pick a goal
-    const enemies = [...units.filter(u => u.troops && u.team !== f.id && u.dying === null && !u.inBattle).map(u => ({ tile: [u.col, u.row], army: u, s: troopStrength(u.troops) * (cityAt([u.col, u.row]) ? 1.3 : 1) })),
-      ...game.cities.filter(c => c.owner && c.owner !== f.id).map(c => ({ tile: [c.col, c.row], city: c, s: troopStrength(garrisonOf(c).map(troop)) * 1.15 + (units.find(u => u.troops && u.col === c.col && u.row === c.row) ? 1e9 : 0) }))];
+    const enemies = [...units.filter(u => u.troops && u.team !== f.id && u.dying === null && !u.inBattle && sees(f.id, [u.col, u.row])).map(u => ({ tile: [u.col, u.row], army: u, s: troopStrength(u.troops) * (cityAt([u.col, u.row]) ? 1.3 : 1) })),
+      ...game.cities.filter(c => c.owner && c.owner !== f.id && knowsTile(f.id, [c.col, c.row])).map(c => ({ tile: [c.col, c.row], city: c, s: troopStrength(garrisonOf(c).map(troop)) * 1.15 + (units.find(u => u.troops && u.col === c.col && u.row === c.row && sees(f.id, [c.col, c.row])) ? 1e9 : 0) }))];
     const free = game.cities.filter(c => !c.owner);
     const dist = t => hexDist(here, t);
     let goal = null, mode2 = null;
@@ -1729,6 +1736,10 @@
       const other = game.cities.filter(c => c.owner && c !== home && !connectedCities(home).includes(c)).sort((x, y) => hexDist([home.col, home.row], [x.col, x.row]) - hexDist([home.col, home.row], [y.col, y.row]))[0];
       if (other && a.troops.length <= 3) { goal = [other.col, other.row]; mode2 = 'road'; }
     }
+    if (!goal && fogOn() && a.troops.length >= (f.style === 'builder' ? 5 : 3)) {      // nothing known nearby: scout unexplored land
+      const ex = (game.explored && game.explored[f.id]) || ''; let best = null;
+      for (let i = 0; i < ex.length; i++) if (ex[i] !== '1') { const t = [i % CCOLS, (i / CCOLS) | 0]; if (impassable(t) || t[1] < WALL_ROW) continue; const d = dist(t) + Math.random() * 4; if (!best || d < best.d) best = { t, d }; }
+      if (best) { goal = best.t; mode2 = 'scout'; } }
     if (!goal && home && dist([home.col, home.row]) > 1) { goal = [home.col, home.row]; mode2 = 'home'; }   // nothing to do: go home for reinforcements
     if (!goal) { aiBusyUntil = Date.now() + 50; return; }
     if (mode2 === 'road' && pts() >= ROAD_COST + 6 + reserve && !hasRoad(here) && !cityAt(here)) { game.roads = [...(game.roads || []), key(...here)]; spend(ROAD_COST); }
@@ -2047,7 +2058,7 @@
   });
   HERO_CARDS.assassin = { passive: ['backstab', 'bloodthirst', 'flurry'], skill: ['eviscerate', 'shadowstep', 'vanish'] };
   const combo = u => hasPassive(u, 'quickdraw') || hasPassive(u, 'flurry');
-  const hiddenFromMe = u => u.team !== viewer() && (!!u.invis || (!!game.bt && game.view === 'battle' && (u.placing || (game.bt.phase !== 'fight' && placingSides().includes(viewer())))));
+  const hiddenFromMe = u => u.team !== viewer() && (!!u.invis || (game.view !== 'lobby' && fogHides(u)) || (!!game.bt && game.view === 'battle' && (u.placing || (game.bt.phase !== 'fight' && placingSides().includes(viewer())))));
   function facingDir(u) {                                    // nearest of the 6 hex directions to where the unit faces
     const a = center(u.col, u.row); let best = 0, bd = 9;
     for (let d = 0; d < 6; d++) { const b = center(...step([u.col, u.row], d)); let x = Math.abs(Math.atan2(b.x - a.x, (b.y - a.y) / SQ) - u.want); x = x % (Math.PI * 2); x = Math.min(x, Math.PI * 2 - x); if (x < bd) { bd = x; best = d; } }
@@ -2562,7 +2573,7 @@
     if (localView() === 'campaign') for (const c of game.cities) { if (!seenTile([c.col, c.row])) continue; const m = center(c.col, c.row); list.push({ city: c, p: { x: m.x + OX, y: m.y + OY - elevPx(c.col, c.row) }, sy: m.y }); }
     list.sort((a, b) => (a.sy !== undefined ? a.sy : a.u ? center(a.u.col, a.u.row).y + (a.u.path && a.u.path.length ? 0.5 : 0) : a.p.y) - (b.sy !== undefined ? b.sy : b.u ? center(b.u.col, b.u.row).y + (b.u.path && b.u.path.length ? 0.5 : 0) : b.p.y));
     for (const { u, p, city, piece, h } of list) {
-      if (u && u.troops && !seenTile([u.col, u.row])) continue;
+      if (u && hiddenFromMe(u)) continue;
       if (piece) { drawMesh(ctx, pieceMesh(piece.kind, piece.kind === 'gate' && sg().gateOpen), p.x, p.y, 0, 0, 0);
         const hp = piece.kind === 'gate' ? sg().gateHp / GATE_HP : piece.kind === 'wall' ? piece.hp / WALL_HP : 1;
         if (hp < 1) { ctx.fillStyle = 'rgba(8,10,6,0.85)'; ctx.fillRect(p.x - 16, p.y - WALL_PX - 10, 32, 5); ctx.fillStyle = '#c9a25a'; ctx.fillRect(p.x - 15, p.y - WALL_PX - 9, 30 * Math.max(0, hp), 3); }
@@ -2604,7 +2615,7 @@
       }
       ctx.restore();
     }
-    for (const { u, p } of list) { if (!u || hiddenFromMe(u) || (u.troops && !seenTile([u.col, u.row]))) continue; if (u.climb === undefined) u.climb = 0; ctx.save(); if (u.dying !== null) ctx.globalAlpha = Math.max(0, 1 - u.dying); if (u.troops) drawArmyLabel(u, p.x, p.y); else drawHealth(u, p.x, p.y); ctx.restore(); }
+    for (const { u, p } of list) { if (!u || hiddenFromMe(u)) continue; if (u.climb === undefined) u.climb = 0; ctx.save(); if (u.dying !== null) ctx.globalAlpha = Math.max(0, 1 - u.dying); if (u.troops) drawArmyLabel(u, p.x, p.y); else drawHealth(u, p.x, p.y); ctx.restore(); }
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const f of floats) {
       const pop = 1 + 0.6 * Math.max(0, 1 - f.t * 7), a = Math.max(0, 1 - Math.max(0, f.t - 0.6) / 0.4);
@@ -2923,7 +2934,7 @@
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(boardCv, 0, 0, BW, BH);
     ctx.drawImage(gridCv, 0, 0, BW, BH);
-    if (localView() === 'campaign') { drawWater(t); drawCampaignGround(t); drawFog(t); } else if (game.bt) { drawBattleZones(t); drawLadders(); }
+    if (localView() === 'campaign') { drawWater(t); drawCampaignGround(t); drawFog(t); } else if (game.bt) { drawBattleZones(t); drawLadders(); if (game.bt.phase === 'fight') drawFog(t); }
 
     if (sel) {
       ctx.beginPath();
@@ -3078,7 +3089,7 @@
   }
   function commit(action) {
     game.seq += 1;
-    if (game.view === 'campaign') markExplored();
+    if (game.view === 'campaign' && fogOn()) markExplored();
     let volley = null;
     if (action.type === 'end') {
       volley = endTurnLocal();
@@ -3173,6 +3184,8 @@
       ${rows}
       <div class="lsub">${n} faction${n === 1 ? '' : 's'} · 10 city spots · each faction starts with 1 city and 1 army of 1 swordsman.</div>
       <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 2 passive points a turn instead of 1</div>
+      ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
+        return `<div class="lsub">${host ? `<button id="${id}" class="${on ? 'on' : ''}">${lab}: ${on ? 'On' : 'Off'}</button>` : `${lab}: ${on ? 'On' : 'Off'}`} · ${txt} · the AI plays by the same fog</div>`; }).join('')}
       ${host ? `<button id="lstart" ${n < 2 ? 'disabled' : ''}>Start the campaign</button>` : '<div class="lsub">Waiting for the host to start…</div>'}`;
     if (lobbyEl.dataset.h !== html) { lobbyEl.dataset.h = html; lobbyEl.innerHTML = html; }
     lobbyEl.style.display = 'block';
@@ -3180,6 +3193,7 @@
   lobbyEl.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || game.view !== 'lobby') return;
     if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
+    if ((b.id === 'lfogc' || b.id === 'lfogb') && isHost()) { const k = b.id === 'lfogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: !!(game.opts && game.opts[k] === false) }; commit({ type: 'setup' }); return; }
     if (b.id === 'lbless' && isHost()) { game.opts = { ...(game.opts || {}), blessed: !(game.opts && game.opts.blessed) }; commit({ type: 'setup' }); return; }
     if (b.dataset.kind && isHost()) { const [i, k] = b.dataset.kind.split(':'); game.factions[i].kind = k; commit({ type: 'setup' }); }
     if (b.dataset.color) { const [i, k] = b.dataset.color.split(':'), f = game.factions[i], p = PALETTE.find(x => x.key === k);
@@ -3302,19 +3316,42 @@
   }
   // right-click orders for an army on the campaign map
   // fog: every realm only sees land its armies and cities have been near
-  const seenTile = h => { if (localView() !== 'campaign' || !game.explored) return true; const ex = game.explored[viewer()]; return !ex || ex[h[1] * CCOLS + h[0]] === '1'; };
+  const SIGHT = 5;
+  const fogOn = () => game.view === 'campaign' ? !(game.opts && game.opts.fogCamp === false) : game.view === 'battle' ? !(game.opts && game.opts.fogBattle === false) : false;
+  let visCache = { k: '', m: new Map() };
+  function visionOf(fid) {                           // tiles a realm can see right now (a Set of keys)
+    const camp = game.view === 'campaign', cols = camp ? CCOLS : BCOLS, rows = camp ? CROWS : BROWS;
+    const eyes = units.filter(u => u.team === fid && u.dying === null && (camp ? u.troops : u.hp > 0 && !(u.enter > game.round))).map(u => [u.col, u.row]);
+    if (camp) for (const c of game.cities) if (c.owner === fid) eyes.push([c.col, c.row]);
+    const k = game.view + '|' + fid + '|' + eyes.map(e => e.join(',')).join(';');
+    if (visCache.k !== game.view + game.seq) visCache = { k: game.view + game.seq, m: new Map() };
+    if (visCache.m.has(k)) return visCache.m.get(k);
+    const set = new Set();
+    for (const [c0, r0] of eyes) for (let r = Math.max(0, r0 - SIGHT); r <= Math.min(rows - 1, r0 + SIGHT); r++) for (let c = Math.max(0, c0 - SIGHT - 1); c <= Math.min(cols - 1, c0 + SIGHT + 1); c++) if (hexDist([c0, r0], [c, r]) <= SIGHT) set.add(r * cols + c);
+    visCache.m.set(k, set); return set;
+  }
+  // can realm fid see this tile now? (no fog, or no realm = sees everything)
+  const sees = (fid, h) => { if (!fid || !fogOn() || (localView() !== game.view)) return true; const f = faction(fid); if (f && f.undead && game.view === 'campaign') return true;
+    return visionOf(fid).has(h[1] * (game.view === 'campaign' ? CCOLS : BCOLS) + h[0]); };
+  const fogHides = u => !!u && u.team !== viewer() && !!viewer() && (game.view === 'campaign' ? !!u.troops : true) && !sees(viewer(), [u.col, u.row]);
+  const seenTile = h => { if (localView() !== 'campaign' || !game.explored || !fogOn()) return true; const ex = game.explored[viewer()]; return !ex || ex[h[1] * CCOLS + h[0]] === '1'; };
+  const knowsTile = (fid, h) => { if (game.view !== 'campaign' || !fogOn() || !game.explored) return true; const ex = game.explored[fid]; return !ex || ex[h[1] * CCOLS + h[0]] === '1'; };
   function markExplored() {
     if (game.view !== 'campaign' || !game.factions) return;
     game.explored = game.explored || {};
     for (const f of game.factions) { if (f.undead) continue; const a = (game.explored[f.id] || '0'.repeat(CCOLS * CROWS)).split('');
-      const eyes = [...units.filter(u => u.team === f.id && u.troops).map(u => [u.col, u.row, 3]), ...game.cities.filter(c => c.owner === f.id).map(c => [c.col, c.row, 3])];
+      const eyes = [...units.filter(u => u.team === f.id && u.troops).map(u => [u.col, u.row, SIGHT]), ...game.cities.filter(c => c.owner === f.id).map(c => [c.col, c.row, SIGHT])];
       for (const [c0, r0, rad] of eyes) for (let r = Math.max(0, r0 - rad); r <= Math.min(CROWS - 1, r0 + rad); r++) for (let c = Math.max(0, c0 - rad - 1); c <= Math.min(CCOLS - 1, c0 + rad + 1); c++) if (hexDist([c0, r0], [c, r]) <= rad) a[r * CCOLS + c] = '1';
       game.explored[f.id] = a.join(''); }
   }
   function drawFog(t) {
-    const ex = game.explored && game.explored[viewer()]; if (!ex) return;
+    if (!fogOn() || !viewer()) return;
+    if (game.view === 'battle') { const v = visionOf(viewer());
+      for (let r = 0; r < BROWS; r++) for (let c = 0; c < BCOLS; c++) if (!v.has(r * BCOLS + c)) { ctx.beginPath(); hexPath(c, r, ctx); ctx.fillStyle = `rgba(14,16,24,${0.5 + 0.03 * Math.sin(t * 0.6 + c * 0.7 + r * 0.4)})`; ctx.fill(); }
+      return; }
+    const ex = game.explored && game.explored[viewer()]; if (!ex) return; const v = visionOf(viewer());
     for (let r = 0; r < CROWS; r++) for (let c = 0; c < CCOLS; c++) {
-      if (ex[r * CCOLS + c] === '1') { if (!nbIn(c, r, CCOLS, CROWS).some(n => ex[n[1] * CCOLS + n[0]] !== '1')) continue; ctx.beginPath(); hexPath(c, r, ctx); ctx.fillStyle = 'rgba(16,18,22,0.32)'; ctx.fill(); continue; }
+      if (ex[r * CCOLS + c] === '1') { if (v.has(r * CCOLS + c)) continue; ctx.beginPath(); hexPath(c, r, ctx); ctx.fillStyle = 'rgba(16,18,22,0.42)'; ctx.fill(); continue; }
       ctx.beginPath(); hexPath(c, r, ctx); ctx.fillStyle = `rgba(16,18,22,${0.9 + 0.04 * Math.sin(t * 0.6 + c * 0.7 + r * 0.4)})`; ctx.fill();
       ctx.strokeStyle = 'rgba(16,18,22,0.9)'; ctx.lineWidth = 3; ctx.stroke(); }
   }
