@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.11</div>
+  <div class="t">Medieval Cities · v1.12</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -780,6 +780,9 @@
   // ---------- Units & game state ----------
   const TEAM = { blue: [52, 86, 146], red: [152, 30, 42] }, BASE_TEAM = { ...TEAM };
   const poss = n => n.endsWith('s') ? n + "'" : n + "'s";
+  // co-op: every human realm is one side and every AI realm the other (the undead fight everyone)
+  const sideOf = fid => { const f = typeof faction === 'function' && game && game.factions ? faction(fid) : null; if (!f || f.undead || !(game.opts && game.opts.coop)) return fid; return f.ai ? 'ai' : 'humans'; };
+  const hostile = (a, b) => a !== b && sideOf(a) !== sideOf(b);
   const teamName = t => { const f = typeof faction === 'function' && faction(ownerOfTeam(t)); if (f) return f.name; return game.dm ? (t === 'blue' ? 'Heroes' : 'Dungeon Master') : (t === 'blue' ? 'Blue' : 'Red'); };
   // Campaign army marker: a war banner on a pole
   function buildFlag(team) {
@@ -885,7 +888,7 @@
   const troop = type => ({ type, hp: typeMax(type), maxHp: typeMax(type), mana: typeStat(type, 'manaMax'), manaMax: typeStat(type, 'manaMax') });
   function freshState(seq) {                     // a new campaign starts in the lobby
     return { seq, turn: 'f0', round: 1, last: null, dm: !!game.dm, battle: false, types: game.types, points: {}, view: 'lobby', campaign: null,
-      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { blessed: !!(game.opts && game.opts.blessed), fogCamp: !(game.opts && game.opts.fogCamp === false), fogBattle: !(game.opts && game.opts.fogBattle === false) } };
+      factions: defaultFactions(), cities: [], roads: [], terrain: null, sides: null, pending: null, cwinner: null, units: [], opts: { coop: !!(game.opts && game.opts.coop), blessed: !!(game.opts && game.opts.blessed), fogCamp: !(game.opts && game.opts.fogCamp === false), fogBattle: !(game.opts && game.opts.fogBattle === false) } };
   }
   function freshBattleState(seq) {
     return { seq, turn: 'blue', round: 1, last: null, dm: !!game.dm, battle: false,
@@ -1159,17 +1162,17 @@
   }
   // who may see what: buildings are visible to the owner and to anyone owning a city directly linked to it by road
   function seesCity(city, fid = viewer()) {
-    if (!city.owner || city.owner === fid) return true;
+    if (!city.owner || !hostile(city.owner, fid)) return true;
     const comp = roadComponents(); return (game.cities || []).some(o => o.owner === fid && connectedCities(o, comp).includes(city));
   }
-  const seesArmy = (u, fid = viewer()) => u.team === fid;
+  const seesArmy = (u, fid = viewer()) => !hostile(u.team, fid);
   const aliveFactions = () => (game.factions || []).filter(f => f.alive);
   function checkDefeats() {
     for (const f of game.factions || []) if (f.alive && !f.undead && !(game.cities || []).some(c => c.owner === f.id) && !units.some(u => u.troops && u.team === f.id && u.dying === null)) {
       f.alive = false; toast(`${f.name} has been defeated`);
     }
     const al = aliveFactions().filter(f => !f.undead), ud = game.undead;          // the last realm must also destroy the undead
-    if (!game.cwinner && game.view === 'campaign') { if (!al.length) game.cwinner = 'undead'; else if (al.length === 1 && (!ud || (ud.final && !undeadArmies().length && !ud.pool.length))) game.cwinner = al[0].id; }
+    if (!game.cwinner && game.view === 'campaign') { if (!al.length) game.cwinner = 'undead'; else if (new Set(al.map(f => sideOf(f.id))).size === 1 && (!ud || (ud.final && !undeadArmies().length && !ud.pool.length))) game.cwinner = al[0].id; }
   }
   // ---------- lobby ----------
   function defaultFactions() {
@@ -1274,7 +1277,7 @@
     for (const a of asks) { const f = faction(a.fid); if (f && f.ai) a.ans = aiWantsToJoin(f, a); }
     commit({ type: 'battle-ask' }); maybeBeginBattle();
   }
-  function aiWantsToJoin(f, a) { if (f.undead) return true; if (f.id === game.bt.initiator || f.id === game.bt.defender) return true; return Math.random() < ({ aggressive: 0.6, balanced: 0.3, builder: 0.1 })[f.style || 'balanced']; }
+  function aiWantsToJoin(f, a) { if (f.undead) return true; if (f.id === game.bt.initiator || f.id === game.bt.defender) return true; if (game.opts && game.opts.coop && (!hostile(f.id, game.bt.initiator) || !hostile(f.id, game.bt.defender))) return true; return Math.random() < ({ aggressive: 0.6, balanced: 0.3, builder: 0.1 })[f.style || 'balanced']; }
   function answerAsk(askIdx, yes, seat) {
     const b = bt(); if (!b || b.phase !== 'ask') return; const a = b.asks[askIdx]; if (!a || a.ans !== null) return;
     if (seat && seat !== a.fid) return;
@@ -1404,11 +1407,11 @@
     if (game.undead) game.undead.pool.push(...alive.filter(u => u.team === 'undead' && rost.some(r => r.id === u.id && r.team !== 'undead')).map(u => u.type));   // the turned march with the dead
     units = game.campaign.armies.map(runtimeUnit);
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
-      if (j.fid === w && (j.dist <= 1 || j.spawned)) a.troops = [...survivorsOf((bySrc[j.id] || []).filter(u => u.team === j.fid)), ...a.troops.slice(j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS)];
-      else if (j.fid !== w && (j.dist <= 1 || j.spawned)) a.dead = true; }
+      if (!hostile(j.fid, w) && (j.dist <= 1 || j.spawned)) a.troops = [...survivorsOf((bySrc[j.id] || []).filter(u => u.team === j.fid)), ...a.troops.slice(j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS)];
+      else if (hostile(j.fid, w) && (j.dist <= 1 || j.spawned)) a.dead = true; }
     for (const u of units) if (u.inBattle === b.id) u.inBattle = null;
     const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity);
-    if (sc && sc.owner !== w) { const att = units.find(u => u.team === w && !u.dead && b.joined.some(j => j.id === u.id)); if (att && !unitAt([sc.col, sc.row])) { att.col = sc.col; att.row = sc.row; }
+    if (sc && hostile(sc.owner, w)) { const att = units.find(u => u.team === w && !u.dead && b.joined.some(j => j.id === u.id)); if (att && !unitAt([sc.col, sc.row])) { att.col = sc.col; att.row = sc.row; }
       game.pending = { type: 'capture', city: sc.id, by: w, army: att ? att.id : null }; }
     units = units.filter(u => !u.dead && !(u.troops && !u.troops.length));
     const hadInterlude = b.interludes > 0; game.round = game.campaign.round; game.turn = b.P;
@@ -1420,14 +1423,15 @@
   function autoResolveBattle() {                      // nobody human involved: strength with some luck decides
     const b = bt(), list = {};
     for (const j of b.joined) { const src = j.kind === 'army' ? units.find(u => u.id === j.id) : game.cities.find(c => c.id === j.id); if (!src) continue;
-      const tr = j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : garrisonOf(src).map(troop); list[j.fid] = (list[j.fid] || 0) + troopStrength(tr) * (j.kind === 'city' ? 1.15 * (src.wall && src.buildings.includes('nightswatch') && b.joined.some(x => x.fid === 'undead') ? 2 : 1) : 1); }
+      const tr = j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : garrisonOf(src).map(troop); list[sideOf(j.fid)] = (list[sideOf(j.fid)] || 0) + troopStrength(tr) * (j.kind === 'city' ? 1.15 * (src.wall && src.buildings.includes('nightswatch') && b.joined.some(x => x.fid === 'undead') ? 2 : 1) : 1); }
     let w = null, best = -1; for (const [f, s] of Object.entries(list)) { const v = s * (0.75 + Math.random() * 0.5); if (v > best) { best = v; w = f; } }
+    const wSide = w; w = (b.joined.find(j => sideOf(j.fid) === wSide) || {}).fid || w; list[w] = list[wSide];
     const total = Object.values(list).reduce((a, x) => a + x, 0), ratio = Math.min(0.9, (total - list[w]) / Math.max(1, list[w]) * 0.7);
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
-      if (j.fid === w) { const keep = a.troops.slice().sort((x, y) => troopStrength([y]) - troopStrength([x])); const k2 = Math.max(1, Math.round(keep.length * (1 - ratio))); if (j.fid !== 'undead') recordDeaths(keep.slice(k2).map(t => t.type)); a.troops = keep.slice(0, k2); }
+      if (!hostile(j.fid, w)) { const keep = a.troops.slice().sort((x, y) => troopStrength([y]) - troopStrength([x])); const k2 = Math.max(1, Math.round(keep.length * (1 - ratio))); if (j.fid !== 'undead') recordDeaths(keep.slice(k2).map(t => t.type)); a.troops = keep.slice(0, k2); }
       else { if (j.fid !== 'undead') recordDeaths(a.troops.map(t => t.type)); a.dead = true; } }
     const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity);
-    if (sc && sc.owner !== w) { const att = units.find(u => u.team === w && !u.dead && b.joined.some(j => j.id === u.id)); if (att) { att.col = sc.col; att.row = sc.row; } game.pending = { type: 'capture', city: sc.id, by: w, army: att ? att.id : null }; }
+    if (sc && hostile(sc.owner, w)) { const att = units.find(u => u.team === w && !u.dead && b.joined.some(j => j.id === u.id)); if (att) { att.col = sc.col; att.row = sc.row; } game.pending = { type: 'capture', city: sc.id, by: w, army: att ? att.id : null }; }
     units = units.filter(u => !u.dead && !(u.troops && !u.troops.length)); game.bt = null;
     checkDefeats(); commit({ type: 'ai' }); resolvePendingAI();
   }
@@ -1659,7 +1663,7 @@
   // ---------- battle AI: every unit walks at the nearest enemy and hits it ----------
   function aiBattleStep() {
     const tk = game.turn + ':' + game.round + ':' + (game.campaign ? game.campaign.att : ''); if (!aiState || aiState.kind !== 'battle' || aiState.turn !== tk) aiState = { kind: 'battle', turn: tk, skip: new Set() };
-    const team = game.turn, allFoes = units.filter(o => o.team !== team && o.dying === null && o.hp > 0 && !o.invis && !o.placing && !(o.enter > game.round));
+    const team = game.turn, allFoes = units.filter(o => hostile(o.team, team) && o.dying === null && o.hp > 0 && !o.invis && !o.placing && !(o.enter > game.round));
     let foes = allFoes.filter(o => sees(team, [o.col, o.row]));
     if (!foes.length && allFoes.length) {              // nothing in sight: scout towards where the enemy lined up
       const zs = Object.entries(game.bt.zones || {}).filter(([fid]) => fid !== team && allFoes.some(o => o.team === fid)).map(([, z]) => z.a);
@@ -1683,7 +1687,7 @@
       if (!u.moved && !u.attacked && !noMoveShoot(u)) { const s = closest(t => hexDist(t, [tgt.col, tgt.row]) <= ty.range); if (s) { aiGo({ type: 'shoot', id: u.id, path: pathTo(b, s.t), target: tgt.id }); return; } }
       if (walkToward()) return;
     } else if (ty.ranged === 'line' || ty.ranged === 'pierce') {
-      if (!u.moved && !u.attacked) for (let d = 0; d < 6; d++) { const f = firstInLine(here, d, ty.range); if (f && f.unit.team !== team) { aiGo({ type: ty.ranged === 'line' ? 'bolt' : 'pierce', id: u.id, dir: d }); return; } }
+      if (!u.moved && !u.attacked) for (let d = 0; d < 6; d++) { const f = firstInLine(here, d, ty.range); if (f && hostile(f.unit.team, team)) { aiGo({ type: ty.ranged === 'line' ? 'bolt' : 'pierce', id: u.id, dir: d }); return; } }
       if (walkToward()) return;
     } else if (ty.ranged === 'mark') {
       if (!u.moved && !u.attacked && dT <= ty.range) { aiGo({ type: 'mark', id: u.id, col: tgt.col, row: tgt.row }); return; }
@@ -1740,8 +1744,8 @@
     aiState.done.add(a.id);
     const here = [a.col, a.row], str = troopStrength(a.troops), home = myCities.slice().sort((x, y) => hexDist(here, [x.col, x.row]) - hexDist(here, [y.col, y.row]))[0];
     // pick a goal
-    const enemies = [...units.filter(u => u.troops && u.team !== f.id && u.dying === null && !u.inBattle && sees(f.id, [u.col, u.row])).map(u => ({ tile: [u.col, u.row], army: u, s: troopStrength(u.troops) * (cityAt([u.col, u.row]) ? 1.3 : 1) })),
-      ...game.cities.filter(c => c.owner && c.owner !== f.id && knowsTile(f.id, [c.col, c.row])).map(c => ({ tile: [c.col, c.row], city: c, s: troopStrength(garrisonOf(c).map(troop)) * 1.15 + (units.find(u => u.troops && u.col === c.col && u.row === c.row && sees(f.id, [c.col, c.row])) ? 1e9 : 0) }))];
+    const enemies = [...units.filter(u => u.troops && hostile(u.team, f.id) && u.dying === null && !u.inBattle && sees(f.id, [u.col, u.row])).map(u => ({ tile: [u.col, u.row], army: u, s: troopStrength(u.troops) * (cityAt([u.col, u.row]) ? 1.3 : 1) })),
+      ...game.cities.filter(c => c.owner && hostile(c.owner, f.id) && knowsTile(f.id, [c.col, c.row])).map(c => ({ tile: [c.col, c.row], city: c, s: troopStrength(garrisonOf(c).map(troop)) * 1.15 + (units.find(u => u.troops && u.col === c.col && u.row === c.row && sees(f.id, [c.col, c.row])) ? 1e9 : 0) }))];
     const free = game.cities.filter(c => !c.owner);
     const dist = t => hexDist(here, t);
     let goal = null, mode2 = null;
@@ -1771,7 +1775,7 @@
     const adjGoal = path.length >= 2 ? path[path.length - 2] : here, atGoalNext = path.length === 1 || (stop === path.length - 2);
     const walk = stop >= 0 ? pathTo(b, path[stop]) : [];
     const after = () => {
-      if (atGoalNext && mode2 === 'attack') { const tgtU = unitAt(goal), c = cityAt(goal); engage(a, tgtU && tgtU.troops && tgtU.team !== f.id ? tgtU : c); return; }
+      if (atGoalNext && mode2 === 'attack') { const tgtU = unitAt(goal), c = cityAt(goal); engage(a, tgtU && tgtU.troops && hostile(tgtU.team, f.id) ? tgtU : c); return; }
       if (atGoalNext && mode2 === 'settle' && pts() >= FOUND_COST) { const c = cityAt(goal); if (c && !c.owner) { c.owner = f.id; c.buildings = []; c.acted = true; spend(FOUND_COST); commit({ type: 'ai' }); return; } }
       if (mode2 === 'road' && pts() >= ROAD_COST + 6 + reserve && !hasRoad([a.col, a.row]) && !cityAt([a.col, a.row])) { game.roads = [...(game.roads || []), key(a.col, a.row)]; spend(ROAD_COST); commit({ type: 'ai' }); }
     };
@@ -1814,7 +1818,7 @@
   const busy = () => !!afterIdle || projectiles.length > 0 || units.some(u => u.path || u.atk || u.dying !== null);
   const faceToward = (u, o) => { const a = center(u.col, u.row), b = center(o.col, o.row); u.want = Math.atan2(b.x - a.x, (b.y - a.y) / SQ); };
   const winner = () => { if (game.view !== 'battle') return null;   // the players decide who wins the campaign
-    if (game.dm && !game.battle) return null; const t = new Set(units.filter(u => u.dying === null).map(u => u.team)); return t.size === 1 ? [...t][0] : null; };
+    if (game.dm && !game.battle) return null; const t = new Set(units.filter(u => u.dying === null).map(u => u.team)); const s2 = new Set([...t].map(sideOf)); return s2.size === 1 ? [...t][0] : null; };
 
   // hex neighbours & pathfinding (odd-q offset <-> axial)
   const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
@@ -1887,7 +1891,7 @@
   // Overwatch: a ranger shoots every enemy that moves through her cone (once per move), pausing it for the shot
   function overwatchCheck(u, h) {
     if (u.push || u.pull || u.dying !== null || !u.watchHit) return;
-    for (const w of units) if (w.invis && w.team !== u.team && w.dying === null && w.hp > 0 && hexDist(h, [w.col, w.row]) <= 1) {
+    for (const w of units) if (w.invis && hostile(w.team, u.team) && w.dying === null && w.hp > 0 && hexDist(h, [w.col, w.row]) <= 1) {
       const L = w.invis.lvl; breakInvis(w);
       if (L >= 5 && !w.atk) {                            // Vanish Lv 5: the assassin strikes whoever found him
         u.wait = (u.wait || 0) + 1; faceToward(w, u); floatOn(w, 'AMBUSH!', '#ff6a8a', 18, 17);
@@ -1898,7 +1902,7 @@
       }
     }
     if (u.invis) return;
-    for (const w of units) if (w.watch && w.team !== u.team && w.dying === null && w.hp > 0 && !u.watchHit.has(w.id) && coneTiles(w).has(key(...h))) {
+    for (const w of units) if (w.watch && hostile(w.team, u.team) && w.dying === null && w.hp > 0 && !u.watchHit.has(w.id) && coneTiles(w).has(key(...h))) {
       u.watchHit.add(w.id); u.wait = (u.wait || 0) + 1;
       const dmg = CARDS.overwatch.dmg(w.watch.lvl);
       fire('arrow', shotFrom(w), shotAt(u), () => { dealDamage(u, rangedDmg(dmg, u), { src: w, projectile: true }); u.wait -= 1; if (u.hp <= 0) { u.path = null; u.then = null; } });
@@ -1945,8 +1949,8 @@
   function pushUnit(u, h) { if (T(u).big) return; u.path = [h]; u.segT = 0; u.push = true; u.then = null; }
   // anti-charge: lancer charging a spear/halberd, or passing within 1 (spear) / 2 (halberd) tiles of one, gets stunned
   function antiCharge(u, tiles, tgt) {
-    if (tgt && antiCavOf(tgt) && tgt.team !== u.team) return true;
-    const foes = units.filter(o => o.team !== u.team && o.dying === null && o.hp > 0 && antiCavOf(o));
+    if (tgt && antiCavOf(tgt) && hostile(tgt.team, u.team)) return true;
+    const foes = units.filter(o => hostile(o.team, u.team) && o.dying === null && o.hp > 0 && antiCavOf(o));
     return tiles.some(h => foes.some(o => hexDist(h, [o.col, o.row]) <= antiCavOf(o)));
   }
   // projectiles: arrows arc high, bolts fly straight, boulders arc very high
@@ -2120,7 +2124,7 @@
     const mult = hasPassive(u, 'backstab') ? backMult(t, [u.col, u.row]) : 1;
     if (mult > 1) floatOn(t, mult === 3 ? 'BACKSTAB ×3' : 'BACKSTAB ×2', '#ff6a8a', 18, 16);
     const wasAlive = t.hp > 0, r = dealDamage(t, (base + bonus) * mult, { melee: true, src: u });
-    if (wasAlive && t.hp <= 0 && t.team !== u.team && hasPassive(u, 'bloodthirst') && u.mana < u.manaMax) { u.mana = u.manaMax; floatOn(u, 'MANA FULL', '#8fb8ff', 0, 15); }
+    if (wasAlive && t.hp <= 0 && hostile(t.team, u.team) && hasPassive(u, 'bloodthirst') && u.mana < u.manaMax) { u.mana = u.manaMax; floatOn(u, 'MANA FULL', '#8fb8ff', 0, 15); }
     return r;
   }
   // Warrior cards: the passive is his weapon (the model changes with it)
@@ -2157,7 +2161,7 @@
     if (antiCavOf(u) && (isMounted(t) || T(t).big)) d *= 2;
     const alive = t.hp > 0, r = dealDamage(t, d, { melee: true, src: u });
     if (basic && hasPassive(u, 'battleaxe') && !r.blocked && t.hp > 0) bleedUnit(t, 1, 2);
-    if (alive && t.hp <= 0 && t.team !== u.team && hasPassive(u, 'dualaxes')) refreshTurn(u);
+    if (alive && t.hp <= 0 && hostile(t.team, u.team) && hasPassive(u, 'dualaxes')) refreshTurn(u);
   }
   const bleedOf = t => { for (const o of units) for (const d of (o.dots || [])) if (d.kind === 'bleed' && ((o === t && !d.guardOf) || d.guardOf === t.id)) return d; return null; };
   function bleedUnit(t, dmg, turns) {                                    // re-applying refreshes the bleed
@@ -2183,7 +2187,7 @@
     if (canMoveNow(u)) return true;
     const ty = T(u), r = ty.ranged === 'arc' ? ty.range : (ty.reach || 1);
     const healer = hasPassive(u, 'mender');
-    const foeIn = units.some(o => o.dying === null && o.hp > 0 && (healer ? o !== u && (o.team === u.team ? o.hp < o.maxHp : !!T(o).undead) : o.team !== u.team) && hexDist([u.col, u.row], [o.col, o.row]) <= r);
+    const foeIn = units.some(o => o.dying === null && o.hp > 0 && (healer ? o !== u && (o.team === u.team ? o.hp < o.maxHp : !!T(o).undead) : hostile(o.team, u.team)) && hexDist([u.col, u.row], [o.col, o.row]) <= r);
     if (canShootNow(u) && (!strict || foeIn)) return true;
     if (!strict && u.cards && u.cards.skills.some(c => c && canCastCard(u, c) && (u.mana || 0) >= CARDS[c.id].cost(c.lvl))) return true;
     return canSkillNow(u) && (!strict || (u.cards && u.cards.skills.some(c => c && (u.mana || 0) >= CARDS[c.id].cost(c.lvl))));
@@ -2231,7 +2235,7 @@
   function dealDamage(t, amt, { physical = true, melee = false, src = null, aoe = false, projectile = false } = {}) {
     if (!t || t.dying !== null || t.hp <= 0) return { blocked: true, dealt: 0 };
     if (t.climb) amt *= 2;                                // on a ladder: double damage
-    if (src && (src.turner || T(src).turner) && t.team !== src.team && !T(t).structure && !T(t).big && t.team !== 'undead') {   // the King/Queen and their thralls turn the living
+    if (src && (src.turner || T(src).turner) && hostile(t.team, src.team) && !T(t).structure && !T(t).big && t.team !== 'undead') {   // the King/Queen and their thralls turn the living
       t.team = src.team; t.turner = true; t.mesh = meshFor(t.type, t.team); t.flash = 1; floatOn(t, 'TURNED!', '#9fd8ff', 0, 18); return { blocked: false, dealt: 0 }; }
     if (t.team === 'undead' && src && game.bt && game.bt.siegeCity) { const wc = game.cities.find(c => c.id === game.bt.siegeCity); if (wc && wc.wall && wc.buildings.includes('nightswatch') && src.team === wc.owner) amt *= 2; }
     const g = t.guard && units.find(x => x.id === t.guard.by && x.dying === null && x.hp > 0);
@@ -2273,7 +2277,7 @@
   }
   // Challenge: an enemy standing inside a paladin's taunt area may only target that paladin
   function tauntLock(u, from) {
-    return units.find(p => p.team !== u.team && p.tauntR > 0 && p.dying === null && p.hp > 0 && hexDist(from, [p.col, p.row]) <= p.tauntR) || null;
+    return units.find(p => hostile(p.team, u.team) && p.tauntR > 0 && p.dying === null && p.hp > 0 && hexDist(from, [p.col, p.row]) <= p.tauntR) || null;
   }
 
   // play one action (your own click AND the other player's replay), then call done when everything settles
@@ -2343,7 +2347,7 @@
           const tg = ts[0] || null, d = typeof a.dir === 'number' ? a.dir : null;
           if (tg) faceToward(u, tg);
           u.atk = tg && { target: tg, t: 0, hit: false, onHit: () => {
-            if (hasPassive(u, 'halberd') && d !== null) { for (const h of halberdTiles([u.col, u.row], d)) { const o = liveUnitAt(h); if (o && o.team !== u.team) warriorHit(u, o); } }
+            if (hasPassive(u, 'halberd') && d !== null) { for (const h of halberdTiles([u.col, u.row], d)) { const o = liveUnitAt(h); if (o && hostile(o.team, u.team)) warriorHit(u, o); } }
             else warriorHit(u, tg); } };
         } else if (ts.length && u.type === 'assassin') { breakInvis(u); faceToward(u, ts[0]); u.atk = { target: ts[0], t: 0, hit: false, onHit: () => assassinHit(u, ts[0], u.dmg) }; }
         else if (ts.length) { faceToward(u, ts[0]); u.atk = { target: ts[0], t: 0, hit: false, onHit: () => ts.forEach(t => dealDamage(t, meleeDmg(u, t), { melee: true, src: u })) }; }
@@ -2355,7 +2359,7 @@
           fire('orb', shotFrom(u), shotAt(t), () => {
             if (healer) { healUnit(t, 3, u); return; }
             const r = dealDamage(t, baseDmg(u), { physical: false, src: u });
-            if (hasPassive(u, 'siphon') && t.team !== u.team && !r.blocked && u.mana < u.manaMax) { u.mana += 1; floatOn(u, '+1 mana', '#8fb8ff', 0, 15); }
+            if (hasPassive(u, 'siphon') && hostile(t.team, u.team) && !r.blocked && u.mana < u.manaMax) { u.mana += 1; floatOn(u, '+1 mana', '#8fb8ff', 0, 15); }
           });
           projectiles[projectiles.length - 1].color = healer ? '140,255,170' : '170,150,255';
         } else if (t && t.dying === null) { faceToward(u, t); fire('arrow', shotFrom(u), shotAt(t), () => dealDamage(t, t.col === u.col && t.row === u.row ? 1 : rangedDmg(baseDmg(u), t), { src: u, projectile: true })); }   // same wall tile: only 1
@@ -2400,7 +2404,7 @@
       const dest = [a.col, a.row], foe = liveUnitAt(dest);
       let stop = dest;
       if (foe) { let best = null; for (const n of [...neighbors(...dest)]) { const o = unitAt(n); if ((o && o !== u) || blockedTile(n)) continue; const dd = hexDist(n, [u.col, u.row]); if (!best || dd < best.d) best = { n, d: dd }; } stop = best ? best.n : null; }
-      const hit = () => { u.fast = false; if (foe && foe.team !== u.team) { faceToward(u, foe); u.atk = { target: foe, t: 0, hit: false, onHit: () => warriorHit(u, foe) }; } };
+      const hit = () => { u.fast = false; if (foe && hostile(foe.team, u.team)) { faceToward(u, foe); u.atk = { target: foe, t: 0, hit: false, onHit: () => warriorHit(u, foe) }; } };
       faceTile(u, dest); floatOn(u, 'DASH!', '#ffd27a');
       if (stop && (stop[0] !== u.col || stop[1] !== u.row)) { u.fast = true; moveUnit(u, [stop], hit); } else hit();
       return true;
@@ -2421,7 +2425,7 @@
       return true;
     }
     if (sk === 'shadowstep') {                          // appear right behind the target
-      if (!tgt) return true; const dest = behindTile(tgt), foe = tgt.team !== u.team;
+      if (!tgt) return true; const dest = behindTile(tgt), foe = hostile(tgt.team, u.team);
       if (foe) breakInvis(u);
       const p0 = upos(u); effects.push({ x: p0.x, y: p0.y, t: 0, color: '150,110,220', r: 40 });
       u.col = dest[0]; u.row = dest[1]; if (u === selUnit) sel = [u.col, u.row]; faceToward(u, tgt);
@@ -2859,7 +2863,7 @@
     if (!tgt || tgt.team === u.team || hiddenFromMe(tgt)) return;
     if (u.type === 'warrior' && canCommand(u) && !u.attacked) { const d = warriorAim(u, here, hover);
       if (d !== null) { const tiles = hasPassive(u, 'halberd') ? halberdTiles(here, d) : [hover];
-        for (const hh of tiles) { tintHex(hh, 'rgba(245,105,75,0.18)'); const o = liveUnitAt(hh); if (o && o.team !== u.team && !hiddenFromMe(o)) {
+        for (const hh of tiles) { tintHex(hh, 'rgba(245,105,75,0.18)'); const o = liveUnitAt(hh); if (o && hostile(o.team, u.team) && !hiddenFromMe(o)) {
           let dm = baseDmg(u); if (hasPassive(u, 'dualswords') && u.dsMark && u.dsMark.id === o.id) dm += dsBonus(u.dsMark.lvl); if (antiCavOf(u) && isMounted(o)) dm *= 2; label(o, `-${dm}`); } }
         return; } }
     if (u.type === 'assassin' && hexDist(here, hover) === 1 && canCommand(u) && !u.attacked) { const m = hasPassive(u, 'backstab') ? backMult(tgt, here) : 1; label(tgt, `-${(u.dmg + (u.ambush || 0)) * m}${m > 1 ? ` (×${m})` : ''}`); return; }
@@ -2876,7 +2880,7 @@
     if (!ty.ranged) {
       const from = hexDist(here, hover) <= (ty.reach || 1) ? here : null;
       label(tgt, `-${meleeDmg(u, tgt)}`);
-      if (from && ty.reach === 2 && hexDist(here, hover) === 2 && ld) { const mo = liveUnitAt(step(here, ld.d)); if (mo && mo.team !== u.team) { outlineHex([mo.col, mo.row], 'rgba(255,70,50,0.95)', 4); label(mo, `-${meleeDmg(u, mo)} thrust`); } }
+      if (from && ty.reach === 2 && hexDist(here, hover) === 2 && ld) { const mo = liveUnitAt(step(here, ld.d)); if (mo && hostile(mo.team, u.team)) { outlineHex([mo.col, mo.row], 'rgba(255,70,50,0.95)', 4); label(mo, `-${meleeDmg(u, mo)} thrust`); } }
     }
   }
   function drawLabels() {
@@ -2922,15 +2926,15 @@
     }
     if (armed.skill === 'blink') { for (const k of areaAround(here, card.range(L))) { const hh = k.split(',').map(Number); if (!(unitAt(hh) && !hiddenFromMe(unitAt(hh))) && !blockedTile(hh)) { tintHex(hh, 'rgba(160,200,255,0.18)'); } } if (hover && !(unitAt(hover) && !hiddenFromMe(unitAt(hover))) && hexDist(here, hover) <= card.range(L)) outlineHex(hover, 'rgba(170,210,255,0.95)', 4); return; }
     if (armed.skill === 'dash') { const zone = areaAround(here, card.range(L)); zone.delete(key(...here)); drawZone(zone, 'rgba(255,210,110,0.08)', 'rgba(255,215,120,0.85)', false);
-      if (hover && zone.has(key(...hover))) { outlineHex(hover, 'rgba(255,215,120,0.95)', 4); const o = liveUnitAt(hover); if (o && o.team !== u.team && !hiddenFromMe(o)) label(o, `-${baseDmg(u)}`); } return; }
-    if (armed.skill === 'pstrike') { for (const o of units) if (o.team !== u.team && o.dying === null && !hiddenFromMe(o) && warriorAim(u, here, [o.col, o.row]) !== null) { outlineHex([o.col, o.row], 'rgba(255,70,50,0.95)', 4); label(o, `-${baseDmg(u) * (antiCavOf(u) && isMounted(o) ? 2 : 1)}`); } return; }
+      if (hover && zone.has(key(...hover))) { outlineHex(hover, 'rgba(255,215,120,0.95)', 4); const o = liveUnitAt(hover); if (o && hostile(o.team, u.team) && !hiddenFromMe(o)) label(o, `-${baseDmg(u)}`); } return; }
+    if (armed.skill === 'pstrike') { for (const o of units) if (hostile(o.team, u.team) && o.dying === null && !hiddenFromMe(o) && warriorAim(u, here, [o.col, o.row]) !== null) { outlineHex([o.col, o.row], 'rgba(255,70,50,0.95)', 4); label(o, `-${baseDmg(u) * (antiCavOf(u) && isMounted(o) ? 2 : 1)}`); } return; }
     if (armed.skill === 'shadowstep') {
       drawZone(areaAround(here, card.range(L)), 'rgba(150,110,220,0.07)', 'rgba(170,130,240,0.85)', false);
       for (const o of units) if (o !== u && o.dying === null && !hiddenFromMe(o) && hexDist(here, [o.col, o.row]) <= card.range(L)) {
         const d = behindTile(o), oc = unitAt(d); if (!onBoard(d) || blockedTile(d) || (oc && oc !== u)) continue;
         outlineHex([o.col, o.row], o.team === u.team ? 'rgba(255,215,110,0.8)' : 'rgba(255,70,50,0.85)', 3);
         if (hover && hover[0] === o.col && hover[1] === o.row) { tintHex(d, 'rgba(170,130,240,0.4)'); outlineHex(d, 'rgba(190,150,255,0.95)', 4);
-          if (o.team !== u.team) label(o, `-${(card.dmg(L) + (u.ambush || 0)) * (hasPassive(u, 'backstab') ? 3 : 1)}`); }
+          if (hostile(o.team, u.team)) label(o, `-${(card.dmg(L) + (u.ambush || 0)) * (hasPassive(u, 'backstab') ? 3 : 1)}`); }
       }
       return;
     }
@@ -2948,7 +2952,7 @@
       const want = card.target === 'friend' ? 'friend' : 'enemy', r = card.range(L);
       const zone = areaAround(here, r); zone.delete(key(...here));
       drawZone(zone, 'rgba(110,200,255,0.08)', 'rgba(120,210,255,0.85)', false);
-      for (const o of units) if (o.dying === null && o !== u && hexDist(here, [o.col, o.row]) <= r && (want === 'friend' ? o.team === u.team : o.team !== u.team))
+      for (const o of units) if (o.dying === null && o !== u && hexDist(here, [o.col, o.row]) <= r && (want === 'friend' ? o.team === u.team : hostile(o.team, u.team)))
         outlineHex([o.col, o.row], want === 'friend' ? 'rgba(255,215,110,0.95)' : 'rgba(255,70,50,0.95)', 4);
     }
   }
@@ -2991,7 +2995,7 @@
       ctx.strokeStyle = 'rgba(235,235,220,0.45)'; ctx.lineWidth = 1.5 / Math.max(z, 0.6); ctx.stroke();
     }
     const hu = unitAt(hover);
-    if (selUnit && hu && hu.team !== selUnit.team && !hiddenFromMe(hu) && !busy() && canCommand(selUnit) && !selUnit.attacked && !['line', 'pierce', 'mark'].includes(T(selUnit).ranged)) {
+    if (selUnit && hu && hostile(hu.team, selUnit.team) && !hiddenFromMe(hu) && !busy() && canCommand(selUnit) && !selUnit.attacked && !['line', 'pierce', 'mark'].includes(T(selUnit).ranged)) {
       ctx.beginPath(); hexPath(hu.col, hu.row, ctx);
       ctx.fillStyle = 'rgba(200,50,40,0.18)'; ctx.fill();
       ctx.strokeStyle = 'rgba(230,80,60,0.9)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
@@ -3144,14 +3148,14 @@
   }
   function unitDone(u) {
     if (u.stunActive || (u.enter && u.enter > game.round) || u.placing) return true;
-    if (T(u).structure) return u.attacked || !units.some(o => o.team !== u.team && o.dying === null && o.hp > 0 && hexDist([u.col, u.row], [o.col, o.row]) <= T(u).range);
+    if (T(u).structure) return u.attacked || !units.some(o => hostile(o.team, u.team) && o.dying === null && o.hp > 0 && hexDist([u.col, u.row], [o.col, o.row]) <= T(u).range);
     if (T(u).hero) return !heroCanAct(u, true);
     if (u.attacked) return !(u.skillUsed && !u.moved);       // a hero who cast a skill may still move
     const ty = T(u);
     if (ty.noMoveShoot) return !!u.moved;                    // these can't move and shoot in the same turn
     if (!u.moved) return false;
     const r = ty.ranged === 'arc' ? ty.range : (ty.reach || 1);   // moved: still has a turn if an enemy is in reach
-    return !units.some(o => o.team !== u.team && o.dying === null && o.hp > 0 && hexDist([u.col, u.row], [o.col, o.row]) <= r);
+    return !units.some(o => hostile(o.team, u.team) && o.dying === null && o.hp > 0 && hexDist([u.col, u.row], [o.col, o.row]) <= r);
   }
   const sideDone = team => units.filter(u => u.team === team && u.dying === null).every(unitDone);
   function endTurnLocal() {
@@ -3225,6 +3229,7 @@
       ${rows}
       <div class="lsub">${n} faction${n === 1 ? '' : 's'} · 10 city spots · each faction starts with 1 city and 1 army of 1 swordsman.</div>
       <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 3 passive gold a turn instead of 1</div>
+      <div class="lsub">${host ? `<button id="lcoop" class="${game.opts && game.opts.coop ? 'on' : ''}">🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}</button>` : `🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}`} · all players are one team against all AI realms; each team shares its sight</div>
       ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
         return `<div class="lsub">${host ? `<button id="${id}" class="${on ? 'on' : ''}">${lab}: ${on ? 'On' : 'Off'}</button>` : `${lab}: ${on ? 'On' : 'Off'}`} · ${txt} · the AI plays by the same fog</div>`; }).join('')}
       ${host ? `<button id="lstart" ${n < 2 ? 'disabled' : ''}>Start the campaign</button>` : '<div class="lsub">Waiting for the host to start…</div>'}`;
@@ -3235,6 +3240,7 @@
     const b = e.target.closest('button'); if (!b || game.view !== 'lobby') return;
     if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
     if ((b.id === 'lfogc' || b.id === 'lfogb') && isHost()) { const k = b.id === 'lfogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: !!(game.opts && game.opts[k] === false) }; commit({ type: 'setup' }); return; }
+    if (b.id === 'lcoop' && isHost()) { game.opts = { ...(game.opts || {}), coop: !(game.opts && game.opts.coop) }; commit({ type: 'setup' }); return; }
     if (b.id === 'lbless' && isHost()) { game.opts = { ...(game.opts || {}), blessed: !(game.opts && game.opts.blessed) }; commit({ type: 'setup' }); return; }
     if (b.dataset.kind && isHost()) { const [i, k] = b.dataset.kind.split(':'); game.factions[i].kind = k; commit({ type: 'setup' }); }
     if (b.dataset.color) { const [i, k] = b.dataset.color.split(':'), f = game.factions[i], p = PALETTE.find(x => x.key === k);
@@ -3362,8 +3368,8 @@
   let visCache = { k: '', m: new Map() };
   function visionOf(fid) {                           // tiles a realm can see right now (a Set of keys)
     const camp = game.view === 'campaign', cols = camp ? CCOLS : BCOLS, rows = camp ? CROWS : BROWS;
-    const eyes = units.filter(u => u.team === fid && u.dying === null && (camp ? u.troops : u.hp > 0 && !(u.enter > game.round))).map(u => [u.col, u.row]);
-    if (camp) for (const c of game.cities) if (c.owner === fid) eyes.push([c.col, c.row]);
+    const eyes = units.filter(u => !hostile(u.team, fid) && u.dying === null && (camp ? u.troops : u.hp > 0 && !(u.enter > game.round))).map(u => [u.col, u.row]);
+    if (camp) for (const c of game.cities) if (c.owner && !hostile(c.owner, fid)) eyes.push([c.col, c.row]);
     const k = game.view + '|' + fid + '|' + eyes.map(e => e.join(',')).join(';');
     if (visCache.k !== game.view + game.seq) visCache = { k: game.view + game.seq, m: new Map() };
     if (visCache.m.has(k)) return visCache.m.get(k);
@@ -3374,14 +3380,14 @@
   // can realm fid see this tile now? (no fog, or no realm = sees everything)
   const sees = (fid, h) => { if (!fid || !fogOn() || (localView() !== game.view)) return true; const f = faction(fid); if (f && f.undead && game.view === 'campaign') return true;
     return visionOf(fid).has(h[1] * (game.view === 'campaign' ? CCOLS : BCOLS) + h[0]); };
-  const fogHides = u => !!u && u.team !== viewer() && !!viewer() && (game.view === 'campaign' ? !!u.troops : true) && !sees(viewer(), [u.col, u.row]);
+  const fogHides = u => !!u && hostile(u.team, viewer()) && !!viewer() && (game.view === 'campaign' ? !!u.troops : true) && !sees(viewer(), [u.col, u.row]);
   const seenTile = h => { if (localView() !== 'campaign' || !game.explored || !fogOn()) return true; const ex = game.explored[viewer()]; return !ex || ex[h[1] * CCOLS + h[0]] === '1'; };
   const knowsTile = (fid, h) => { if (game.view !== 'campaign' || !fogOn() || !game.explored) return true; const ex = game.explored[fid]; return !ex || ex[h[1] * CCOLS + h[0]] === '1'; };
   function markExplored() {
     if (game.view !== 'campaign' || !game.factions) return;
     game.explored = game.explored || {};
     for (const f of game.factions) { if (f.undead) continue; const a = (game.explored[f.id] || '0'.repeat(CCOLS * CROWS)).split('');
-      const eyes = [...units.filter(u => u.team === f.id && u.troops).map(u => [u.col, u.row, SIGHT]), ...game.cities.filter(c => c.owner === f.id).map(c => [c.col, c.row, SIGHT])];
+      const eyes = [...units.filter(u => !hostile(u.team, f.id) && u.troops).map(u => [u.col, u.row, SIGHT]), ...game.cities.filter(c => c.owner && !hostile(c.owner, f.id)).map(c => [c.col, c.row, SIGHT])];
       for (const [c0, r0, rad] of eyes) for (let r = Math.max(0, r0 - rad); r <= Math.min(CROWS - 1, r0 + rad); r++) for (let c = Math.max(0, c0 - rad - 1); c <= Math.min(CCOLS - 1, c0 + rad + 1); c++) if (hexDist([c0, r0], [c, r]) <= rad) a[r * CCOLS + c] = '1';
       game.explored[f.id] = a.join(''); }
   }
@@ -3408,7 +3414,7 @@
     const tgt0 = unitAt(h), tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, city = cityAt(h), here = [u.col, u.row];
     const hint = txt => { const m = center(...h); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
     if (impassable(h)) { hint('Impassable'); return; }
-    const foeArmy = tgt && tgt.troops && tgt.team !== u.team ? tgt : null, foeCity = city && city.owner && city.owner !== u.team ? city : null, freeSpot = city && !city.owner ? city : null;
+    const foeArmy = tgt && tgt.troops && hostile(tgt.team, u.team) ? tgt : null, foeCity = city && city.owner && hostile(city.owner, u.team) ? city : null, freeSpot = city && !city.owner ? city : null;
     const goAdj = then => {                                          // walk next to the target first (if needed), then do something
       if (hexDist(here, h) === 1) { then(); return; }
       if (u.moved) { hint('Already moved'); return; }
@@ -3492,7 +3498,7 @@
     const s2 = sg(), here = [u.col, u.row], p = wallAt(h), lad = ladderAt(here), ty = T(u), canLadder = !ty.mounted && !ty.structure;
     if (lad && h[0] === lad.w[0] && h[1] === lad.w[1] && canLadder) { if (u.moved || u.attacked) { hint('Already acted', here); return true; } go({ type: 'climb', id: u.id }); return true; }
     if (u.climb) { hint('On the ladder: right-click the wall to climb on', here); return true; }
-    const mate = units.find(o => o !== u && o.team !== u.team && o.col === u.col && o.row === u.row && o.dying === null);
+    const mate = units.find(o => o !== u && hostile(o.team, u.team) && o.col === u.col && o.row === u.row && o.dying === null);
     if (mate && ty.ranged && tgt !== mate) { hint('Fighting on the same tile: only that enemy', here); return true; }
     if (!p || p.kind === 'stair' || (tgt && !(p.kind === 'gate' && tgt.team === u.team))) return false;
     if (p.kind === 'gate' && u.team === s2.def) {
@@ -3740,7 +3746,8 @@
       if (w && game.view === 'battle' && (mode !== 'online' || p2p.role === 'host')) setTimeout(returnToCampaign, 4300);
       if (w || game.cwinner) {
         const n = document.getElementById('vname');
-        n.textContent = w ? `${teamName(w)} wins the battle` : `${teamName(game.cwinner)} wins the campaign`;
+        const coopW = t => game.opts && game.opts.coop && t !== 'undead' ? (sideOf(t) === 'ai' ? 'The AI realms' : 'The players') : null;
+        n.textContent = w ? `${coopW(w) || teamName(w)} win${coopW(w) ? '' : 's'} the battle` : `${coopW(game.cwinner) || teamName(game.cwinner)} win${coopW(game.cwinner) ? '' : 's'} the campaign`;
         n.style.color = `rgb(${TEAM[w || game.cwinner].map(v => Math.min(255, v + 80))})`;
         vicEl.classList.add('show'); vicTimer = setTimeout(() => vicEl.classList.remove('show'), 4000);
       } else { vicEl.classList.remove('show'); seenTurn = game.turn; }
@@ -3918,14 +3925,14 @@
         const ld = lineDir(here, h); if (!ld) { hint('Not in a straight line', h); return; }
         if (ld.n > card.range(L)) { hint('Out of range', h); return; }
         const f = firstInLine(here, ld.d, card.range(L)); if (!f) { hint('Nobody in that line', h); return; }
-        if (f.unit.team !== u.team && lockedOut(here, f.unit)) { hint('Taunted: must target the Paladin', h); return; }
+        if (hostile(f.unit.team, u.team) && lockedOut(here, f.unit)) { hint('Taunted: must target the Paladin', h); return; }
         go({ type: 'skill', id: u.id, skill: 'drive', dir: ld.d }); armed = null; return;
       }
       if (armed.skill === 'firebolt') {
         const ld = lineDir(here, h); if (!ld) { hint('Not in a straight line', h); return; }
         if (ld.n > card.range(L)) { hint('Out of range', h); return; }
         const f = firstInLine(here, ld.d, card.range(L));
-        if (f && f.unit.team !== u.team && lockedOut(here, f.unit)) { hint('Taunted: must target the Paladin', h); return; }
+        if (f && hostile(f.unit.team, u.team) && lockedOut(here, f.unit)) { hint('Taunted: must target the Paladin', h); return; }
         go({ type: 'skill', id: u.id, skill: 'firebolt', dir: ld.d }); armed = null; return;
       }
       if (armed.skill === 'fireball' || armed.skill === 'lightning') {
@@ -3957,7 +3964,7 @@
         if (dist > card.range(L)) { hint('Out of range', h); return; }
         const dest = behindTile(tgt), o = unitAt(dest);
         if (!onBoard(dest) || blockedTile(dest) || (o && o !== u)) { hint('The tile behind it is taken', h); return; }
-        if (tgt.team !== u.team && lockedOut(here, tgt)) { hint('Taunted: must target the Paladin', h); return; }
+        if (hostile(tgt.team, u.team) && lockedOut(here, tgt)) { hint('Taunted: must target the Paladin', h); return; }
         go({ type: 'skill', id: u.id, skill: 'shadowstep', target: tgt.id }); armed = null; return;
       }
       if (armed.skill === 'mheal') {
@@ -3982,7 +3989,7 @@
         go({ type: 'skill', id: u.id, skill: 'chains', target: armed.target, col: h[0], row: h[1] }); armed = null; return;
       }
       if (card.target === 'friend') {
-        if (!tgt || tgt.team !== u.team || tgt === u) { hint('Pick a friendly unit', h); return; }
+        if (!tgt || hostile(tgt.team, u.team) || tgt === u) { hint('Pick a friendly unit', h); return; }
         if (dist > card.range(L)) { hint('Out of range', h); return; }
         go({ type: 'skill', id: u.id, skill: armed.skill, target: tgt.id }); armed = null; return;
       }
@@ -4028,7 +4035,7 @@
     if (ty.ranged === 'arc') {                               // archers & horse archers
       if (!tgt) { moveTo(); return; }
       const healer = hasPassive(u, 'mender');
-      if (healer ? (tgt === u || (tgt.team !== u.team && !T(tgt).undead)) : tgt.team === u.team) { if (healer && tgt.team !== u.team) hint("Healer's Touch: target an ally", h); return; }
+      if (healer ? (tgt === u || (hostile(tgt.team, u.team) && !T(tgt).undead)) : !hostile(tgt.team, u.team)) { if (healer && hostile(tgt.team, u.team)) hint("Healer's Touch: target an ally", h); return; }
       const nms = noMoveShoot(u);
       if (healer && tgt.team === u.team) {
         if (u.attacked) { hint('Already used his action', here); return; }
@@ -4046,7 +4053,7 @@
       const path = approach(ty.range, tgt); if (!path) { hint(lock ? 'Taunted: must target the Paladin' : 'Out of reach', h); return; }
       go({ type: 'shoot', id: u.id, path, target: tgt.id }); return;
     }
-    if (u.type === 'warrior' && tgt && tgt.team !== u.team) {   // warrior: reach 1 (halberd: 2 in a straight line)
+    if (u.type === 'warrior' && tgt && hostile(tgt.team, u.team)) {   // warrior: reach 1 (halberd: 2 in a straight line)
       if (u.attacked) { hint('Already attacked', here); return; }
       let path = [], from = here, d = warriorAim(u, here, h);
       if (d === null || lockedOut(here, tgt)) {
@@ -4072,7 +4079,7 @@
       from = path[path.length - 1];
     }
     const targets = [tgt.id];
-    if (r === 2 && hexDist(from, h) === 2) { const ld = lineDir(from, h); if (ld) { const mo = liveUnitAt(step(from, ld.d)); if (mo && mo.team !== u.team) targets.push(mo.id); } }
+    if (r === 2 && hexDist(from, h) === 2) { const ld = lineDir(from, h); if (ld) { const mo = liveUnitAt(step(from, ld.d)); if (mo && hostile(mo.team, u.team)) targets.push(mo.id); } }
     go({ type: 'attack', id: u.id, path, target: tgt.id, targets });
   });
   addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
