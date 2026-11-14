@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.8</div>
+  <div class="t">Medieval Cities · v1.9</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1113,7 +1113,7 @@
         SIEGE = ['trebuchet', 'ballista'], HEROES = ['knight', 'ranger', 'mage', 'assassin', 'warrior'];
   const unitCost = t => HEROES.includes(t) ? 20 : MOUNT.includes(t) ? 18 : SIEGE.includes(t) ? 20 : 10;
   const BUILDINGS = {
-    tradepost: { name: 'Trade post', cost: 20, text: '+1 gold per turn (+1 more per city it is road-connected to)' },
+    tradepost: { name: 'Trade post', cost: 20, text: '+1 gold per turn for this city (doubled, tripled… by its road links like the city itself)' },
     garrison:  { name: 'Garrison', cost: 10, text: '+1 swordsman defender, +1 defender of each unit type this city can recruit' },
     nightswatch: { name: "Night's Watch", cost: 40, wallOnly: true, text: 'Defenders of this city deal double damage to the undead' },
     walls:     { name: 'Walls', cost: 20, text: 'Stone walls with a 3-tile gate and stairs when this city is besieged' },
@@ -1129,27 +1129,29 @@
     if ((city.buildings || []).includes('garrison')) { g.push('swordsman'); for (const t of recruitable(city)) if (!HEROES.includes(t)) g.push(t); }
     return g.slice(0, MAX_DEFENDERS);
   }
-  // road network: road tiles and city tiles form nodes; returns a map tileKey -> component id
+  // roads: connected stretches of road tiles (cities are the ends of a road, not part of it); returns a map tileKey -> stretch id
   function roadComponents() {
-    const nodes = new Set(game.roads || []); for (const c of game.cities || []) if (c.owner) nodes.add(key(c.col, c.row));
+    const nodes = new Set(game.roads || []);
     const comp = new Map(); let id = 0;
     for (const k of nodes) if (!comp.has(k)) { const st = [k]; comp.set(k, id);
       while (st.length) { const [c, r] = st.pop().split(',').map(Number); for (const n of nbIn(c, r, CCOLS, CROWS)) { const nk = key(...n); if (nodes.has(nk) && !comp.has(nk)) { comp.set(nk, id); st.push(nk); } } }
       id++; }
     return comp;
   }
-  const connectedCities = (city, comp = roadComponents()) => { const me = comp.get(key(city.col, city.row));
-    return (game.cities || []).filter(o => o !== city && o.owner && comp.get(key(o.col, o.row)) === me && hasRoadLink(o, comp) && hasRoadLink(city, comp)); };
+  // the cities a city's own roads lead straight to (a road does not run on through another city)
+  const roadsAt = (city, comp) => new Set(nbIn(city.col, city.row, CCOLS, CROWS).map(n => comp.get(key(...n))).filter(v => v !== undefined));
+  const connectedCities = (city, comp = roadComponents()) => { const mine = roadsAt(city, comp); if (!mine.size) return [];
+    return (game.cities || []).filter(o => o !== city && o.owner && [...roadsAt(o, comp)].some(v => mine.has(v))); };
   const hasRoadLink = (city, comp) => nbIn(city.col, city.row, CCOLS, CROWS).some(n => (game.roads || []).includes(key(...n)));   // a city counts once a road touches it
-  function incomeOf(fid, shown) {                   // passive 1 (3 for the secretly blessed realm) + 1 per city + trade posts + road connections
+  function incomeOf(fid, shown) {                   // passive 1 (3 for the secretly blessed realm) + each city: (1, +1 with a trade post) x (1 + cities its roads lead to)
     const f0 = faction(fid), comp = roadComponents(); let pts = 1 + (f0 && f0.blessed && !shown ? 2 : 0); const lines = [['Passive', 1]];
     for (const c of game.cities || []) if (c.owner === fid) {
       const tp = (c.buildings || []).includes('tradepost'), links = connectedCities(c, comp).length;
-      const v = 1 + (tp ? 1 : 0) + links * (1 + (tp ? 1 : 0)); pts += v; lines.push([c.name, v]);
+      const v = (1 + (tp ? 1 : 0)) * (1 + links); pts += v; lines.push([c.name, v, 1 + links]);
     }
     return { pts, lines };
   }
-  // who may see what: buildings are visible to the owner and to anyone with a road-connected city
+  // who may see what: buildings are visible to the owner and to anyone owning a city directly linked to it by road
   function seesCity(city, fid = viewer()) {
     if (!city.owner || city.owner === fid) return true;
     const comp = roadComponents(); return (game.cities || []).some(o => o.owner === fid && connectedCities(o, comp).includes(city));
@@ -3283,7 +3285,7 @@
       html += `<div class="t" style="margin-top:${a ? 10 : 0}px;color:${fo ? `rgb(${fo.col.map(v => Math.min(255, v + 70))})` : '#c8b98a'}">🏰 ${city.name}${fo ? ` · ${fo.name}` : ' · free land'}</div>`;
       if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} gold (right-click it).</div>`;
       else {
-        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn · defended by ${garrisonOf(city).map(t => UNIT_TYPES[t].name).join(', ')}</div>`; }
+        if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn${inc && inc[2] > 1 ? ` (×${inc[2]}, road-linked to ${inc[2] - 1} cit${inc[2] > 2 ? 'ies' : 'y'})` : ''} · defended by ${garrisonOf(city).map(t => UNIT_TYPES[t].name).join(', ')}</div>`; }
         if (sees) {
           html += `<div class="sub">Buildings ${city.buildings.length}/${CITY_SLOTS}${!own ? ' (seen through the road link)' : ''}</div><div class="blist">${city.buildings.map((b, i) => `<span class="bld">${BUILDINGS[b].name}${own ? btn(`data-unbuild="${i}"`, '✕', my && !city.acted && p >= DESTROY_COST, `Destroy (${DESTROY_COST} gold)`) : ''}</span>`).join('') || '<span class="k">none</span>'}</div>`;
         } else html += '<div class="k">Its buildings are unknown. Connect a road to it to see them.</div>';
