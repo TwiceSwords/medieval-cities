@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.23-preview</div>
+  <div class="t">Medieval Cities 3D · v2.24-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -1918,22 +1918,51 @@
     const pts = () => game.points[f.id] || 0, spend = n => { game.points = { ...game.points, [f.id]: pts() - n }; };
     const myCities = game.cities.filter(c => c.owner === f.id), myArmies = () => units.filter(u => u.troops && u.team === f.id && u.dying === null && !u.inBattle);
     const freeSpots = game.cities.filter(c => !c.owner && knowsTile(f.id, [c.col, c.row]));
-    const settleTarget = myCities.length < 4 && freeSpots.length ? freeSpots.map(c => ({ c, d: Math.min(...myCities.map(m => hexDist([m.col, m.row], [c.col, c.row])), ...myArmies().map(a => hexDist([a.col, a.row], [c.col, c.row]))) })).sort((x, y) => x.d - y.d)[0] : null;
-    const reserve = settleTarget && settleTarget.d <= 16 && (f.style !== 'aggressive' || myCities.length < 2) ? FOUND_COST : 0;   // save up to found a city
+    const settleTarget = myCities.length < 6 && freeSpots.length ? freeSpots.map(c => ({ c, d: Math.min(...myCities.map(m => hexDist([m.col, m.row], [c.col, c.row])), ...myArmies().map(a => hexDist([a.col, a.row], [c.col, c.row]))) })).sort((x, y) => x.d - y.d)[0] : null;
+    const reserve = settleTarget && settleTarget.d <= 20 && (f.style !== 'aggressive' || myCities.length < 4) ? FOUND_COST : 0;   // save up to found a city
     if (!aiState.econ) {                                              // buildings and recruits, all at once
       aiState.econ = true;
-      const wants = f.style === 'builder' ? ['swordsman', 'tradepost', 'walls', 'archer', 'tower', 'garrison'] : f.style === 'aggressive' ? ['swordsman', 'archer', 'horseman', 'tradepost', 'heroes', 'garrison'] : ['swordsman', 'tradepost', 'archer', 'walls', 'garrison', 'horseman'];
+      const owned = myCities.flatMap(c => c.buildings), count = b => owned.filter(x => x === b).length;
+      const pool = f.style === 'aggressive' ? [...FOOT.slice(0, 3), ...MOUNT, ARCH[0]] : f.style === 'builder' ? [...ARCH, ...FOOT.slice(0, 3), SIEGE[0]] : [FOOT[0], ARCH[0], FOOT[1], MOUNT[0], ARCH[1], FOOT[2], MOUNT[1]];
+      const unitB = c => recruitable(c).filter(t => !HEROES.includes(t)).length;
+      const threat = c => units.some(u => u.troops && hostile(u.team, f.id) && u.dying === null && hexDist([u.col, u.row], [c.col, c.row]) <= 6 && sees(f.id, [u.col, u.row]));
+      const nextUnit = c => pool.filter(t => !c.buildings.includes(t)).sort((x, y) => count(x) - count(y) || pool.indexOf(x) - pool.indexOf(y))[0];
       for (const c of myCities) {
-        if (!c.acted && c.buildings.length < CITY_SLOTS) { const b = wants.find(w => w === 'tower' ? c.buildings.filter(x => x === 'tower').length < 2 : !c.buildings.includes(w));
-          const first = !recruitable(c).length && b === 'swordsman';
-          if (b && pts() >= BUILDINGS[b].cost + (first ? 0 : reserve + 4)) { c.buildings = [...c.buildings, b]; c.acted = true; spend(BUILDINGS[b].cost); } }
-        const types = recruitable(c).filter(t => !HEROES.includes(t) || Math.random() < 0.3); if (!types.length) continue;
+        if (c.acted || c.buildings.length >= CITY_SLOTS) continue;
+        let want = null;
+        if (!c.buildings.includes('tradepost') && !(threat(c) && !unitB(c))) want = 'tradepost';   // trade first: it pays for everything else
+        else if (!unitB(c)) want = nextUnit(c);                                        // then something to recruit
+        else if (threat(c) && !c.buildings.includes('walls')) want = 'walls';
+        else if (unitB(c) < 2) want = nextUnit(c);                                     // a second, different unit building
+        else if (!c.buildings.includes('garrison')) want = 'garrison';
+        else if (!c.buildings.includes('walls') && (f.style !== 'aggressive' || myCities.length > 2)) want = 'walls';
+        else if (!count('heroes') && game.round >= 18) want = 'heroes';
+        else if (unitB(c) < 3) want = nextUnit(c);
+        else if (f.style === 'builder' && c.buildings.filter(x => x === 'tower').length < 2) want = 'tower';
+        if (!want || !BUILDINGS[want]) continue;
+        const keep = (want === 'tradepost' || !unitB(c)) ? 0 : reserve;               // trade and the first unit building don't wait for settling money
+        if (pts() >= BUILDINGS[want].cost + keep) { c.buildings = [...c.buildings, want]; c.acted = true; spend(BUILDINGS[want].cost); owned.push(want); }
+      }
+      // recruits: fill the armies at home with a mix of what the cities offer
+      const maxArmies = Math.max(2, myCities.length + 1);
+      for (const c of myCities.slice().sort(() => Math.random() - 0.5)) {
+        const types = recruitable(c); if (!types.length) continue;
         const near = myArmies().filter(a => hexDist([a.col, a.row], [c.col, c.row]) <= 1);
-        for (let tries = 0; tries < 3; tries++) { const t = types[(Math.random() * types.length) | 0]; if (pts() < unitCost(t) + reserve + (f.style === 'builder' ? 6 : 0)) break;
-          let a = near.find(x => x.troops.length < MAX_TROOPS);
-          if (!a && myArmies().length < myCities.length + 1) { const spot = nbIn(c.col, c.row, CCOLS, CROWS).find(n => !impassable(n) && !unitAt(n) && !cityAt(n));
+        for (let tries = 0; tries < 6; tries++) {
+          const r = Math.random(), heroes = types.filter(t => HEROES.includes(t)), ranged = types.filter(t => UNIT_TYPES[t].ranged && !HEROES.includes(t)), mounted = types.filter(t => UNIT_TYPES[t].mounted && !HEROES.includes(t)), foot = types.filter(t => !HEROES.includes(t) && !UNIT_TYPES[t].ranged && !UNIT_TYPES[t].mounted);
+          const pickFrom = heroes.length && r < 0.08 && pts() >= 45 ? heroes : ranged.length && r < 0.4 ? ranged : mounted.length && r < 0.6 ? mounted : foot.length ? foot : types.filter(t => !HEROES.includes(t));
+          if (!pickFrom.length) break; const t = pickFrom[(Math.random() * pickFrom.length) | 0];
+          const smallest = Math.min(99, ...myArmies().map(x => x.troops.length));
+          const buildFirst = myCities.some(x => !x.buildings.includes('tradepost') || !unitB(x)) ? 20 : 0;   // keep money for the economy unless an army is nearly empty
+          if (pts() < unitCost(t) + (smallest < 3 ? 0 : reserve + buildFirst)) break;
+          let a = near.filter(x => x.troops.length < MAX_TROOPS).sort((x, y) => y.troops.length - x.troops.length)[0];
+          if (!a && myArmies().length < maxArmies) { const spot = nbIn(c.col, c.row, CCOLS, CROWS).find(n => !impassable(n) && !unitAt(n) && !cityAt(n));
             if (spot) { a = runtimeUnit({ id: `army-${f.id}-${Date.now().toString(36)}${tries}`, type: 'army', team: f.id, col: spot[0], row: spot[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [] }); units.push(a); near.push(a); } }
-          if (!a) break; a.troops = [...a.troops, troop(t)]; spend(unitCost(t)); }
+          if (!a) break;
+          const tr = troop(t);
+          if (HEROES.includes(t) && HERO_CARDS[t] && pts() >= unitCost(t) + CARD_PRICE + reserve) { tr.cards = emptyCards(); tr.cards.passive = HERO_CARDS[t].passive[(Math.random() * HERO_CARDS[t].passive.length) | 0]; spend(CARD_PRICE); }   // a hero comes with a passive when affordable
+          a.troops = [...a.troops, tr]; spend(unitCost(t));
+        }
       }
       commit({ type: 'ai' }); aiBusyUntil = Date.now() + 300; return;
     }
@@ -1943,29 +1972,43 @@
     const here = [a.col, a.row], str = troopStrength(a.troops), home = myCities.slice().sort((x, y) => hexDist(here, [x.col, x.row]) - hexDist(here, [y.col, y.row]))[0];
     // pick a goal
     const enemies = [...units.filter(u => u.troops && hostile(u.team, f.id) && u.dying === null && !u.inBattle && sees(f.id, [u.col, u.row])).map(u => ({ tile: [u.col, u.row], army: u, s: troopStrength(u.troops) * (cityAt([u.col, u.row]) ? 1.3 : 1) })),
-      ...game.cities.filter(c => c.owner && hostile(c.owner, f.id) && knowsTile(f.id, [c.col, c.row])).map(c => ({ tile: [c.col, c.row], city: c, s: troopStrength(garrisonOf(c).map(troop)) * 1.15 + (units.find(u => u.troops && u.col === c.col && u.row === c.row && sees(f.id, [c.col, c.row])) ? 1e9 : 0) }))];
+      ...game.cities.filter(c => c.owner && hostile(c.owner, f.id) && knowsTile(f.id, [c.col, c.row])).map(c => ({ tile: [c.col, c.row], city: c, s: troopStrength(garrisonOf(c).map(troop)) * ((c.buildings || []).includes('walls') ? 1.6 : 1.15) + units.filter(u => u.troops && u.col === c.col && u.row === c.row && sees(f.id, [c.col, c.row])).reduce((x, u) => x + troopStrength(u.troops) * 1.3, 0) }))];
     const free = game.cities.filter(c => !c.owner);
     const dist = t => hexDist(here, t);
     let goal = null, mode2 = null;
-    const prey = enemies.filter(e => e.s < str * (f.style === 'aggressive' ? 1.0 : 0.7) && dist(e.tile) <= (f.style === 'aggressive' ? 30 : 12)).sort((x, y) => dist(x.tile) - dist(y.tile))[0];
+    const force = t => myArmies().filter(o => o === a || hexDist([o.col, o.row], t) <= 3).reduce((x, o) => x + troopStrength(o.troops), 0);   // this army plus friends close to the target (they join the fight)
+    const bigEnough = a.troops.length >= ({ aggressive: 6, balanced: 8, builder: 10 })[f.style || 'balanced'] || a.troops.length >= MAX_TROOPS - 2;
+    const mine2 = myArmies(), scoutArmy = mine2.length >= 2 && mine2.slice().sort((x, y) => x.troops.length - y.troops.length)[0] === a && !bigEnough;
+    const raid = game.round < 25 && a.troops.length >= 3;
+    const prey = enemies.filter(e => { const d = dist(e.tile); if (e.army && raid && e.s < str * 0.75 && d <= 10) return true;   // early raids on weak armies
+        return bigEnough && d <= 26 && force(e.tile) >= e.s * (e.city ? 1.5 : 1.3); })
+      .sort((x, y) => (dist(x.tile) - dist(y.tile)) + (x.city ? -3 : 0) - (y.city ? -3 : 0))[0];
+    // defend: an enemy army close to one of our cities sends the nearest able army home to hold it
+    const danger = myCities.map(c => ({ c, foe: units.filter(u => u.troops && hostile(u.team, f.id) && u.dying === null && !u.inBattle && sees(f.id, [u.col, u.row]) && hexDist([u.col, u.row], [c.col, c.row]) <= 4).reduce((x, u) => x + troopStrength(u.troops), 0) }))
+      .filter(d => d.foe > troopStrength(garrisonOf(d.c).map(troop)) && !units.some(u => u.troops && u.team === f.id && u.col === d.c.col && u.row === d.c.row)).sort((x, y) => y.foe - x.foe)[0];
+    const defender = danger && myArmies().filter(o => !o.moved && troopStrength(o.troops) >= danger.foe * 0.5).sort((x, y) => hexDist([x.col, x.row], [danger.c.col, danger.c.row]) - hexDist([y.col, y.row], [danger.c.col, danger.c.row]))[0] === a;
     const spot = reserve && settleTarget ? settleTarget.c : null;
     const settler = spot && myArmies().slice().sort((x, y) => hexDist([x.col, x.row], [spot.col, spot.row]) - hexDist([y.col, y.row], [spot.col, spot.row]))[0] === a;
-    if (spot && settler && (f.style !== 'aggressive' || !prey)) {
+    if (defender) {
+      if (a.col === danger.c.col && a.row === danger.c.row) { aiBusyUntil = Date.now() + 50; return; }
+      goal = [danger.c.col, danger.c.row]; mode2 = 'defend'; }
+    else if (spot && settler && !(prey && prey.army && dist(prey.tile) <= 2)) {
       if (dist([spot.col, spot.row]) === 1) {                        // next to the free land: found it once the points are there
         if (pts() >= FOUND_COST) { spot.owner = f.id; spot.buildings = []; spot.acted = true; spend(FOUND_COST); commit({ type: 'ai' }); }
         aiBusyUntil = Date.now() + 100; return; }
       goal = [spot.col, spot.row]; mode2 = 'settle'; }
     else if (prey && a.troops.length >= (f.style === 'aggressive' ? 3 : 4)) { goal = prey.tile; mode2 = 'attack'; }
-    else if (f.style !== 'aggressive' && home) {                    // road builders head for the nearest other city
-      const other = game.cities.filter(c => c.owner && c !== home && !connectedCities(home).includes(c)).sort((x, y) => hexDist([home.col, home.row], [x.col, x.row]) - hexDist([home.col, home.row], [y.col, y.row]))[0];
-      if (other && a.troops.length <= 3) { goal = [other.col, other.row]; mode2 = 'road'; }
+    else if (home && a.troops.length <= 4 && myCities.length >= 2) {   // small armies with nothing better link our own cities by road (x2 income)
+      const other = myCities.filter(c => c !== home && !connectedCities(home).includes(c)).sort((x, y) => hexDist([home.col, home.row], [x.col, x.row]) - hexDist([home.col, home.row], [y.col, y.row]))[0];
+      if (other) { goal = [other.col, other.row]; mode2 = 'road'; }
     }
     if (!goal && mode2 === null) {                                   // nothing better to do: hold a gold mine
       if (mineAt(here)) { aiBusyUntil = Date.now() + 50; return; }
       const mn = (game.mines || []).filter(m => knowsTile(f.id, m) && !impassable(m) && !units.some(o => o !== a && o.troops && o.dying === null && o.col === m[0] && o.row === m[1]) && !myArmies().some(o => o !== a && o.mineGoal === m.join()))
         .sort((x, y) => dist(x) - dist(y))[0];
       if (mn && dist(mn) <= 12 && a.troops.length <= 4) { goal = mn; mode2 = 'mine'; a.mineGoal = mn.join(); } }
-    if (!goal && fogOn() && a.troops.length >= (f.style === 'builder' ? 5 : 3)) {      // nothing known nearby: scout unexplored land
+    if (!goal && home && !bigEnough && !scoutArmy && a.troops.length < MAX_TROOPS && dist([home.col, home.row]) > 1 && game.round >= 6) { goal = [home.col, home.row]; mode2 = 'home'; }   // not ready yet: back home to grow
+    if (!goal && fogOn() && (scoutArmy || a.troops.length >= (f.style === 'builder' ? 5 : 3))) {      // nothing known nearby: scout unexplored land
       const ex = (game.explored && game.explored[f.id]) || ''; let best = null;
       for (let i = 0; i < ex.length; i++) if (ex[i] !== '1') { const t = [i % CCOLS, (i / CCOLS) | 0]; if (impassable(t) || t[1] < WALL_ROW) continue; const d = dist(t) + Math.random() * 4; if (!best || d < best.d) best = { t, d }; }
       if (best) { goal = best.t; mode2 = 'scout'; } }
@@ -1974,7 +2017,7 @@
     if (mode2 === 'road' && pts() >= ROAD_COST + 6 + reserve && !hasRoad(here) && !cityAt(here)) { game.roads = [...(game.roads || []), key(...here)]; spend(ROAD_COST); }
     const path = campPath(here, goal, a); if (!path || !path.length) { if (mode2 === 'road') commit({ type: 'ai' }); aiBusyUntil = Date.now() + 50; return; }
     const b = reach(a); let stop = -1;
-    for (let i = 0; i < path.length - (mode2 === 'mine' ? 0 : 1); i++) if (b.dist.has(key(...path[i])) && !unitAt(path[i])) stop = i;
+    for (let i = 0; i < path.length - (mode2 === 'mine' || mode2 === 'defend' ? 0 : 1); i++) if (b.dist.has(key(...path[i])) && !unitAt(path[i])) stop = i;
     const adjGoal = path.length >= 2 ? path[path.length - 2] : here, atGoalNext = path.length === 1 || (stop === path.length - 2);
     const walk = stop >= 0 ? pathTo(b, path[stop]) : [];
     const after = () => {
