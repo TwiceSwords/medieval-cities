@@ -78,7 +78,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v0.9</div>
+  <div class="t">Medieval Cities · v1.0</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -827,6 +827,10 @@
     lancer:      { name: 'Lancer',       maxHp: 18, dmg: 3, move: 4, h: 20.5, mounted: true, charge: 6, build: buildLancer },
     horsearcher: { name: 'Horse archer', maxHp: 9,  dmg: 2, move: 4, h: 20.5, mounted: true, ranged: 'arc', range: 5, build: buildHorseArcher },
     trebuchet:   { name: 'Trebuchet',    maxHp: 6,  dmg: 20, move: 1, h: 16, ranged: 'mark', range: 8, noMoveShoot: true, build: buildTrebuchet },
+    skeleton:    { name: 'Skeleton', maxHp: 6, dmg: 2, move: 2, h: 15, build: buildSkeleton },
+    mammoth:     { name: 'Undead Mammoth', maxHp: 120, dmg: 15, move: 3, h: 40, mounted: true, big: true, noCC: true, build: buildMammoth },
+    uking:       { name: 'Undead King', maxHp: 30, dmg: 0, move: 2, h: 19, turner: true, build: buildUndeadKing },
+    uqueen:      { name: 'Undead Queen', maxHp: 20, dmg: 0, move: 2, h: 18, ranged: 'arc', range: 5, noMoveShoot: true, turner: true, build: buildUndeadQueen },
     tower:       { name: 'Tower', maxHp: 24, dmg: 3, move: 0, h: 24, ranged: 'arc', range: 5, noMoveShoot: true, structure: true, build: buildTower },
     army:        { name: 'Army', army: true, maxHp: 1, staMax: 0, manaMax: 0, dmg: 0, move: 2, build: buildFlag },
     ballista:    { name: 'Ballista',     maxHp: 6,  dmg: 12, move: 1, h: 9, ranged: 'pierce', range: 8, noMoveShoot: true, build: buildBallista },
@@ -837,7 +841,9 @@
     return t; };
 
   const meshCache = {};
-  const meshFor = (type, team, v = '') => { const k = type + (TEAM[team] || TEAM.blue).join() + v; return meshCache[k] || (meshCache[k] = UNIT_TYPES[type].build(TEAM[team] || TEAM.blue, v || undefined)); };
+  const meshFor = (type, team, v = '') => { const k = type + (TEAM[team] || TEAM.blue).join() + v + team; if (meshCache[k]) return meshCache[k];
+    const m = UNIT_TYPES[type].build(TEAM[team] || TEAM.blue, v || undefined);
+    return (meshCache[k] = team === 'undead' && !['skeleton', 'mammoth', 'uking', 'uqueen', 'army'].includes(type) ? bleach(m) : m); };
   const START = [
     { id: 'b1', col: 7, row: 8, team: 'blue' }, { id: 'b2', col: 7, row: 11, team: 'blue' }, { id: 'b3', col: 7, row: 14, team: 'blue' },
     { id: 'r1', col: 14, row: 8, team: 'red' }, { id: 'r2', col: 14, row: 11, team: 'red' }, { id: 'r3', col: 14, row: 14, team: 'red' },
@@ -871,28 +877,28 @@
   function exportState(last) {
     if (shadowSt && spectating()) return { ...shadowSt, last: last || shadowSt.last };
     return { seq: game.seq, turn: game.turn, round: game.round, dm: !!game.dm, battle: !!game.battle, types: game.types, last: last || null,
-      view: game.view, cities: game.cities, campaign: game.campaign, factions: game.factions, roads: game.roads, terrain: game.terrain, bt: game.bt, pending: game.pending, cwinner: game.cwinner,
+      view: game.view, cities: game.cities, campaign: game.campaign, factions: game.factions, roads: game.roads, terrain: game.terrain, bt: game.bt, pending: game.pending, cwinner: game.cwinner, undead: game.undead,
       ...(game.water && game.water.length ? { water: game.water } : {}), units: units.filter(u => u.dying === null && u.hp > 0).map(u => ({ id: u.id, type: u.type, team: u.team, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, sta: u.sta, staMax: u.staMax, mana: u.mana, manaMax: u.manaMax,
         face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked,
         ...(u.stun ? { stun: u.stun } : {}), ...(u.stunActive ? { stunActive: true } : {}), ...(u.mark ? { mark: u.mark } : {}),
         ...(u.cards ? { cards: u.cards } : {}), ...(u.tauntR ? { tauntR: u.tauntR } : {}), ...(u.guard ? { guard: u.guard } : {}),
         ...(u.dots && u.dots.length ? { dots: u.dots } : {}), ...(u.skillUsed ? { skillUsed: true } : {}),
         ...(u.raining ? { raining: true } : {}), ...(u.watch ? { watch: u.watch } : {}), ...(u.rain && u.rain.length ? { rain: u.rain } : {}),
-        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
+        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.released ? { released: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
     const old = new Map(units.map(u => [u.id, u]));
     units = st.units.map(s => { const o = old.get(s.id);
       if (!o || o.type !== (UNIT_TYPES[s.type] ? s.type : 'swordsman') || o.team !== s.team) return runtimeUnit(s);
       if (typeof s.face === 'number') o.want = s.face;          // keep facing in sync with the shared game
-      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, climb: s.climb || 0, replaced: s.replaced || null, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
+      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, climb: s.climb || 0, turner: !!s.turner, released: !!s.released, replaced: s.replaced || null, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
       return o; });
     const prevView = game.view;
     game = { seq: st.seq, turn: st.turn, round: st.round, dm: !!st.dm, battle: !!st.battle, types: (st.types && typeof st.types === 'object') ? st.types : {},
       points: { blue: 0, red: 0, ...(st.points && typeof st.points === 'object' ? st.points : {}) }, water: Array.isArray(st.water) ? st.water : [],
       view: ['campaign', 'lobby'].includes(st.view) ? st.view : 'battle', cities: Array.isArray(st.cities) ? st.cities : [], campaign: st.campaign || null,
       factions: Array.isArray(st.factions) ? st.factions : [], roads: Array.isArray(st.roads) ? st.roads : [], terrain: typeof st.terrain === 'string' ? st.terrain : null,
-      bt: st.bt || null, pending: st.pending || null, cwinner: st.cwinner || null };
+      bt: st.bt || null, pending: st.pending || null, cwinner: st.cwinner || null, undead: st.undead || null };
     if (spectating()) { shadowSt = st; units = ((st.campaign && st.campaign.armies) || []).map(runtimeUnit); } else shadowSt = null;
     syncTeams(); ensureLayers();
     if (prevView !== game.view) { setTimeout(centerOnUnits, 0); selCity = null; placingArmy = null; }
@@ -916,21 +922,21 @@
     off.x = innerWidth / 2 - cx * z; off.y = innerHeight / 2 - cy * z;
   }
   // ===================== CAMPAIGN WORLD (Medieval Cities) =====================
-  const CCOLS = 16, CROWS = 40;                       // the campaign map: much taller than wide
+  const CCOLS = 16, CROWS = 52;                       // the campaign map: much taller than wide
   const PALETTE = [
     { key: 'blue', name: 'Blue', col: [52, 86, 146] }, { key: 'red', name: 'Red', col: [152, 30, 42] },
     { key: 'green', name: 'Green', col: [44, 118, 56] }, { key: 'gold', name: 'Gold', col: [176, 136, 32] },
     { key: 'purple', name: 'Purple', col: [104, 52, 148] }, { key: 'orange', name: 'Orange', col: [190, 92, 26] },
     { key: 'teal', name: 'Teal', col: [26, 126, 128] }, { key: 'white', name: 'White', col: [178, 178, 172] }, { key: 'black', name: 'Black', col: [46, 46, 52] }];
-  const CITY_NAMES = ['Northwatch', 'Southreach', 'Ironhold', 'Greywater', 'Ashford', 'Highmoor', 'Stonebridge', 'Wolfden', 'Saltmere', 'Dunmore',
-    'Ravenscar', 'Goldcrest', 'Frostgate', 'Oakheart', 'Redcliff', 'Whitehaven', 'Blackfen', 'Sunspire'];
-  const TERRAIN = { m: { name: 'Mountains', col: [104, 100, 94] }, r: { name: 'Rocks', col: [96, 92, 86] }, g: { name: 'Grassland', col: [64, 88, 44] }, f: { name: 'Forest', col: [36, 60, 32] }, d: { name: 'Desert', col: [178, 152, 98] },
+  const CITY_NAMES = ['Coldharbor', 'Southreach', 'Ironhold', 'Greywater', 'Ashford', 'Highmoor', 'Stonebridge', 'Wolfden', 'Saltmere', 'Dunmore',
+    'Ravenscar', 'Goldcrest', 'Thornbury', 'Oakheart', 'Redcliff', 'Whitehaven', 'Blackfen', 'Sunspire'];
+  const TERRAIN = { i: { name: 'Ice wall', col: [196, 220, 234] }, m: { name: 'Mountains', col: [104, 100, 94] }, r: { name: 'Rocks', col: [96, 92, 86] }, g: { name: 'Grassland', col: [64, 88, 44] }, f: { name: 'Forest', col: [36, 60, 32] }, d: { name: 'Desert', col: [178, 152, 98] },
     s: { name: 'Snow', col: [208, 214, 222] }, x: { name: 'Dead lands', col: [92, 86, 74] }, w: { name: 'Water', col: [38, 72, 108] } };
   const faction = id => (game.factions || []).find(f => f.id === id) || null;
   const ownerOfTeam = t => t;
   const terrainAt = h => game.terrain && localView() === 'campaign' ? game.terrain[h[1] * CCOLS + h[0]] : 'g';
   const isWater = h => terrainAt(h) === 'w';
-  const impassable = h => { const k = terrainAt(h); return k === 'w' || k === 'm'; };
+  const impassable = h => { const k = terrainAt(h); return k === 'w' || k === 'm' || k === 'i'; };
   const cityAt = h => h && (game.cities || []).find(c => c.col === h[0] && c.row === h[1]) || null;
   const roadSet = () => new Set(game.roads || []);
   const hasRoad = h => (game.roads || []).includes(key(...h));
@@ -953,12 +959,14 @@
       else if (t > 0.85) k = m > 0.74 ? 'g' : 'd';               // deep south: desert
       else if (t > 0.72) k = m < 0.42 ? 'd' : m > 0.66 ? 'f' : 'g';
       else k = m > 0.6 ? 'f' : 'g';                               // the middle: grassland and forest
-      if (k !== 'w' && Math.abs(ridge(x, y) - 0.5) < 0.04) k = 'm';      // mountain ridges with gaps: chokepoints
+      if (k !== 'w' && r > WALL_ROW + 2 && Math.abs(ridge(x, y) - 0.5) < 0.04) k = 'm';
+      const gapC = CCOLS >> 1;                                   // the frozen north, the great ice wall and its single gate-city
+      if (r < WALL_ROW) k = m > 0.52 ? 's' : 'x'; else if (r === WALL_ROW) k = c === gapC ? 's' : 'i'; else if (r <= WALL_ROW + 1 && Math.abs(c - gapC) <= 1) k = 's';      // mountain ridges with gaps: chokepoints
       T[r * CCOLS + c] = k;
     }
     // keep only the biggest land mass so every city can reach every other
     const seen = new Uint8Array(T.length); let best = [];
-    const pass = k => k !== 'w' && k !== 'm';
+    const pass = k => k !== 'w' && k !== 'm' && k !== 'i';
     for (let i = 0; i < T.length; i++) if (pass(T[i]) && !seen[i]) {
       const comp = [i]; seen[i] = 1;
       for (let j = 0; j < comp.length; j++) { const c = comp[j] % CCOLS, r = (comp[j] / CCOLS) | 0;
@@ -967,13 +975,13 @@
     }
     const keep = new Set(best); for (let i = 0; i < T.length; i++) if (pass(T[i]) && !keep.has(i)) T[i] = 'm';
     // 10 city spots, at least 6 tiles apart (5 empty tiles between): a couple at the edge, a couple central, the rest anywhere
-    const land = []; for (let i = 0; i < T.length; i++) { const c = i % CCOLS, r = (i / CCOLS) | 0; if (pass(T[i]) && nbIn(c, r, CCOLS, CROWS).filter(([a, b]) => pass(T[b * CCOLS + a])).length >= 4) land.push([c, r]); }
+    const land = []; for (let i = 0; i < T.length; i++) { const c = i % CCOLS, r = (i / CCOLS) | 0; if (r > WALL_ROW + 2 && pass(T[i]) && nbIn(c, r, CCOLS, CROWS).filter(([a, b]) => pass(T[b * CCOLS + a])).length >= 4) land.push([c, r]); }
     const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
-    const edge = h => h[0] <= 1 || h[0] >= CCOLS - 2 || h[1] <= 1 || h[1] >= CROWS - 2, mid = [CCOLS >> 1, CROWS >> 1];
+    const edge = h => h[0] <= 1 || h[0] >= CCOLS - 2 || h[1] <= 1 || h[1] >= CROWS - 2, mid = [CCOLS >> 1, (CROWS + WALL_ROW) >> 1];
     const spots = [], far = h => spots.every(p => hexDist(p, h) >= 6);
     for (const [pool, n] of [[shuffle(land.filter(edge)), 2], [shuffle(land.filter(h => hexDist(h, mid) <= 7)), 2], [shuffle(land.slice()), 10]])
       { let got = 0; for (const h of pool) { if (spots.length >= 10 || got >= n) break; if (far(h)) { spots.push(h); got++; } } }
-    return { terrain: T.join(''), spots, ok: spots.length === 10, R };
+    return { terrain: T.join(''), spots, wallSpot: [CCOLS >> 1, WALL_ROW], ok: spots.length === 10 && pass(T[(WALL_ROW + 1) * CCOLS + (CCOLS >> 1)]), R };
   }
   // ---------- campaign board layers: terrain painted at half resolution ----------
   function hexAtCanvas(px, py) {
@@ -1009,7 +1017,11 @@
     // decorations per tile
     for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
       const k = tAt(c, r), m = center(c, r), cx = m.x + OX, cy = m.y + OY, spot = () => { const a = rnd() * 7, rr = Math.sqrt(rnd()) * S * 0.7; return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * SQ]; };
-      if (k === 'm' || k === 'r') {                                  // mountains / rocks: grey peaks
+      if (k === 'i') {                                                // the great ice wall
+        const top = cy - 70; b.fillStyle = 'rgba(0,0,0,0.3)'; b.fillRect(cx - S * 0.87, cy + 4, S * 1.74, 10);
+        const gr = b.createLinearGradient(0, top, 0, cy); gr.addColorStop(0, '#f2fbff'); gr.addColorStop(1, '#9cc4d8'); b.fillStyle = gr; b.fillRect(cx - S * 0.88, top, S * 1.76, 74);
+        b.strokeStyle = 'rgba(120,160,190,0.6)'; b.lineWidth = 2; for (let i = 0; i < 4; i++) { b.beginPath(); b.moveTo(cx - S * 0.88, top + 14 + i * 16); b.lineTo(cx + S * 0.88, top + 12 + i * 16 + (rnd() - 0.5) * 6); b.stroke(); }
+      } else if (k === 'm' || k === 'r') {                                  // mountains / rocks: grey peaks
         const n = k === 'm' ? 3 : 2;
         for (let i = 0; i < n; i++) { const x = cx + (i - (n - 1) / 2) * 24 + (rnd() - 0.5) * 8, y = cy + (rnd() - 0.3) * 10, hh = k === 'm' ? 46 + rnd() * 18 : 22 + rnd() * 10, w = k === 'm' ? 30 : 20;
           b.fillStyle = 'rgba(0,0,0,0.3)'; b.beginPath(); b.ellipse(x + 6, y + 3, w, w * 0.4, 0, 0, 7); b.fill();
@@ -1066,6 +1078,7 @@
   const BUILDINGS = {
     tradepost: { name: 'Trade post', cost: 20, text: '+1 point per turn (+1 more per city it is road-connected to)' },
     garrison:  { name: 'Garrison', cost: 10, text: '+1 swordsman defender, +1 defender of each unit type this city can recruit' },
+    nightswatch: { name: "Night's Watch", cost: 40, wallOnly: true, text: 'Defenders of this city deal double damage to the undead' },
     walls:     { name: 'Walls', cost: 20, text: 'Stone walls with a 3-tile gate and stairs when this city is besieged' },
     tower:     { name: 'Tower', cost: 20, text: 'A defence tower (24 HP, range 5, 3 damage) placed like a unit when besieged · up to 2' },
     heroes:    { name: "Heroes' hall", cost: 20, text: 'Recruit any hero (base stats, no cards)', units: HEROES },
@@ -1107,10 +1120,11 @@
   const seesArmy = (u, fid = viewer()) => u.team === fid;
   const aliveFactions = () => (game.factions || []).filter(f => f.alive);
   function checkDefeats() {
-    for (const f of game.factions || []) if (f.alive && !(game.cities || []).some(c => c.owner === f.id) && !units.some(u => u.troops && u.team === f.id && u.dying === null)) {
+    for (const f of game.factions || []) if (f.alive && !f.undead && !(game.cities || []).some(c => c.owner === f.id) && !units.some(u => u.troops && u.team === f.id && u.dying === null)) {
       f.alive = false; toast(`${f.name} has been defeated`);
     }
-    const al = aliveFactions(); if (al.length === 1 && !game.cwinner) game.cwinner = al[0].id;
+    const al = aliveFactions().filter(f => !f.undead), ud = game.undead;          // the last realm must also destroy the undead
+    if (!game.cwinner && game.view === 'campaign') { if (!al.length) game.cwinner = 'undead'; else if (al.length === 1 && (!ud || (ud.final && !undeadArmies().length && !ud.pool.length))) game.cwinner = al[0].id; }
   }
   // ---------- lobby ----------
   function defaultFactions() {
@@ -1124,20 +1138,22 @@
     const spots = w.spots.slice(); for (let i = spots.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }
     const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai', alive: true, style: ['aggressive', 'builder', 'balanced'][(R() * 3) | 0] }));
     const cities = spots.map((h, i) => ({ id: 'city' + i, col: h[0], row: h[1], name: names[i], owner: i < factions.length ? factions[i].id : null, buildings: [], acted: false }));
+    cities.push({ id: 'citywall', col: w.wallSpot[0], row: w.wallSpot[1], name: 'Frostgate', owner: null, buildings: [], acted: false, wall: true });
     const T = w.terrain, armies = [];
     factions.forEach((f, i) => { const c = cities[i];
       const n = nbIn(c.col, c.row, CCOLS, CROWS).find(([a, b]) => T[b * CCOLS + a] !== 'w' && T[b * CCOLS + a] !== 'm');
       armies.push({ id: `army-${f.id}-1`, type: 'army', team: f.id, col: n[0], row: n[1], hp: 1, maxHp: 1, face: 0, moved: false, attacked: false, troops: [troop('swordsman')] }); });
+    factions.push({ id: 'undead', name: 'Undead', col: UNDEAD_COL, ai: true, alive: true, style: 'undead', undead: true });   // the undead play last, with no city and no army yet
     const points = {}; for (const f of factions) points[f.id] = 0;
     const st = { ...exportState(null), seq: game.seq + 1, view: 'campaign', turn: factions[0].id, round: 1, factions, cities, roads: [], terrain: T, points, units: armies,
-      sides: null, campaign: null, cwinner: null, pending: null, battle: false };
+      sides: null, campaign: null, cwinner: null, pending: null, battle: false, undead: { pool: [], waves: [], final: false, countdownEnd: null } };
     st.last = { type: 'start', seq: st.seq };
     floats = []; selUnit = null; sel = null; selCity = null; applyState(st); publish(st.last);
     startOfFactionTurn(factions[0].id, true); commit({ type: 'income' });
   }
   // ---------- turns ----------
   function startOfFactionTurn(fid, quiet) {
-    const f = faction(fid); if (!f) return;
+    const f = faction(fid); if (!f || f.undead) return;
     const inc = incomeOf(fid); game.points = { ...game.points, [fid]: (game.points[fid] || 0) + inc.pts };
     for (const c of game.cities) if (c.owner === fid) c.acted = false;
     if (!quiet && fid === viewer()) toast(`${f.name}: +${inc.pts} points`);
@@ -1205,7 +1221,7 @@
     for (const a of asks) { const f = faction(a.fid); if (f && f.ai) a.ans = aiWantsToJoin(f, a); }
     commit({ type: 'battle-ask' }); maybeBeginBattle();
   }
-  function aiWantsToJoin(f, a) { if (f.id === game.bt.initiator || f.id === game.bt.defender) return true; return Math.random() < ({ aggressive: 0.6, balanced: 0.3, builder: 0.1 })[f.style || 'balanced']; }
+  function aiWantsToJoin(f, a) { if (f.undead) return true; if (f.id === game.bt.initiator || f.id === game.bt.defender) return true; return Math.random() < ({ aggressive: 0.6, balanced: 0.3, builder: 0.1 })[f.style || 'balanced']; }
   function answerAsk(askIdx, yes, seat) {
     const b = bt(); if (!b || b.phase !== 'ask') return; const a = b.asks[askIdx]; if (!a || a.ans !== null) return;
     if (seat && seat !== a.fid) return;
@@ -1251,11 +1267,15 @@
   function spawnTroops(j, zone, enter) {               // put an army's (or city's) troops into its zone: melee in front, ranged behind
     const b = bt(), src = j.kind === 'army' ? (game.campaign.armies.find(u => u.id === j.id) || units.find(u => u.id === j.id)) : game.cities.find(c => c.id === j.id);
     if (!src || !zone) return;
-    const list = j.kind === 'army' ? src.troops.slice(0, MAX_TROOPS) : garrisonOf(src).map(t => ({ ...troop(t), garrison: true }));
+    const list = j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : garrisonOf(src).map(t => ({ ...troop(t), garrison: true }));
     const mid = [BCOLS >> 1, BROWS >> 1], free = zoneTiles(zone).filter(h => b.grid[h[1] * BCOLS + h[0]] !== 'r' && !unitAt(h)).sort((x, y) => hexDist(x, mid) - hexDist(y, mid));
     const order = list.map((t, i) => ({ t, i, back: !!(UNIT_TYPES[t.type] || {}).ranged })).sort((x, y) => x.back - y.back);
     const prefix = j.kind === 'army' ? j.id : 'g:' + j.id;
-    order.forEach(({ t, i }) => { const h = free.shift(); if (!h) return;
+    order.forEach(({ t, i }) => { let h;
+      if ((UNIT_TYPES[t.type] || {}).big) { const k = free.findIndex(c => nbIn(c[0], c[1], BCOLS, BROWS).length === 6 && nbIn(c[0], c[1], BCOLS, BROWS).every(n => free.some(f => f[0] === n[0] && f[1] === n[1])));
+        if (k < 0) return; h = free[k]; const fp = [h, ...nbIn(h[0], h[1], BCOLS, BROWS)]; for (const q of fp) { const j2 = free.findIndex(f => f[0] === q[0] && f[1] === q[1]); if (j2 >= 0) free.splice(j2, 1); } }
+      else h = free.shift(); if (!h) return;
+      (b.roster = b.roster || []).push({ id: `${prefix}.${i}`, type: t.type, team: j.fid });
       units.push(runtimeUnit({ ...t, id: `${prefix}.${i}`, team: j.fid, col: h[0], row: h[1], face: faceAng(h, mid), moved: false, attacked: false, ...(enter > 1 ? { enter } : {}) })); });
   }
   function faceAng(a, b) { const p = center(a[0], a[1]), q = center(b[0], b[1]); return Math.atan2(q.x - p.x, (q.y - p.y) / SQ); }
@@ -1326,9 +1346,12 @@
     const w = winner(), b = bt(); if (game.view !== 'battle' || !w || !b) return;
     const alive = units.filter(u => u.dying === null && u.hp > 0);
     const bySrc = {}; for (const u of alive) { const src = String(u.id).replace(/\.\d+$/, ''); (bySrc[src] = bySrc[src] || []).push(u); }
+    const aliveIds = new Set(alive.map(u => u.id)), rost = b.roster || [];
+    recordDeaths(rost.filter(r => r.team !== 'undead' && !aliveIds.has(r.id)).map(r => r.type));
+    if (game.undead) game.undead.pool.push(...alive.filter(u => u.team === 'undead' && rost.some(r => r.id === u.id && r.team !== 'undead')).map(u => u.type));   // the turned march with the dead
     units = game.campaign.armies.map(runtimeUnit);
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
-      if (j.fid === w && (j.dist <= 1 || j.spawned)) a.troops = [...survivorsOf(bySrc[j.id] || []), ...a.troops.slice(MAX_TROOPS)];
+      if (j.fid === w && (j.dist <= 1 || j.spawned)) a.troops = [...survivorsOf((bySrc[j.id] || []).filter(u => u.team === j.fid)), ...a.troops.slice(j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS)];
       else if (j.fid !== w && (j.dist <= 1 || j.spawned)) a.dead = true; }
     for (const u of units) if (u.inBattle === b.id) u.inBattle = null;
     const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity);
@@ -1344,12 +1367,12 @@
   function autoResolveBattle() {                      // nobody human involved: strength with some luck decides
     const b = bt(), list = {};
     for (const j of b.joined) { const src = j.kind === 'army' ? units.find(u => u.id === j.id) : game.cities.find(c => c.id === j.id); if (!src) continue;
-      const tr = j.kind === 'army' ? src.troops.slice(0, MAX_TROOPS) : garrisonOf(src).map(troop); list[j.fid] = (list[j.fid] || 0) + troopStrength(tr) * (j.kind === 'city' ? 1.15 : 1); }
+      const tr = j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : garrisonOf(src).map(troop); list[j.fid] = (list[j.fid] || 0) + troopStrength(tr) * (j.kind === 'city' ? 1.15 * (src.wall && src.buildings.includes('nightswatch') && b.joined.some(x => x.fid === 'undead') ? 2 : 1) : 1); }
     let w = null, best = -1; for (const [f, s] of Object.entries(list)) { const v = s * (0.75 + Math.random() * 0.5); if (v > best) { best = v; w = f; } }
     const total = Object.values(list).reduce((a, x) => a + x, 0), ratio = Math.min(0.9, (total - list[w]) / Math.max(1, list[w]) * 0.7);
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
-      if (j.fid === w) { const keep = a.troops.slice().sort((x, y) => troopStrength([y]) - troopStrength([x])); a.troops = keep.slice(0, Math.max(1, Math.round(keep.length * (1 - ratio)))); }
-      else a.dead = true; }
+      if (j.fid === w) { const keep = a.troops.slice().sort((x, y) => troopStrength([y]) - troopStrength([x])); const k2 = Math.max(1, Math.round(keep.length * (1 - ratio))); if (j.fid !== 'undead') recordDeaths(keep.slice(k2).map(t => t.type)); a.troops = keep.slice(0, k2); }
+      else { if (j.fid !== 'undead') recordDeaths(a.troops.map(t => t.type)); a.dead = true; } }
     const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity);
     if (sc && sc.owner !== w) { const att = units.find(u => u.team === w && !u.dead && b.joined.some(j => j.id === u.id)); if (att) { att.col = sc.col; att.row = sc.row; } game.pending = { type: 'capture', city: sc.id, by: w, army: att ? att.id : null }; }
     units = units.filter(u => !u.dead && !(u.troops && !u.troops.length)); game.bt = null;
@@ -1464,6 +1487,96 @@
       ctx.beginPath(); ctx.moveTo(a.x + px, a.y + py); ctx.lineTo(bx + px, by + py); ctx.moveTo(a.x - px, a.y - py); ctx.lineTo(bx - px, by - py);
       for (let i = 1; i < 6; i++) { const f = i / 6; ctx.moveTo(a.x + dx * f + px, a.y + dy * f + py); ctx.lineTo(a.x + dx * f - px, a.y + dy * f - py); } ctx.stroke(); }
   }
+  // ===================== THE UNDEAD =====================
+  const WALL_ROW = 12, UNDEAD_CAP = 40, WAVE_EVERY = 20, FINAL_WAVE = 100, UNDEAD_COL = [150, 162, 178];
+  const isUndeadFid = fid => fid === 'undead';
+  const undeadArmies = () => units.filter(u => u.troops && u.team === 'undead' && u.dying === null);
+  const halfTroop = t => { const mx = Math.max(1, Math.ceil(typeMax(t) / 2)); return { type: t, hp: mx, maxHp: mx, mana: typeStat(t, 'manaMax'), manaMax: typeStat(t, 'manaMax') }; };
+  function northTile() {                              // a free tile up in the frozen north
+    for (let i = 0; i < 400; i++) { const h = [(Math.random() * CCOLS) | 0, (Math.random() * (WALL_ROW - 2)) | 0];
+      if (!impassable(h) && !unitAt(h) && !cityAt(h) && !units.some(u => u.troops && hexDist([u.col, u.row], h) <= 1)) return h; }
+    return [0, 0];
+  }
+  function addUndeadTroops(list, released) {          // fill undead armies up to 40, then start a new one
+    if (!list.length) return; if (game.view !== 'campaign') { game.undead.pool.push(...list.map(t => t.type)); return; }
+    let pool = list.slice();
+    for (const a of undeadArmies().filter(a => !!a.released === !!released && a.troops.length < UNDEAD_CAP)) { const n = UNDEAD_CAP - a.troops.length; a.troops = [...a.troops, ...pool.splice(0, n)]; if (!pool.length) return; }
+    while (pool.length) { const h = northTile();
+      units.push(runtimeUnit({ id: `army-undead-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, type: 'army', team: 'undead', col: h[0], row: h[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, released: !!released, troops: pool.splice(0, UNDEAD_CAP) })); }
+  }
+  function recordDeaths(types) {                     // every living unit that dies comes back twice (siege engines: 2 swordsmen)
+    const out = []; for (const t of types) { if (t === 'tower') continue; if (SIEGE.includes(t)) out.push('swordsman', 'swordsman'); else out.push(t, t); }
+    if (game.undead) game.undead.pool.push(...out);
+  }
+  function flushPool() { if (!game.undead || !game.undead.pool.length) return; const p = game.undead.pool; game.undead.pool = []; addUndeadTroops(p.map(halfTroop), false); }
+  function undeadWave(T) {                           // every 20 turns: T new skeletons; 80: a mammoth; 100: 2 mammoths, the King and the Queen
+    const ud = game.undead; if (ud.waves.includes(T)) return; ud.waves.push(T);
+    const mobs = Array.from({ length: Math.min(T, FINAL_WAVE) }, () => troop('skeleton'));
+    if (T >= 80) mobs.unshift(troop('mammoth'));
+    if (T >= FINAL_WAVE) { mobs.unshift(troop('mammoth'), troop('uking'), troop('uqueen')); ud.final = true; }
+    addUndeadTroops(mobs, true);
+    if (T >= 40 || ud.final) for (const a of undeadArmies()) a.released = true;   // from turn 40 the risen dead march too
+    toast(`🧟 The undead march south · ${mobs.length} new`);
+  }
+  function undeadTurnStart() {                        // called when the undead faction's campaign turn begins
+    const ud = game.undead; if (!ud) return;
+    flushPool();
+    const living = game.factions.filter(f => f.alive && !isUndeadFid(f.id));
+    if (living.length === 1 && game.round < 80 && !ud.countdownEnd && !ud.final) { ud.countdownEnd = game.round + 40; toast('Only one realm stands · the undead come in 40 turns'); }
+    if (ud.countdownEnd && game.round >= ud.countdownEnd && !ud.final) undeadWave(FINAL_WAVE);
+    else if (game.round % WAVE_EVERY === 0 && game.round <= FINAL_WAVE) undeadWave(game.round);
+  }
+  function aiUndeadStep(f) {
+    if (!aiState || aiState.kind !== 'undead' || aiState.round !== game.round) { aiState = { kind: 'undead', round: game.round, done: new Set() }; undeadTurnStart(); commit({ type: 'ai' }); aiBusyUntil = Date.now() + 300; return; }
+    const a = undeadArmies().find(x => x.released && !x.moved && !x.inBattle && !aiState.done.has(x.id));
+    if (!a) { aiBusyUntil = Date.now() + 200; commit({ type: 'end' }); return; }
+    aiState.done.add(a.id);
+    const here = [a.col, a.row], foes = [...units.filter(u => u.troops && u.team !== 'undead' && u.dying === null && !u.inBattle).map(u => ({ tile: [u.col, u.row], u })),
+      ...game.cities.filter(c => c.owner).map(c => ({ tile: [c.col, c.row], c }))].sort((x, y) => hexDist(here, x.tile) - hexDist(here, y.tile));
+    let goal = null, path = null;
+    for (const t of foes.slice(0, 6)) { path = campPath(here, t.tile, a); if (path && path.length) { goal = t; break; } }
+    if (!goal) { const wc = game.cities.find(c => c.wall); if (wc && wc.owner) { path = campPath(here, [wc.col, wc.row], a); if (path) goal = { tile: [wc.col, wc.row], c: wc }; } }
+    if (!goal) {                                       // nothing to hunt: wander south
+      const b = reach(a), opts = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t)).sort((x, y) => (y[1] + Math.random() * 3) - (x[1] + Math.random() * 3));
+      if (opts[0]) { const mv = { type: 'move', id: a.id, path: pathTo(b, opts[0]), rng: 1 }; aiBusyUntil = Date.now() + 200; play(mv, () => commit(mv)); } return; }
+    const b = reach(a); let stop = -1; for (let i = 0; i < path.length - 1; i++) if (b.dist.has(key(...path[i])) && !unitAt(path[i])) stop = i;
+    const adjNext = path.length === 1 || stop === path.length - 2, walk = stop >= 0 ? pathTo(b, path[stop]) : [];
+    const after = () => { if (adjNext && !a.attacked) engage(a, goal.u || goal.c); };
+    if (walk.length) { const mv = { type: 'move', id: a.id, path: walk, rng: 1 }; aiBusyUntil = Date.now() + 200; play(mv, () => { commit(mv); after(); }); } else { after(); aiBusyUntil = Date.now() + 80; }
+  }
+  // big units (mammoth): its tile and the ring around it
+  const footprint = (h, u) => T(u).big ? [h, ...neighbors(...h)] : [h];
+  const gapTo = (from, bigFrom, o) => hexDist(from, [o.col, o.row]) - (bigFrom ? 1 : 0) - (T(o).big ? 1 : 0);
+  // undead look: the same models, bleached to grey bone
+  function bleach(mesh) {
+    return { v: mesh.v, f: mesh.f.map(f => { const c = f.col, g = (c[0] + c[1] + c[2]) / 3, skin = c === C.SKIN;
+      return { ...f, col: skin ? [196, 192, 176] : [g * 0.55 + 70, g * 0.55 + 74, g * 0.55 + 82] }; }) };
+  }
+  function buildSkeleton(team) {
+    const m = { v: [], f: [] }, BONE = [200, 196, 180], DB = [150, 146, 132], RAG = [70, 72, 78];
+    for (const sx of [-1, 1]) { part(m, boxG(0.5, 6.4, 0.5), BONE, { p: [sx * 0.8, 0, 0] }); part(m, boxG(0.9, 0.5, 1.3), DB, { p: [sx * 0.8, 0, 0.2] }); }
+    part(m, boxG(2.2, 1.4, 1.4, 1.1), RAG, { p: [0, 6.2, 0] });
+    for (let i = 0; i < 4; i++) part(m, boxG(2.6 - i * 0.2, 0.35, 1.5), BONE, { p: [0, 8 + i * 1.0, 0] });
+    part(m, boxG(0.4, 4.4, 0.4), BONE, { p: [0, 7.4, -0.4] });
+    part(m, boxG(1.6, 1.7, 1.6), BONE, { p: [0, 12.4, 0.05] }); part(m, boxG(1.1, 0.5, 0.3), [30, 40, 60], { p: [0, 13.3, 0.82], bias: 2 });
+    const rH = arm(m, [-1.6, 11.6, 0], [-0.5, 0, 0.2], [-1.2, 0, 0.2], BONE, BONE, 3, 2.6);
+    arm(m, [1.6, 11.6, 0], [-0.3, 0, -0.2], [-0.6, 0, -0.3], BONE, BONE, 3, 2.6);
+    part(m, boxG(0.4, 6, 0.15, 0.3), [130, 120, 100], { o: [0, 0.4, 0], r: [0.9, 0, 0], p: rH });
+    return m;
+  }
+  function buildMammoth(team) {
+    const m = { v: [], f: [] }, HIDE = [120, 112, 104], DH = [86, 80, 74], TUSK = [226, 220, 200];
+    for (const [x, z] of [[-6, -9], [6, -9], [-6, 9], [6, 9]]) part(m, cylG(3.2, 13, 8, 2.8), DH, { p: [x, 0, z] });
+    part(m, boxG(17, 14, 28, 0.9, 0.85), HIDE, { p: [0, 11, 0] });
+    part(m, boxG(15, 4, 22, 0.8, 0.8), DH, { p: [0, 25, -1] });
+    part(m, boxG(11, 11, 9, 0.8, 0.8), HIDE, { p: [0, 15, 16] });
+    part(m, boxG(3.2, 13, 3.2, 0.6, 0.6), DH, { r: [0.25, 0, 0], p: [0, 4, 21] });
+    for (const sx of [-1, 1]) { part(m, boxG(1.4, 15, 1.4, 0.4, 0.4), TUSK, { r: [1.1, 0, sx * 0.2], p: [sx * 3.4, 13, 19] }); part(m, boxG(4, 6, 0.6), DH, { p: [sx * 6, 17, 13] }); }
+    part(m, boxG(2.4, 1, 0.4), [80, 160, 230], { p: [0, 19, 20.6], bias: 2 });
+    return m;
+  }
+  function buildUndeadKing(team) { const m = bleach(buildKnight([160, 170, 190])); part(m, cylG(1.6, 1.6, 8, 1.9), [150, 200, 240], { p: [0, 17.2, 0] }); return m; }
+  function buildUndeadQueen(team) { const m = bleach(buildRanger([160, 170, 190])); part(m, cylG(1.5, 1.4, 8, 1.8), [150, 200, 240], { p: [0, 16.8, -0.2] }); return m; }
   function resolvePendingAI() {                     // an AI that took a city keeps it
     const p = game.pending; if (!p) return; const f = faction(p.by);
     if (f && f.ai && iRunAI()) { captureCity(true); }
@@ -1485,7 +1598,7 @@
   const iRunAI = () => mode === 'local' || p2p.role === 'host';
   function aiTick() {
     if (!iRunAI() || busy() || game.pending && !faction(game.pending.by)?.ai || Date.now() < aiBusyUntil) return;
-    if (game.view === 'campaign' && !game.cwinner && !(game.bt && !game.bt.saved)) { const f = faction(game.turn); if (f && f.ai && f.alive) aiCampaignStep(f); }
+    if (game.view === 'campaign' && !game.cwinner && !(game.bt && !game.bt.saved)) { const f = faction(game.turn); if (f && f.ai && f.alive) (f.undead ? aiUndeadStep(f) : aiCampaignStep(f)); }
     else if (game.view === 'battle' && game.bt && game.bt.phase === 'fight' && !winner()) { const f = faction(game.turn); if (f && f.ai) aiBattleStep(); }
   }
   const aiGo = a => { a.rng = Math.floor(Math.random() * 4e9); aiBusyUntil = Date.now() + 260; play(a, () => commit(a)); };
@@ -1516,9 +1629,9 @@
       if (walkToward()) return;
     } else if (!u.attacked) {                                       // melee
       const r = u.type === 'warrior' ? (hasPassive(u, 'halberd') ? 2 : 1) : (ty.reach || 1);
-      const adj = foes.find(o => hexDist(here, [o.col, o.row]) <= 1);
+      const adj = foes.find(o => gapTo(here, T(u).big, o) <= 1);
       if (adj) { aiGo({ type: 'attack', id: u.id, path: [], target: adj.id, targets: [adj.id], dir: u.type === 'warrior' ? warriorAim(u, here, [adj.col, adj.row]) : undefined }); return; }
-      if (!u.moved) { const s = closest(t => hexDist(t, [tgt.col, tgt.row]) === 1);
+      if (!u.moved) { const s = closest(t => gapTo(t, T(u).big, tgt) === 1);
         if (s) { aiGo({ type: 'attack', id: u.id, path: pathTo(b, s.t), target: tgt.id, targets: [tgt.id], dir: u.type === 'warrior' ? warriorAim(u, s.t, [tgt.col, tgt.row]) : undefined }); return; } }
       if (sg() && sg().def !== team) { const near2 = neighbors(...here).filter(n => { const p = wallAt(n); return p && p.kind !== 'stair' && !(p.kind === 'gate' && sg().gateOpen) && !liveUnitAt(n); })
           .sort((x, y) => (wallAt(y).kind === 'gate') - (wallAt(x).kind === 'gate'));
@@ -1533,7 +1646,7 @@
     while (q.length) { const h = q.shift(); if (h[0] === to[0] && h[1] === to[1]) break;
       for (const n of nbIn(h[0], h[1], CCOLS, CROWS)) { const k = key(...n); if (prev.has(k) || impassable(n)) continue;
         const goal = n[0] === to[0] && n[1] === to[1], o = unitAt(n), c = cityAt(n);
-        if (!goal && ((o && o !== u) || (c && c.owner !== u.team))) continue; prev.set(k, h); q.push(n); } }
+        if (!goal && ((o && o !== u) || (c && c.owner !== u.team && !(u.team === 'undead' && !c.owner)))) continue; prev.set(k, h); q.push(n); } }
     if (!prev.has(key(...to))) return null;
     const p = []; let cur = to; while (cur && key(...cur) !== k0) { p.unshift(cur); cur = prev.get(key(...cur)); } return p;
   }
@@ -1632,7 +1745,7 @@
       toast(`Loaded save · Round ${loaded.round}`);
     });
   }
-  const unitAt = h => h && units.find(u => u.col === h[0] && u.row === h[1]);
+  const unitAt = h => h && (units.find(u => u.col === h[0] && u.row === h[1]) || units.find(u => u.dying === null && UNIT_TYPES[u.type] && UNIT_TYPES[u.type].big && hexDist(h, [u.col, u.row]) <= 1));
   const busy = () => !!afterIdle || projectiles.length > 0 || units.some(u => u.path || u.atk || u.dying !== null);
   const faceToward = (u, o) => { const a = center(u.col, u.row), b = center(o.col, o.row); u.want = Math.atan2(b.x - a.x, (b.y - a.y) / SQ); };
   const winner = () => { if (game.view !== 'battle') return null;   // the players decide who wins the campaign
@@ -1645,7 +1758,7 @@
   const neighbors = (c, r) => { const [q, rr] = toAx(c, r);
     return DIRS.map(([dq, dr]) => fromAx(q + dq, rr + dr)).filter(([a, b]) => a >= 0 && a < COLS && b >= 0 && b < ROWS); };
   // zone of control: no army can walk past another faction's army (also one that is in a battle)
-  const zoc = (h, u) => units.some(o => o.troops && o !== u && o.team !== u.team && o.dying === null && hexDist(h, [o.col, o.row]) === 1);
+  const zoc = (h, u) => units.some(o => o.troops && o !== u && o.dying === null && hexDist(h, [o.col, o.row]) === 1);
   function reach(u) {
     const dist = new Map([[key(u.col, u.row), 0]]), prev = new Map(), q = [[u.col, u.row]];
     while (q.length) {
@@ -1655,7 +1768,8 @@
       for (const n of neighbors(...h)) {
         const k = key(...n); if (dist.has(k)) continue;
         const o = unitAt(n); if (o && o !== u) continue; if (blockedTile(n) || !canStep(h, n)) continue;
-        if (u.troops && game.view === 'campaign') { if (impassable(n)) continue; const c = cityAt(n); if (c && c.owner !== u.team) continue; }
+        if (T(u).big && !footprint(n, u).every(t => onBoard(t) && !blockedTile(t) && (!unitAt(t) || unitAt(t) === u))) continue;
+        if (u.troops && game.view === 'campaign') { if (impassable(n)) continue; const c = cityAt(n); if (c && c.owner !== u.team && !(u.team === 'undead' && !c.owner)) continue; }
         dist.set(k, d + 1); prev.set(k, h); q.push(n);
       }
     }
@@ -1709,7 +1823,7 @@
   function attack(u, tgt) { faceToward(u, tgt); u.atk = { target: tgt, t: 0, hit: false }; }
   // ---------- Combat: lines, damage, push & stun, projectiles ----------
   let projectiles = [], effects = [];
-  const liveUnitAt = h => h && units.find(u => u.col === h[0] && u.row === h[1] && u.dying === null && u.hp > 0);
+  const liveUnitAt = h => h && (units.find(u => u.col === h[0] && u.row === h[1] && u.dying === null && u.hp > 0) || units.find(u => u.dying === null && u.hp > 0 && UNIT_TYPES[u.type] && UNIT_TYPES[u.type].big && hexDist(h, [u.col, u.row]) <= 1));
   const isMounted = u => !!T(u).mounted;
   const onBoard = h => h[0] >= 0 && h[0] < COLS && h[1] >= 0 && h[1] < ROWS;
   const blockedTile = h => !onBoard(h) || (game.view === 'battle' && !!game.bt && !!game.bt.grid && game.bt.grid[h[1] * BCOLS + h[0]] === 'r') || gateClosed(h);
@@ -1738,12 +1852,13 @@
   }
   // stun: a unit stunned during its own side's turn loses the rest of that turn; otherwise it skips its next turn
   function stunUnit(u) {
+    if (u && T(u).noCC) return;
     if (!u || u.dying !== null || u.hp <= 0) return;
     if (game.turn === u.team) { u.stunActive = true; u.moved = true; u.attacked = true; } else u.stun = 1;
     const p = upos(u); addFloat(p.x - 14, p.y - headY(u) - 62, 'STUNNED!', '#ffd23a', 16);
   }
   const isStunned = u => u.stunActive || u.stun > 0;
-  function pushUnit(u, h) { u.path = [h]; u.segT = 0; u.push = true; u.then = null; }
+  function pushUnit(u, h) { if (T(u).big) return; u.path = [h]; u.segT = 0; u.push = true; u.then = null; }
   // anti-charge: lancer charging a spear/halberd, or passing within 1 (spear) / 2 (halberd) tiles of one, gets stunned
   function antiCharge(u, tiles, tgt) {
     if (tgt && antiCavOf(tgt) && tgt.team !== u.team) return true;
@@ -2032,6 +2147,9 @@
   function dealDamage(t, amt, { physical = true, melee = false, src = null, aoe = false, projectile = false } = {}) {
     if (!t || t.dying !== null || t.hp <= 0) return { blocked: true, dealt: 0 };
     if (t.climb) amt *= 2;                                // on a ladder: double damage
+    if (src && (src.turner || T(src).turner) && t.team !== src.team && !T(t).structure && !T(t).big && t.team !== 'undead') {   // the King/Queen and their thralls turn the living
+      t.team = src.team; t.turner = true; t.mesh = meshFor(t.type, t.team); t.flash = 1; floatOn(t, 'TURNED!', '#9fd8ff', 0, 18); return { blocked: false, dealt: 0 }; }
+    if (t.team === 'undead' && src && game.bt && game.bt.siegeCity) { const wc = game.cities.find(c => c.id === game.bt.siegeCity); if (wc && wc.wall && wc.buildings.includes('nightswatch') && src.team === wc.owner) amt *= 2; }
     const g = t.guard && units.find(x => x.id === t.guard.by && x.dying === null && x.hp > 0);
     if (g && g !== t) {                                     // Guardian's Oath: damage goes to the paladin instead
       const moved = steadfast(g, Math.max(0, amt - (t.guard.red || 0)));
@@ -2313,7 +2431,7 @@
       fire(sk === 'snipe' ? 'shot' : 'arrow', shotFrom(u), shotAt(tgt), () => {
         if (sk === 'snipe') { dealDamage(tgt, rangedDmg(card.dmg(L), tgt), { src: u, projectile: true }); return; }
         if (tgt.dying !== null || avoids(tgt, u, { projectile: true })) return;
-        const sl = card.slows(L); if (!tgt.slows || tgt.slows.length < sl.length || sl[0] === 'root') tgt.slows = [...sl];
+        const sl = card.slows(L); if (!T(tgt).noCC && (!tgt.slows || tgt.slows.length < sl.length || sl[0] === 'root')) tgt.slows = [...sl];
         floatOn(tgt, sl[0] === 'root' ? 'PINNED!' : 'CRIPPLED!', '#9fd0ff');
       });
       return true;
@@ -3020,6 +3138,12 @@
       if (!(isHost() || f.id === mySeat) || game.factions.some(o => o !== f && o.color === k)) return;
       f.color = k; f.col = p.col; f.name = p.name; commit({ type: 'setup' }); }
   });
+  function undeadInfo() {
+    const ud = game.undead; if (!ud) return '';
+    if (ud.final) return ' · 🧟 the last wave is out';
+    if (ud.countdownEnd) return ` · 🧟 the dead come in ${Math.max(0, ud.countdownEnd - game.round)}`;
+    const left = game.round % WAVE_EVERY === 0 ? 0 : WAVE_EVERY - (game.round % WAVE_EVERY); return ` · 🧟 ${left ? `next wave in ${left}` : 'a wave rises this turn'}`;
+  }
   function renderFactions() {
     document.getElementById('teams').style.display = 'none';
     if (game.view === 'battle' && game.bt && !spectating()) { const h2 = battleSidesHtml(); if (facsEl.dataset.h !== h2) { facsEl.dataset.h = h2; facsEl.innerHTML = h2; } facsEl.style.display = 'block'; return; }
@@ -3030,7 +3154,7 @@
       const nc = game.cities.filter(c => c.owner === f.id).length, na = units.filter(u => u.troops && u.team === f.id && u.dying === null).length;
       const cur = f.id === game.turn, inc = f.id === me ? incomeOf(f.id).pts : null;
       return `<div class="frow ${cur ? 'cur' : ''} ${f.alive ? '' : 'dead'}" style="--fc:rgb(${f.col.map(v => Math.min(255, v + 60))})"><span class="fsw" style="background:rgb(${f.col})"></span>
-        <b>${f.name}</b>${f.id === me ? ' (you)' : f.ai ? ' · AI' : ''}${f.alive ? '' : ' · ✝ defeated'} · 🏰 ${nc} · ⚑ ${na}${f.id === me ? ` · <b style="color:#e8c25a">${pts(f.id)} pts</b> <span class="k">(+${inc}/turn)</span>` : ''}</div>`;
+        <b>${f.undead ? '🧟 ' : ''}${f.name}</b>${f.id === me ? ' (you)' : f.ai && !f.undead ? ' · AI' : ''}${f.alive ? '' : ' · ✝ defeated'} · ${f.undead ? '' : `🏰 ${nc} · `}⚑ ${na}${f.id === me ? ` · <b style="color:#e8c25a">${pts(f.id)} pts</b> <span class="k">(+${inc}/turn)</span>` : ''}</div>`;
     }).join('');
     if (facsEl.dataset.h !== html) { facsEl.dataset.h = html; facsEl.innerHTML = html; }
     facsEl.style.display = 'block';
@@ -3071,7 +3195,7 @@
         } else html += '<div class="k">Its buildings are unknown. Connect a road to it to see them.</div>';
         if (own) {
           html += city.acted ? '<div class="k">Already built or destroyed something here this turn.</div>' : '';
-          if (city.buildings.length < CITY_SLOTS) html += `<div class="sub">Build (1 per turn)</div><div class="grid">${Object.entries(BUILDINGS).filter(([k]) => k === 'tower' ? city.buildings.filter(x => x === 'tower').length < 2 : !city.buildings.includes(k)).map(([k, b]) => btn(`data-build="${k}"`, `${b.name} · ${b.cost}`, my && !city.acted && p >= b.cost, b.text)).join('')}</div>`;
+          if (city.buildings.length < CITY_SLOTS) html += `<div class="sub">Build (1 per turn)</div><div class="grid">${Object.entries(BUILDINGS).filter(([k, bd]) => !(bd.wallOnly && !city.wall)).filter(([k]) => k === 'tower' ? city.buildings.filter(x => x === 'tower').length < 2 : !city.buildings.includes(k)).map(([k, b]) => btn(`data-build="${k}"`, `${b.name} · ${b.cost}`, my && !city.acted && p >= b.cost, b.text)).join('')}</div>`;
           const types = recruitable(city);
           html += `<div class="sub">New army</div>` + (placingArmy && placingArmy.city === city.id ? `<div class="k">${UNIT_TYPES[placingArmy.type].name}: click a highlighted tile next to the city.</div>${btn('data-ca="cancelnew"', 'Cancel', true)}`
             : types.length ? `<div class="grid">${types.map(t => btn(`data-newarmy="${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t)}`, my && p >= unitCost(t))).join('')}</div><div class="k">Pick its first unit, then the tile. It can move next turn.</div>` : '<div class="k">Build a unit building first.</div>');
@@ -3380,7 +3504,7 @@
       (selUnit.team === game.turn ? ` · ${statusOf(selUnit)}` : '') : '';
     const w = winner(), where = game.view === 'campaign' ? '🗺 Campaign' : game.view === 'lobby' ? '⚙ Setting up' : '⚔ Battle';
     const turnHtml = w ? `${where} · <b style="color:rgb(${TEAM[w].map(c => c + 70)})">${teamName(w)} wins the battle!</b> · back to the campaign map…`
-      : spectating() ? `⚔ A battle rages (${game.bt.sides.map(f => faction(f).name).join(' vs ')}) · battle round ${shadowSt ? shadowSt.round : '?'} · ${battleSidesHtml().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')}` : game.bt && game.bt.phase === 'ask' ? '⚔ A battle is about to start · waiting for answers…' : game.view === 'lobby' ? `${where} a new campaign` : game.cwinner ? `👑 <b style="color:rgb(${TEAM[game.cwinner].map(c => Math.min(255, c + 70))})">${teamName(game.cwinner)} rules the land!</b> · hold ⟲ Reset for a new campaign` : `${where} · Round ${game.round} · <b style="color:rgb(${TEAM[game.turn].map(c => c + 70)})">${poss(teamName(game.turn))} turn</b>` +
+      : spectating() ? `⚔ A battle rages (${game.bt.sides.map(f => faction(f).name).join(' vs ')}) · battle round ${shadowSt ? shadowSt.round : '?'} · ${battleSidesHtml().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')}` : game.bt && game.bt.phase === 'ask' ? '⚔ A battle is about to start · waiting for answers…' : game.view === 'lobby' ? `${where} a new campaign` : game.cwinner ? `👑 <b style="color:rgb(${TEAM[game.cwinner].map(c => Math.min(255, c + 70))})">${teamName(game.cwinner)} rules the land!</b> · hold ⟲ Reset for a new campaign` : `${where} · ${localView() === 'campaign' ? `Turn ${game.round}${undeadInfo()}` : `Round ${game.round}`} · <b style="color:rgb(${TEAM[game.turn].map(c => c + 70)})">${poss(teamName(game.turn))} turn</b>` +
         (mode === 'online' ? (myTurn() ? ' · your move' : ' · waiting for opponent') : '');
     if (Date.now() - resetArmed > 2000 && lastTurnHtml !== turnHtml) { lastTurnHtml = turnHtml; turnEl.innerHTML = turnHtml; }
     const bdm = document.getElementById('bdm'), dmEl = document.getElementById('dm');
