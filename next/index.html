@@ -86,7 +86,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.21-preview</div>
+  <div class="t">Medieval Cities 3D · v2.22-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -3262,7 +3262,8 @@
     const tx = innerWidth / 2 - camGoal.x * z, ty = innerHeight / 2 - camGoal.y * z, k = Math.min(1, dt * 2.2);
     off.x += (tx - off.x) * k; off.y += (ty - off.y) * k;
   }
-  function loop(now) { now = now || performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  let lastFrameAt = performance.now();
+  function loop(now) { now = now || performance.now(); lastFrameAt = performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
     panKeys(dt); try { godCam(dt); } catch (e) {} updateUnits(dt); turnUnits(dt); render(now / 1000); requestAnimationFrame(loop); }
   // WASD camera: hold to scroll (Shift = faster)
   const held = new Set();
@@ -4398,8 +4399,8 @@
   { const jc = codeFrom(location.search); if (jc) { try { history.replaceState(null, '', location.pathname); } catch (e) {} setTimeout(() => { toast(`Joining game ${jc}…`); p2pJoin(jc); }, 900); } }
   let stuckSince = 0;
   setInterval(() => {
-    if (lastRemote && busy() && document.hidden) { stuckSince = stuckSince || Date.now(); if (Date.now() - stuckSince > 1500) { for (const u of units) { u.path = null; u.atk = null; } units = units.filter(u => u.dying === null); projectiles = []; afterIdle = null; } } else stuckSince = 0;
-    if (document.hidden && busy()) { try { for (let i = 0; i < 12; i++) { updateUnits(0.05); turnUnits(0.05); } } catch (e) { console.error(e); } }   // a background tab gets no animation frames: keep the moves (and the AI that waits for them) going
+    if (lastRemote && busy() && (document.hidden || performance.now() - lastFrameAt > 500)) { stuckSince = stuckSince || Date.now(); if (Date.now() - stuckSince > 1500) { for (const u of units) { u.path = null; u.atk = null; } units = units.filter(u => u.dying === null); projectiles = []; afterIdle = null; } } else stuckSince = 0;
+    if ((document.hidden || performance.now() - lastFrameAt > 500) && busy()) { try { for (let i = 0; i < 12; i++) { updateUnits(0.05); turnUnits(0.05); } } catch (e) { console.error(e); } }   // a background tab gets no animation frames: keep the moves (and the AI that waits for them) going
     if (lastRemote && !busy()) { const st = lastRemote; lastRemote = null; onRemoteState(st); } try { aiTick(); } catch (e) { console.error(e); } refreshUI(); }, 250);
   setTimeout(() => {
     layersReady = true; ensureLayers(); R3.init();
