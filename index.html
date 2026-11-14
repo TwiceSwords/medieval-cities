@@ -89,7 +89,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.36</div>
+  <div class="t">Medieval Cities · v1.37</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -882,6 +882,7 @@
   const hasRes = u => !!UNIT_TYPES[u.type].hero;               // only hero units (either side) use stamina and mana
   const typeStat = (type, k) => { const t = game.types[type]; return t && typeof t[k] === 'number' ? t[k] : UNIT_TYPES[type][k]; };
   let units = [], floats = [], selUnit = null, afterIdle = null, armed = null;
+  let group = [], box = null;                    // RTS-style mass selection (unit ids) and the drag box being drawn
 
   function runtimeUnit(s) {
     const type = UNIT_TYPES[s.type] ? s.type : 'swordsman', T = UNIT_TYPES[type];
@@ -1702,6 +1703,79 @@
     else if (game.view === 'battle' && game.bt && game.bt.phase === 'fight' && !winner()) { const f = faction(game.turn); if (f && f.ai) aiBattleStep(); }
   }
   const aiGo = a => { a.rng = Math.floor(Math.random() * 4e9); aiBusyUntil = Date.now() + 260; play(a, () => commit(a)); };
+  // ---------- mass orders: drag a box to select, Ctrl+click to add/drop, right-click to move them all ----------
+  const boxable = () => game.view === 'battle' && game.bt && game.bt.phase === 'fight' && !dmActive();
+  const tileScreen = (c, r) => { const m = center(c, r); return { x: off.x + (m.x + OX) * z, y: off.y + (m.y + OY) * z }; };
+  const ownSel = u => u && u.dying === null && u.hp > 0 && !u.placing && u.team === (viewer() || game.turn) && !hiddenFromMe(u);
+  const groupUnits = () => group.map(id => units.find(u => u.id === id)).filter(u => u && u.dying === null && u.hp > 0);
+  function boxSelect(b, add) {
+    const x0 = Math.min(b.x0, b.x1), x1 = Math.max(b.x0, b.x1), y0 = Math.min(b.y0, b.y1), y1 = Math.max(b.y0, b.y1);
+    const inside = p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
+    const got = units.filter(u => { if (!ownSel(u)) return false; const p = tileScreen(u.col, u.row); return inside(p) || inside({ x: p.x, y: p.y - 16 * z }); });   // feet or body
+    const prev = add ? (group.length ? group : selUnit && ownSel(selUnit) ? [selUnit.id] : []) : [];
+    group = [...new Set([...prev, ...got.map(u => u.id)])];
+    if (group.length) { if (!selUnit || !group.includes(selUnit.id)) selUnit = units.find(u => u.id === group[0]); sel = [selUnit.col, selUnit.row]; }
+    else if (!add) { selUnit = null; sel = null; }
+    selCity = null; armed = null; refreshUI();
+  }
+  function ctrlPick(h) {
+    if (!boxable()) return false;
+    const u = unitAt(h); if (!ownSel(u)) return true;                 // Ctrl+click on nothing of yours: keep the selection as it is
+    let ids = group.length ? group.slice() : selUnit && ownSel(selUnit) ? [selUnit.id] : [];
+    ids = ids.includes(u.id) ? ids.filter(i => i !== u.id) : [...ids, u.id];
+    group = ids; selUnit = selUnit && ids.includes(selUnit.id) ? selUnit : units.find(x => x.id === ids[0]) || null; sel = selUnit ? [selUnit.col, selUnit.row] : null;
+    armed = null; refreshUI(); return true;
+  }
+  // walk a set of units towards their tiles, keeping their formation; nobody goes around obstacles (those stop as close as they can)
+  function planMarch(us, destOf, direct) {
+    const start = new Map(us.map(u => [u.id, [u.col, u.row]])), dests = new Map(us.map(u => [u.id, destOf(u)])), plan = new Map();
+    const order = us.slice().sort((a, b) => hexDist([a.col, a.row], dests.get(a.id)) - hexDist([b.col, b.row], dests.get(b.id)));
+    try {
+      for (let pass = 0; pass < 2; pass++) for (const u of order) {     // the front ones step off first, freeing tiles for the ones behind
+        if (plan.has(u.id)) continue;
+        const s = [u.col, u.row], dest = dests.get(u.id), d0 = hexDist(s, dest); if (d0 === 0) continue;
+        const b = reach(u); let best = null;
+        for (const [k, d] of b.dist) { if (d === 0) continue; const t = k.split(',').map(Number); if (unitAt(t) && unitAt(t) !== u) continue;
+          if (direct && d > hexDist(s, t) + 1) continue;                // that tile needs a detour (mountain, lake...): not for a mass order
+          const hd = hexDist(t, dest); if (hd >= d0) continue;
+          if (!best || hd < best.hd || (hd === best.hd && d < best.d)) best = { t, hd, d }; }
+        if (!best) continue;
+        plan.set(u.id, pathTo(b, best.t)); u.col = best.t[0]; u.row = best.t[1];
+      }
+    } finally { for (const u of us) [u.col, u.row] = start.get(u.id); }
+    return plan;
+  }
+  function groupMove(h) {
+    const say = (txt, hh) => { const m = center(...hh); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
+    const ms = groupUnits().filter(u => canCommand(u) && !u.moved && !isStunned(u) && !u.climb && moveOf(u) > 0);
+    if (!ms.length) { say('Nobody selected can move', h); return; }
+    const mean = [0, 0, 0]; for (const u of ms) toCube(u.col, u.row).forEach((v, i) => mean[i] += v / ms.length);
+    const cd = (q, m) => (Math.abs(q[0] - m[0]) + Math.abs(q[1] - m[1]) + Math.abs(q[2] - m[2])) / 2;
+    const anchor = ms.slice().sort((a, b) => cd(toCube(a.col, a.row), mean) - cd(toCube(b.col, b.row), mean))[0];
+    const ac = toCube(anchor.col, anchor.row), hc = toCube(h[0], h[1]);
+    const plan = planMarch(ms, u => { const c = toCube(u.col, u.row), q = hc[0] + c[0] - ac[0], r = hc[1] + c[1] - ac[1]; return [q + (r - (r & 1)) / 2, r]; }, true);
+    const moves = []; let halted = false, spent = false;
+    for (const u of ms) { const p = plan.get(u.id); if (!p || !p.length) continue;
+      const gh = ghostFor(u), cutAt = p.findIndex(t => { const o = unitAt(t); return o && gh(o); }), r = cutAt < 0 ? { path: p, cut: false } : { path: p.slice(0, cutAt), cut: true };   // only a hidden enemy stops the march (friends step aside)
+      if (r.cut) { halted = true; if (!r.path.length) { u.moved = true; spent = true; continue; } }
+      moves.push({ id: u.id, path: r.path }); }
+    if (halted) say('Halt! Something in the fog', h);
+    if (!moves.length) { if (!halted) say('Blocked', h); if (spent) commit({ type: 'ai' }); refreshUI(); return; }
+    const a = { type: 'gmove', moves, rng: Math.floor(Math.random() * 4e9) }; armed = null;
+    play(a, () => commit(a));
+  }
+  // battle AI: units far from any enemy march together in one go; the close ones still think one by one
+  function aiHorde(mine, foes) {
+    const nearest = t => { let b = null; for (const o of foes) { const d = hexDist(t, [o.col, o.row]); if (!b || d < b.d) b = { o, d }; } return b; };
+    const far = mine.filter(u => { if (u.moved || u.climb || moveOf(u) <= 0) return false; const n = nearest([u.col, u.row]); if (!n) return false;
+      if (typeof sg === 'function' && sg() && neighbors(u.col, u.row).some(x => wallAt(x))) return false;      // at a wall: may want to hit it
+      return n.o.ghost || n.d > moveOf(u) + Math.max(T(u).range || 1, 1) + 2; });
+    if (far.length < 2) return null;
+    const goal = new Map(far.map(u => { const n = nearest([u.col, u.row]); return [u.id, [n.o.col, n.o.row]]; }));
+    const plan = planMarch(far, u => goal.get(u.id), false), moves = [];
+    for (const u of far) { const p = plan.get(u.id); if (p && p.length) moves.push({ id: u.id, path: p }); }
+    return moves.length >= 2 ? moves : null;
+  }
   // ---------- battle AI: every unit walks at the nearest enemy and hits it ----------
   function aiBattleStep() {
     const tk = game.turn + ':' + game.round + ':' + (game.campaign ? game.campaign.att : ''); if (!aiState || aiState.kind !== 'battle' || aiState.turn !== tk) aiState = { kind: 'battle', turn: tk, skip: new Set() };
@@ -1712,6 +1786,7 @@
       const goal = zs[0] || [BCOLS >> 1, BROWS >> 1]; foes = [{ col: goal[0], row: goal[1], hp: 99, id: null, ghost: true }]; }
     const mine = units.filter(u => u.team === team && u.dying === null && u.hp > 0 && !unitDone(u) && !aiState.skip.has(u.id) && !isStunned(u));
     if (!mine.length || !foes.length) { aiBusyUntil = Date.now() + 400; commit({ type: 'end' }); return; }
+    if (!aiState.horde) { aiState.horde = true; const hm = aiHorde(mine, foes); if (hm) { for (const m of hm) aiState.skip.add(m.id); aiGo({ type: 'gmove', moves: hm }); return; } }   // far from the fight: march as one horde
     const u = mine[0], ty = T(u), here = [u.col, u.row]; aiState.skip.add(u.id);
     const near = (from) => foes.slice().sort((a, b) => hexDist(from, [a.col, a.row]) - hexDist(from, [b.col, b.row]))[0];
     const tgt = near(here), dT = hexDist(here, [tgt.col, tgt.row]);
@@ -2368,7 +2443,7 @@
   }
 
   // play one action (your own click AND the other player's replay), then call done when everything settles
-  const ACTIONS = ['move', 'attack', 'shoot', 'bolt', 'pierce', 'charge', 'mark', 'skill', 'hitwall', 'ladder', 'climb', 'gate'];
+  const ACTIONS = ['gmove', 'move', 'attack', 'shoot', 'bolt', 'pierce', 'charge', 'mark', 'skill', 'hitwall', 'ladder', 'climb', 'gate'];
   function offImpassable() {                           // safety net: an army found on a mountain / water / the wall steps onto the nearest open land
     if (game.view !== 'campaign') return;
     for (const u of units) if (u.troops && u.dying === null && impassable([u.col, u.row])) { let best = null;
@@ -2376,6 +2451,12 @@
       if (best) { u.col = best.t[0]; u.row = best.t[1]; } }
   }
   function play(a, done) {
+    if (a && a.type === 'gmove') {                     // mass move: everyone in the order walks at the same time
+      seedRng(a.rng || 7);
+      const ms = (a.moves || []).map(m => [units.find(x => x.id === m.id), (m.path || []).map(h => [h[0], h[1]])]).filter(([u, p]) => u && u.dying === null && u.hp > 0 && p.length);
+      if (!ms.length) { done(); return; }
+      afterIdle = done; for (const [u, p] of ms) { u.moved = true; moveUnit(u, p); } return;
+    }
     if (a && a.type === 'move' && a.path && game.view === 'campaign') { const i = a.path.findIndex(t => impassable(t)); if (i >= 0) a = { ...a, path: a.path.slice(0, i) }; }
     seedRng(a.rng || 7);
     const u = units.find(x => x.id === a.id);
@@ -3088,6 +3169,15 @@
       ctx.fillStyle = 'rgba(226,206,130,0.18)'; ctx.fill();
       ctx.strokeStyle = 'rgba(232,212,140,0.85)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
     }
+    if (group.length > 1) {                            // mass selection: ring every selected unit
+      ctx.beginPath(); for (const u of groupUnits()) hexPath(u.col, u.row, ctx);
+      ctx.fillStyle = 'rgba(226,206,130,0.12)'; ctx.fill(); ctx.strokeStyle = 'rgba(232,212,140,0.8)'; ctx.lineWidth = 1.6 / Math.max(z, 0.6); ctx.stroke();
+    }
+    if (box) {                                         // the drag box, drawn in screen space
+      ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const x = Math.min(box.x0, box.x1), y = Math.min(box.y0, box.y1), w = Math.abs(box.x1 - box.x0), hh = Math.abs(box.y1 - box.y0);
+      ctx.fillStyle = 'rgba(232,212,140,0.08)'; ctx.fillRect(x, y, w, hh); ctx.strokeStyle = 'rgba(232,212,140,0.9)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w, hh); ctx.restore();
+    }
     if (hover) {
       ctx.beginPath(); hexPath(hover[0], hover[1], ctx);
       ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fill();
@@ -3136,7 +3226,7 @@
   function loop(now) { now = now || performance.now(); lastFrameAt = performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
     panKeys(dt); try { godCam(dt); } catch (e) {} updateUnits(dt); turnUnits(dt); render(now / 1000); requestAnimationFrame(loop); }
   // WASD camera: hold to scroll (Shift = faster)
-  const held = new Set();
+  const held = new Set(), ARROWK = { ArrowUp: 'w', ArrowDown: 's', ArrowLeft: 'a', ArrowRight: 'd' };   // arrow keys = WASD
   function panKeys(dt) {
     if (!held.size) return;
     const sp = (held.has('shift') ? 1600 : 800) * dt;
@@ -3884,6 +3974,7 @@
     try { goldHud(); } catch (e) {}
     renderLobby(); renderFactions(); renderCamp(); renderPending();
     if (armed && (!selUnit || armed.id !== selUnit.id)) armed = null;
+    if (!selUnit || game.view !== 'battle' || !group.includes(selUnit.id)) group = []; else group = group.filter(id => units.some(u => u.id === id && u.dying === null && u.hp > 0));
     if (shopFor && shopFor.id !== (heroSel || selUnit || {}).id) shopFor = null;
     renderCards();
     selEl.textContent = fmt(sel);
@@ -4091,7 +4182,7 @@
       const dx = e.clientX - down.x, dy = e.clientY - down.y;
       if (!dragging && Math.hypot(dx, dy) > 4) { dragging = true; cv.classList.add('drag'); if (down.grab) dragUnit = down.grab; }
       if (dragging && dragUnit) dragUnit.dragPos = { x: (e.clientX - off.x) / z, y: (e.clientY - off.y) / z + 10 };
-      else if (dragging) { off.x = down.ox + dx; off.y = down.oy + dy; }
+      else if (dragging && boxable()) box = { x0: down.x, y0: down.y, x1: e.clientX, y1: e.clientY };   // left-drag draws a selection box (the camera moves with WASD / arrow keys)
     }
     const h = pick(e.clientX, e.clientY);
     if (fmt(h) !== fmt(hover)) { hover = h; hovEl.textContent = fmt(h); }
@@ -4104,6 +4195,7 @@
       if (!dmActive() && game.bt && game.bt.phase !== 'fight' && u.placing) { if (h && (!o || o === u)) { selUnit = u; sel = h; requestOp({ op: 'place', id: u.id, col: h[0], row: h[1] }); } else if (h) toast('That tile is taken'); }
       else if (h && (!o || o === u) && dmActive()) { [u.col, u.row] = h; selUnit = u; sel = h; commit({ type: 'edit' }); }
       else if (h) toast('That tile is taken');
+    } else if (box) { const b = box; box = null; boxSelect(b, e.ctrlKey || e.shiftKey || e.metaKey);
     } else if (down && !dragging) {
       if (placing && dmActive()) {                         // DM: place a new unit
         if (h && !unitAt(h)) {
@@ -4114,6 +4206,8 @@
         } else if (h) toast('That tile is taken');
       } else {
         if (placingArmy && game.view === 'campaign') { placeNewArmy(h); down = null; dragging = false; cv.classList.remove('drag'); return; }
+        if ((e.ctrlKey || e.metaKey) && ctrlPick(h)) { down = null; dragging = false; cv.classList.remove('drag'); return; }   // Ctrl+click: add / drop one unit
+        group = [];
         sel = (h && sel && h[0] === sel[0] && h[1] === sel[1]) ? null : h;
         selUnit = unitAt(sel) || null; const godSel = testOn && isHost(); if (selUnit && hiddenFromMe(selUnit) && !godSel) selUnit = null; selCity = game.view === 'campaign' ? cityAt(sel) : null; if (sel && !seenTile(sel) && !godSel) { selUnit = null; selCity = null; } refreshUI();
       }
@@ -4132,7 +4226,7 @@
   addEventListener('keydown', e => {
     if (e.target && e.target.tagName === 'INPUT') { if (e.key === 'Enter') { if (e.target.id === 'code') p2pJoin(e.target.value); else e.target.blur(); } return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); return; }
-    { const k = e.key.toLowerCase(); if ('wasd'.includes(k) && k.length === 1 || k === 'shift') { held.add(k); if (k !== 'shift') return; } }
+    { const k = ARROWK[e.key] || e.key.toLowerCase(); if (ARROWK[e.key]) e.preventDefault(); if ('wasd'.includes(k) && k.length === 1 || k === 'shift') { held.add(k); if (k !== 'shift') return; } }
     if (e.repeat) return;
     const k = e.key.toLowerCase();
     if (k === 'escape') { if (placingArmy) { placingArmy = null; refreshUI(); return; } if (modalEl.style.display === 'flex' && !game.pending) { hideModal(); return; } if (armed) { armed = null; refreshUI(); return; } if (shopFor) { shopFor = null; refreshUI(); return; } if (placing) { placing = null; refreshUI(); return; } sel = null; selUnit = null; refreshUI(); }
@@ -4153,6 +4247,7 @@
     if (game.view === 'battle' && game.bt && game.bt.phase !== 'fight') { if (u.placing && u.team === viewer()) requestOp({ op: 'place', id: u.id, col: h[0], row: h[1] }); return; }
     const hint = (txt, hh) => { const m = center(...hh); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
     const go = a0 => { const a = fogOrder(u, a0); if (!a) { commit({ type: 'ai' }); refreshUI(); return; } a.rng = Math.floor(Math.random() * 4e9); play(a, () => { commit(a); if (a.skill === 'rain') refreshUI(); }); };   // Arrow Rain stays aimed until Esc, even out of mana, so a right-click never turns into a shot
+    if (game.view === 'battle' && groupUnits().length > 1 && !(armed && armed.id === u.id)) { groupMove(h); return; }   // a mass selection moves together
     if (!canCommand(u)) { hint(winner() ? 'Game over' : isStunned(u) ? 'Stunned' : u.team !== game.turn || !myTurn() ? 'Not your turn' : 'Already acted', here); return; }
     if (game.view === 'campaign') { if (u.troops && !game.pending && !(game.bt && !game.bt.saved)) campaignOrder(u, h); return; }
     const lock = tauntLock(u, here), lockedOut = (from, target) => { const p = tauntLock(u, from); return p && p !== target; };
@@ -4321,7 +4416,7 @@
     if (r === 2 && hexDist(from, h) === 2) { const ld = lineDir(from, h); if (ld) { const mo = liveUnitAt(step(from, ld.d)); if (mo && hostile(mo.team, u.team)) targets.push(mo.id); } }
     go({ type: 'attack', id: u.id, path, target: tgt.id, targets });
   });
-  addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
+  addEventListener('keyup', e => held.delete(ARROWK[e.key] || e.key.toLowerCase()));
   addEventListener('blur', () => held.clear());
   addEventListener('resize', () => resize(false));
 
