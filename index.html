@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.24</div>
+  <div class="t">Medieval Cities · v1.25</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -98,7 +98,7 @@
 <div id="cards"></div>
 <div id="teams"><div class="team" id="tb"></div><div class="team" id="tr"></div></div>
 <div id="flash"></div>
-<div id="victory"><div class="v1">VICTORY</div><div class="v2" id="vname"></div></div>
+<div id="victory"><div class="v1" id="vtitle">VICTORY</div><div class="v2" id="vname"></div></div>
 <div id="net"></div>
 <div id="load">Growing grass…</div>
 <script>
@@ -3821,6 +3821,11 @@
         const coopW = t => game.opts && game.opts.coop && t !== 'undead' ? (sideOf(t) === 'ai' ? 'The AI realms' : 'The players') : null;
         n.textContent = w ? `${coopW(w) || teamName(w)} win${coopW(w) ? '' : 's'} the battle` : `${coopW(game.cwinner) || teamName(game.cwinner)} win${coopW(game.cwinner) ? '' : 's'} the campaign`;
         n.style.color = `rgb(${TEAM[w || game.cwinner].map(v => Math.min(255, v + 80))})`;
+        const me = viewer(), wf = w || game.cwinner, tEl = document.getElementById('vtitle');
+        const took = w ? (me && (inBattleSides(me) || allyInBattle(me) || (game.bt && game.bt.joined.some(j => j.fid === me || (game.opts && game.opts.coop && !hostile(j.fid, me)))))) : (me && (game.factions || []).some(f => f.id === me));
+        const mine = me && !hostile(me, wf), lost = me && took && !mine;
+        tEl.textContent = mine && (took || !w) ? 'VICTORY' : lost ? 'DEFEAT' : w ? 'BATTLE OVER' : 'CAMPAIGN OVER';
+        tEl.style.color = mine && (took || !w) ? '' : lost ? '#e0533e' : '#cfc9b4';
         vicEl.classList.add('show'); vicTimer = setTimeout(() => vicEl.classList.remove('show'), 4000);
       } else { vicEl.classList.remove('show'); seenTurn = game.turn; }
     }
@@ -3923,7 +3928,8 @@
   cv.addEventListener('pointerdown', e => { camHand = performance.now();
     if (e.button !== 0) return;
     const h = pick(e.clientX, e.clientY), u = unitAt(h);
-    down = { x: e.clientX, y: e.clientY, ox: off.x, oy: off.y, grab: dmActive() && !placing && u && !busy() ? u : null };
+    const placeGrab = u && !busy() && !dmActive() && game.view === 'battle' && game.bt && game.bt.phase !== 'fight' && u.placing && u.team === viewer() && !(game.bt.ready || {})[u.team] ? u : null;   // battle placement: drag your own units
+    down = { x: e.clientX, y: e.clientY, ox: off.x, oy: off.y, grab: (dmActive() && !placing && u && !busy() ? u : null) || placeGrab };
     dragging = false; cv.setPointerCapture(e.pointerId);
   });
   cv.addEventListener('pointermove', e => {
@@ -3941,7 +3947,8 @@
     if (dragUnit) {                                          // DM: drop the dragged unit
       const u = dragUnit; dragUnit = null; u.dragPos = null;
       const o = unitAt(h);
-      if (h && (!o || o === u) && dmActive()) { [u.col, u.row] = h; selUnit = u; sel = h; commit({ type: 'edit' }); }
+      if (!dmActive() && game.bt && game.bt.phase !== 'fight' && u.placing) { if (h && (!o || o === u)) { selUnit = u; sel = h; requestOp({ op: 'place', id: u.id, col: h[0], row: h[1] }); } else if (h) toast('That tile is taken'); }
+      else if (h && (!o || o === u) && dmActive()) { [u.col, u.row] = h; selUnit = u; sel = h; commit({ type: 'edit' }); }
       else if (h) toast('That tile is taken');
     } else if (down && !dragging) {
       if (placing && dmActive()) {                         // DM: place a new unit
