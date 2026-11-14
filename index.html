@@ -83,7 +83,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.16</div>
+  <div class="t">Medieval Cities · v1.17</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">Drag / WASD: move camera · Wheel: zoom · Left-click: select · Esc: deselect</div>
@@ -904,7 +904,7 @@
         ...(u.cards ? { cards: u.cards } : {}), ...(u.tauntR ? { tauntR: u.tauntR } : {}), ...(u.guard ? { guard: u.guard } : {}),
         ...(u.dots && u.dots.length ? { dots: u.dots } : {}), ...(u.skillUsed ? { skillUsed: true } : {}),
         ...(u.raining ? { raining: true } : {}), ...(u.watch ? { watch: u.watch } : {}), ...(u.rain && u.rain.length ? { rain: u.rain } : {}),
-        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.released ? { released: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
+        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.released ? { released: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
     const old = new Map(units.map(u => [u.id, u]));
@@ -1321,7 +1321,7 @@
     syncTeams(); ensureLayers(); centerOnUnits(); commit({ type: 'battle' }); checkPlacementDone();
     toast(`Battle! ${sides.map(f => faction(f).name).join(' vs ')} · place your units, then press Ready`);
   }
-  const exportCampaignUnits = () => units.filter(u => u.dying === null).map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1, face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, troops: u.troops, ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}) }));
+  const exportCampaignUnits = () => units.filter(u => u.dying === null).map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1, face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, troops: u.troops, ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}) }));
   function spawnTroops(j, zone, enter) {               // put an army's (or city's) troops into its zone: melee in front, ranged behind
     const b = bt(), src = j.kind === 'army' ? (game.campaign.armies.find(u => u.id === j.id) || units.find(u => u.id === j.id)) : game.cities.find(c => c.id === j.id);
     if (!src || !zone) return;
@@ -1587,15 +1587,17 @@
     else if (game.round % WAVE_EVERY === 0 && game.round <= FINAL_WAVE) undeadWave(game.round);
   }
   function aiUndeadStep(f) {
+    for (const u of undeadArmies()) if (!u.released && (u.row >= WALL_ROW - 1 || (game.undead && game.undead.final))) u.released = true;   // repair armies that lost their marching orders in older saves
+    for (const c of game.cities) if (c.owner === 'undead') { c.owner = null; c.buildings = []; toast(`🧟 The dead burned ${c.name} to the ground`); }
     if (!aiState || aiState.kind !== 'undead' || aiState.round !== game.round) { aiState = { kind: 'undead', round: game.round, done: new Set() }; undeadTurnStart(); commit({ type: 'ai' }); aiBusyUntil = Date.now() + 300; return; }
     const a = undeadArmies().find(x => x.released && !x.moved && !x.inBattle && !aiState.done.has(x.id));
     if (!a) { aiBusyUntil = Date.now() + 200; commit({ type: 'end' }); return; }
     aiState.done.add(a.id);
     const here = [a.col, a.row], uSee = fogOn() ? visionOf('undead') : null, foes = [...units.filter(u => u.troops && u.team !== 'undead' && u.dying === null && !u.inBattle && (!uSee || uSee.has(u.row * CCOLS + u.col))).map(u => ({ tile: [u.col, u.row], u })),
-      ...game.cities.filter(c => c.owner).map(c => ({ tile: [c.col, c.row], c }))].sort((x, y) => hexDist(here, x.tile) - hexDist(here, y.tile));
+      ...game.cities.filter(c => c.owner && c.owner !== 'undead').map(c => ({ tile: [c.col, c.row], c }))].sort((x, y) => hexDist(here, x.tile) - hexDist(here, y.tile));
     let goal = null, path = null;
     for (const t of foes.slice(0, 6)) { path = campPath(here, t.tile, a); if (path && path.length) { goal = t; break; } }
-    if (!goal) { const wc = game.cities.find(c => c.wall); if (wc && wc.owner) { path = campPath(here, [wc.col, wc.row], a); if (path) goal = { tile: [wc.col, wc.row], c: wc }; } }
+    if (!goal) { const wc = game.cities.find(c => c.wall); if (wc && wc.owner && wc.owner !== 'undead') { path = campPath(here, [wc.col, wc.row], a); if (path) goal = { tile: [wc.col, wc.row], c: wc }; } }
     if (!goal) {                                       // nothing to hunt: wander south
       const b = reach(a), opts = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t)).sort((x, y) => (y[1] + Math.random() * 3) - (x[1] + Math.random() * 3));
       if (opts[0]) { const mv = { type: 'move', id: a.id, path: pathTo(b, opts[0]), rng: 1 }; aiBusyUntil = Date.now() + 200; play(mv, () => commit(mv)); } return; }
@@ -1639,14 +1641,15 @@
   function buildUndeadQueen(team) { const m = bleach(buildRanger([160, 170, 190])); part(m, cylG(1.5, 1.4, 8, 1.8), [150, 200, 240], { p: [0, 16.8, -0.2] }); return m; }
   function resolvePendingAI() {                     // an AI that took a city keeps it
     const p = game.pending; if (!p) return; const f = faction(p.by);
-    if (f && f.ai && iRunAI()) { captureCity(true); }
+    if (f && f.ai && iRunAI()) { captureCity(!f.undead); }
   }
   function captureCity(keep) {
     const p = game.pending; if (!p) return; const city = game.cities.find(c => c.id === p.city); game.pending = null;
     if (!city) return;
+    if (keep && p.by === 'undead') keep = false;
     if (keep) { city.owner = p.by; city.acted = true; toast(`${faction(p.by).name} captured ${city.name}`); }
     else { const gain = Math.floor(cityValue(city) / 2); game.points = { ...game.points, [p.by]: (game.points[p.by] || 0) + gain };
-      toast(`${city.name} was razed · +${gain} gold`); city.owner = null; city.buildings = []; }
+      toast(p.by === 'undead' ? `🧟 The dead burned ${city.name} to the ground` : `${city.name} was razed · +${gain} gold`); city.owner = null; city.buildings = []; }
     checkDefeats(); commit({ type: 'capture' });
   }
   function syncTeams() {
