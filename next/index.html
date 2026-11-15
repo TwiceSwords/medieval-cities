@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.46-preview</div>
+  <div class="t">Medieval Cities 3D · v2.47-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2114,10 +2114,37 @@
   function aiPickTroop(id, troops, types, gold) {
     const plain = types.filter(t => !HEROES.includes(t)), heroes = types.filter(t => HEROES.includes(t)), rnd = a => a[(Math.random() * a.length) | 0];
     if (idHash(id) % 4 === 0) { const first = troops.find(x => !HEROES.includes(x.type)); if (first) return plain.includes(first.type) ? first.type : null; return plain.length ? rnd(plain) : null; }
-    if (heroes.length && Math.random() < 0.08 && gold >= 45) return rnd(heroes);
+    if (heroes.length && Math.random() < 0.15 && gold >= 45) return rnd(heroes);
     if (!plain.length) return null;
     const cnt = t => troops.filter(x => x.type === t).length, w = plain.map(t => 1 / (1 + cnt(t)) ** 2);   // what this army has least of is the likeliest pick
     let r = Math.random() * w.reduce((x, y) => x + y, 0); for (let i = 0; i < plain.length; i++) { r -= w[i]; if (r <= 0) return plain[i]; } return plain[plain.length - 1];
+  }
+  // AI heroes: with spare gold the AI buys passives and skills, levels skills up and buys HP / mana / damage, same prices and caps as players
+  function aiHeroShop(f, gold, spend, keep) {
+    const rnd = a => a[(Math.random() * a.length) | 0], heroes = [];
+    for (const a of units) if (a.troops && a.team === f.id && a.dying === null && !a.inBattle) a.troops.forEach((t, i) => { if (HEROES.includes(t.type) && HERO_CARDS[t.type]) heroes.push({ a, i }); });
+    let budget = Math.max(0, gold() - keep) * 0.5;                                   // half of what's spare, so the armies still grow
+    for (let n = 0; n < 12 && heroes.length; n++) {
+      const { a, i } = rnd(heroes), t = { ...a.troops[i] }, ty = UNIT_TYPES[t.type], HC = HERO_CARDS[t.type];
+      t.cards = t.cards ? { passive: t.cards.passive, skills: [...t.cards.skills] } : emptyCards();
+      const free = t.cards.skills.findIndex(x => !x), owned = t.cards.skills.filter(Boolean).map(x => x.id), newSk = HC.skill.filter(id => !owned.includes(id)), opts = [];
+      if (!t.cards.passive) opts.push(['passive', CARD_PRICE, 6]);
+      if (free >= 0 && newSk.length) opts.push(['skill', CARD_PRICE, 5]);
+      if (t.cards.skills.some(x => x && x.lvl < 5)) opts.push(['up', UPGRADE_PRICE, 3]);
+      if (t.maxHp < (ty.hpCap || 40)) opts.push(['hp', 1, 2]);
+      if ((t.manaMax || 0) < MANA_CAP) opts.push(['mana', 1 + (t.manaBought || 0), 1]);
+      if (ty.dmgCap && ty.dmg + (t.dmgBought || 0) < ty.dmgCap) opts.push(['dmg', DMG_PRICE, 2]);
+      const can = opts.filter(o => o[1] <= budget && o[1] <= gold() - keep); if (!can.length) break;
+      let r = Math.random() * can.reduce((x, o) => x + o[2], 0), pick = can[0]; for (const o of can) { r -= o[2]; if (r <= 0) { pick = o; break; } }
+      const [kind, cost] = pick;
+      if (kind === 'passive') t.cards.passive = rnd(HC.passive);
+      else if (kind === 'skill') t.cards.skills[free] = { id: rnd(newSk), lvl: 1 };
+      else if (kind === 'up') { const k = rnd(t.cards.skills.map((x, j) => x && x.lvl < 5 ? j : -1).filter(j => j >= 0)); t.cards.skills[k] = { ...t.cards.skills[k], lvl: t.cards.skills[k].lvl + 1 }; }
+      else if (kind === 'hp') { const add = Math.min(HP_PER_POINT, (ty.hpCap || 40) - t.maxHp); t.maxHp += add; t.hp += add; }
+      else if (kind === 'mana') { t.manaMax = (t.manaMax || 0) + 1; t.mana = (t.mana || 0) + 1; t.manaBought = (t.manaBought || 0) + 1; }
+      else if (kind === 'dmg') t.dmgBought = (t.dmgBought || 0) + 1;
+      a.troops = a.troops.map((x, k) => k === i ? t : x); spend(cost); budget -= cost;
+    }
   }
   // ---------- campaign AI ----------
   function campPath(from, to, u) {                  // BFS over land to a target tile (units block, except the goal)
@@ -2181,6 +2208,7 @@
           a.troops = [...a.troops, tr]; spend(unitCost(t));
         }
       }
+      aiHeroShop(f, pts, spend, reserve + 10);
       commit({ type: 'ai' }); aiBusyUntil = Date.now() + 300; return;
     }
     const a = myArmies().find(x => !x.moved && !aiState.done.has(x.id));
