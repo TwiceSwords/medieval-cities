@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.40-preview</div>
+  <div class="t">Medieval Cities 3D · v2.41-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2369,8 +2369,9 @@
     return null;
   }
   function lineTiles(from, d, n) { const out = []; for (let k = 1; k <= n; k++) { const h = step(from, d, k); if (!onBoard(h)) break; out.push(h); } return out; }
+  const shotBlocked = h => !onBoard(h) || (game.view === 'battle' && !!game.bt && !!game.bt.grid && game.bt.grid[h[1] * BCOLS + h[0]] === 'r');   // shots fly over walls and a shut gate; only rocks stop them
   function firstInLine(from, d, n) {
-    for (const h of lineTiles(from, d, n)) { if (blockedTile(h)) return null; const o = liveUnitAt(h); if (o) return { unit: o, tile: h }; }
+    for (const h of lineTiles(from, d, n)) { if (shotBlocked(h)) return null; const o = liveUnitAt(h); if (o) return { unit: o, tile: h }; }
     return null;
   }
   const meleeDmg = (a, t) => a.dmg * (antiCavOf(a) && isMounted(t) ? 2 : 1);     // spears & halberds: double vs mounted
@@ -2859,7 +2860,7 @@
         faceDir(u, a.dir); u.attacked = u.moved = true;
         const tiles = lineTiles(here(), a.dir, ty.range); let dmg = u.dmg, endI = tiles.length - 1; const hits = [];
         for (let i = 0; i < tiles.length; i++) {
-          if (blockedTile(tiles[i])) { endI = i - 1; break; }
+          if (shotBlocked(tiles[i])) { endI = i - 1; break; }
           const o = liveUnitAt(tiles[i]);
           if (o) { hits.push({ o, i, dmg: rangedDmg(dmg, o) }); dmg -= 2; if (dmg <= 0) { endI = i; break; } }
         }
@@ -4085,7 +4086,7 @@
   modalEl.addEventListener('click', e => { const b = e.target.closest('button[data-ask]'); if (!b) return; const [i, y] = b.dataset.ask.split(':').map(Number); modalEl.dataset.ask = ''; hideModal(); requestOp({ op: 'answer', i, yes: !!y }); });
   let wallChoice = null;
   function siegeOrder(u, h, tgt, hint, go) {         // returns true when the click was about walls, the gate or a ladder
-    const s2 = sg(), here = [u.col, u.row], p = wallAt(h), lad = ladderAt(here), ty = T(u), canLadder = !ty.mounted && !ty.structure && u.type !== 'trebuchet' && u.type !== 'ballista';   // siege engines don't climb
+    const s2 = sg(), here = [u.col, u.row], p = wallAt(h), lad = ladderAt(here), ty = T(u), canLadder = false;   // ladders are switched off for now: next to a wall, a unit simply attacks it
     if (lad && h[0] === lad.w[0] && h[1] === lad.w[1] && canLadder) { if (u.moved || u.attacked) { hint('Already acted', here); return true; } go({ type: 'climb', id: u.id }); return true; }
     if (u.climb) { hint('On the ladder: right-click the wall to climb on', here); return true; }
     const mate = units.find(o => o !== u && hostile(o.team, u.team) && o.col === u.col && o.row === u.row && o.dying === null);
