@@ -89,7 +89,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.46</div>
+  <div class="t">Medieval Cities · v1.47</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2201,9 +2201,12 @@
     return null;
   }
   function lineTiles(from, d, n) { const out = []; for (let k = 1; k <= n; k++) { const h = step(from, d, k); if (!onBoard(h)) break; out.push(h); } return out; }
-  const shotBlocked = h => !onBoard(h) || (game.view === 'battle' && !!game.bt && !!game.bt.grid && game.bt.grid[h[1] * BCOLS + h[0]] === 'r');   // shots fly over walls and a shut gate; only rocks stop them
+  const shotBlocked = h => !onBoard(h) || (game.view === 'battle' && !!game.bt && !!game.bt.grid && game.bt.grid[h[1] * BCOLS + h[0]] === 'r');   // the edge of the board and rocks stop every shot (walls: see flatStop)
+  // flat shots (crossbow, ballista, firebolt, Driving Shot): from the ground a wall piece or a shut gate stops them (whoever stands on it is still hit); from the wall top they pass over the walls
+  const flatStop = (fromWall, h) => { if (fromWall || !sg()) return false; const p = wallAt(h); return !!p && (p.kind === 'wall' || (p.kind === 'gate' && !sg().gateOpen)); };
   function firstInLine(from, d, n) {
-    for (const h of lineTiles(from, d, n)) { if (shotBlocked(h)) return null; const o = liveUnitAt(h); if (o) return { unit: o, tile: h }; }
+    const fw = isWallTop(from);
+    for (const h of lineTiles(from, d, n)) { if (shotBlocked(h)) return null; const o = liveUnitAt(h); if (o) return { unit: o, tile: h }; if (flatStop(fw, h)) return null; }
     return null;
   }
   const meleeDmg = (a, t) => a.dmg * (antiCavOf(a) && isMounted(t) ? 2 : 1);     // spears & halberds: double vs mounted
@@ -2695,6 +2698,7 @@
           if (shotBlocked(tiles[i])) { endI = i - 1; break; }
           const o = liveUnitAt(tiles[i]);
           if (o) { hits.push({ o, i, dmg: rangedDmg(dmg, o) }); dmg -= 2; if (dmg <= 0) { endI = i; break; } }
+          if (flatStop(isWallTop(here()), tiles[i])) { endI = i; break; }   // the bolt sticks in the wall / gate
         }
         if (endI < 0) return;
         const end = tileAt(tiles[endI]), from = shotFrom(u);
@@ -2760,7 +2764,8 @@
     const sk = a.skill, spell = { physical: false, src: u };
     if (sk === 'firebolt') {                            // straight bolt at the first unit in line, then it burns
       faceDir(u, a.dir); const f = firstInLine([u.col, u.row], a.dir, card.range(L));
-      const end = f ? shotAt(f.unit) : tileAt(lineTiles([u.col, u.row], a.dir, card.range(L)).slice(-1)[0] || [u.col, u.row]);
+      const lt = lineTiles([u.col, u.row], a.dir, card.range(L)), stopI = lt.findIndex(h => shotBlocked(h) || flatStop(isWallTop([u.col, u.row]), h));
+      const end = f ? shotAt(f.unit) : tileAt((stopI >= 0 ? lt[Math.max(0, stopI - (shotBlocked(lt[stopI]) ? 1 : 0))] : lt.slice(-1)[0]) || [u.col, u.row]);   // a miss flies until the wall / rock
       fire('firebolt', shotFrom(u), end, () => {
         if (!f || f.unit.dying !== null) return; const t = f.unit, hot = !!burnOf(t), b = card.burn(L);
         dealDamage(t, card.hit(L) + (hot ? 1 : 0), spell);
@@ -2804,7 +2809,8 @@
     const sk = a.skill;
     if (sk === 'drive') {                               // straight shot, first unit hit is pushed back L tiles (stunned if it can't go)
       faceDir(u, a.dir); const f = firstInLine([u.col, u.row], a.dir, card.range(L));
-      const end = f ? shotAt(f.unit) : tileAt(lineTiles([u.col, u.row], a.dir, card.range(L)).slice(-1)[0] || [u.col, u.row]);
+      const lt = lineTiles([u.col, u.row], a.dir, card.range(L)), stopI = lt.findIndex(h => shotBlocked(h) || flatStop(isWallTop([u.col, u.row]), h));
+      const end = f ? shotAt(f.unit) : tileAt((stopI >= 0 ? lt[Math.max(0, stopI - (shotBlocked(lt[stopI]) ? 1 : 0))] : lt.slice(-1)[0]) || [u.col, u.row]);   // a miss flies until the wall / rock
       fire('shot', shotFrom(u), end, () => {
         if (!f) return; const t = f.unit, r = dealDamage(t, rangedDmg(baseDmg(u), t), { src: u, projectile: true });
         if (t.hp <= 0 || r.blocked) return;
