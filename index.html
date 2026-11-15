@@ -89,7 +89,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.52</div>
+  <div class="t">Medieval Cities · v1.53</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1880,6 +1880,64 @@
         if ((blockedTile(n) && !gateMine(u, n)) || !canStep(h, n, u)) continue; dist.set(k, d + 1); prev.set(k, h); q.push(n); } }
     return null;
   }
+  // ---------- AI heroes cast their skill cards: score every option, cast the best one when it beats a plain attack ----------
+  function aiHeroSkill(u, foes) {
+    if (!u.cards || !canSkillNow(u)) return null;
+    const here = [u.col, u.row], team = u.team, pos = o => [o.col, o.row], live = o => o && o.dying === null && o.hp > 0;
+    const friends = units.filter(o => live(o) && !hostile(o.team, team) && !T(o).structure), enemies = foes.filter(o => live(o) && !o.ghost);
+    const kill = (t, d) => d >= t.hp ? 6 + (T(t).hero ? 4 : 0) : 0, val = (t, d) => Math.min(d, t.hp) + kill(t, d);
+    const ok = (from, t) => !hostile(t.team, team) || tauntOk(u, from, t);
+    const free = h => onBoard(h) && !blockedTile(h) && !unitAt(h);
+    const near = (h, r) => enemies.filter(e => hexDist(h, pos(e)) <= r);
+    const attackVal = enemies.some(e => hexDist(here, pos(e)) <= (T(u).ranged ? T(u).range : (T(u).reach || 1))) ? baseDmg(u) + 1 : 0;   // what a plain attack would be worth now
+    const opts = [];
+    for (const c of u.cards.skills) {
+      if (!c || !canCastCard(u, c)) continue; const card = CARDS[c.id], L = c.lvl, cost = card.cost(L); if ((u.mana || 0) < cost) continue;
+      if (u.raining && c.id !== 'rain') continue;
+      const add = (score, act, free2) => opts.push({ score, act: { type: 'skill', id: u.id, skill: c.id, ...act }, free: !!free2, cost });
+      const R2 = card.range ? card.range(L) : 1;
+      switch (c.id) {
+        case 'smite': for (const e of near(here, 1)) if (ok(here, e)) add(4 + val(e, card.dmg(L)), { target: e.id }); break;
+        case 'bash': for (const e of near(here, 1)) if (ok(here, e)) add(1.5, { target: e.id }); break;
+        case 'heal': { const n = card.heal(L), sum = friends.filter(o => o !== u && hexDist(here, pos(o)) <= R2).reduce((x, o) => x + Math.min(n, o.maxHp - o.hp), 0); if (sum >= 2) add(sum, {}); break; }
+        case 'chains': for (const e of enemies) { const d = hexDist(here, pos(e)); if (d < 2 || d > R2 || !ok(here, e) || T(e).big || T(e).structure) continue;
+          const dest = neighbors(...here).filter(free).sort((x, y) => hexDist(x, pos(e)) - hexDist(y, pos(e)))[0]; if (dest) add(2 + (T(e).ranged || T(e).magic ? 3 : 0), { target: e.id, col: dest[0], row: dest[1] }); } break;
+        case 'taunt': { const n = near(here, R2).length; if (n >= 2 && u.hp >= u.maxHp * 0.5) add(n * 1.6, {}); break; }
+        case 'guard': for (const o of friends) if (o !== u && hexDist(here, pos(o)) <= 3 && o.hp < o.maxHp * 0.5 && near(pos(o), 2).length && u.hp > o.hp) add(4, { target: o.id }); break;
+        case 'drive': case 'firebolt': for (let d = 0; d < 6; d++) { const f = firstInLine(here, d, R2); if (!f || !hostile(f.unit.team, team) || !ok(here, f.unit)) continue;
+            if (c.id === 'drive') add(val(f.unit, rangedDmg(baseDmg(u), f.unit)) + 1, { dir: d });
+            else { const b = card.burn(L); add(val(f.unit, card.hit(L)) + b[0] * b[1], { dir: d }); } } break;
+        case 'rain': for (const e of near(here, R2)) { if (hexDist(here, pos(e)) === 0 || (u.rain || []).some(m => m.col === e.col && m.row === e.row)) continue; add(1 + card.dmg(L), { col: e.col, row: e.row }); } break;
+        case 'tumble': if (u.hp < u.maxHp * 0.7) for (const e of near(here, 1)) add(3.5, { target: e.id }); break;
+        case 'snipe': for (const e of near(here, 8)) if (ok(here, e)) add(val(e, rangedDmg(card.dmg(L), e)) + (hexDist(here, pos(e)) > 5 ? 1 : 0), { target: e.id }); break;
+        case 'overwatch': if (!near(here, 5).length && near(here, 9).length) { const e = enemies.slice().sort((x, y) => hexDist(here, pos(x)) - hexDist(here, pos(y)))[0]; add(3, { dir: dirToward(here, pos(e)) }); } break;
+        case 'cripple': for (const e of near(here, R2)) if (ok(here, e)) add(val(e, rangedDmg(baseDmg(u), e)) + (T(e).ranged ? 0.5 : 2), { target: e.id }); break;
+        case 'fireball': { const [d0, d1] = card.dmg(L), seen = new Set();
+          for (const e of near(here, R2 + 1)) for (const t of [pos(e), ...neighbors(...pos(e))]) { const k = key(...t); if (seen.has(k) || !onBoard(t) || hexDist(here, t) > R2) continue; seen.add(k);
+            let sc = 0; for (const o of units) { if (!live(o)) continue; const dd = hexDist(t, pos(o)); if (dd > 1) continue; const dm = dd === 0 ? d0 : d1; sc += hostile(o.team, team) ? val(o, dm) : -1.5 * Math.min(dm, o.hp) - (dm >= o.hp ? 6 : 0); }
+            if (sc >= 4 && (!liveUnitAt(t) || ok(here, liveUnitAt(t)))) add(sc, { col: t[0], row: t[1] }); } break; }
+        case 'lightning': for (const e of near(here, R2)) if (ok(here, e)) add(val(e, card.dmg(L)) + 2.5, { col: e.col, row: e.row }); break;
+        case 'blink': if (u.hp < u.maxHp * 0.45 && near(here, 1).length) { let best = null;
+          for (const k of areaAround(here, R2)) { const t = k.split(',').map(Number); if (!free(t) || hexDist(here, t) === 0) continue; const d = Math.min(...enemies.map(e => hexDist(t, pos(e)))); if (!best || d > best.d) best = { t, d }; }
+          if (best && best.d >= 2) add(3.5, { col: best.t[0], row: best.t[1] }, L >= 4); } break;
+        case 'mheal': for (const o of units) { if (!live(o) || hexDist(here, pos(o)) > 5) continue; const n = card.heal(L);
+          if (!hostile(o.team, team) && o.maxHp - o.hp >= Math.min(n, 4)) add(Math.min(n, o.maxHp - o.hp) * (T(o).hero ? 1.2 : 1) + 2 * (1 - o.hp / o.maxHp), { target: o.id });   // the closest to dying first
+          else if (hostile(o.team, team) && T(o).undead && ok(here, o)) add(val(o, n * 2), { target: o.id }); } break;
+        case 'eviscerate': for (const e of near(here, 1)) if (ok(here, e)) add(val(e, card.dmg(L) * (hasPassive(u, 'backstab') ? backMult(e, here) : 1)), { target: e.id }); break;
+        case 'shadowstep': for (const e of near(here, R2)) { const dst = behindTile(e), o = unitAt(dst); if (!onBoard(dst) || blockedTile(dst) || (o && o !== u) || !ok(here, e)) continue; add(val(e, card.dmg(L)) + 1.5, { target: e.id }); } break;
+        case 'vanish': if (!u.invis && ((u.hp < u.maxHp * 0.5 && near(here, 3).length) || (!near(here, 4).length && near(here, 9).length))) add(3, {}); break;
+        case 'dash': for (const e of near(here, R2)) { if (hexDist(here, pos(e)) <= 1 || !ok(here, e)) continue; if (!neighbors(...pos(e)).some(n => (!unitAt(n) || unitAt(n) === u) && !blockedTile(n))) continue;
+          add(val(e, baseDmg(u)) + 1.5, { col: e.col, row: e.row }); } break;
+        case 'pstrike': for (const e of near(here, 2)) if (warriorAim(u, here, pos(e)) !== null && ok(here, e)) add(val(e, baseDmg(u)) + 3, { target: e.id }, true); break;
+      }
+    }
+    if (!opts.length) return null;
+    for (const o of opts) o.net = o.score - o.cost * 0.25;
+    opts.sort((a, b) => b.net - a.net); const best = opts[0];
+    const usesTurn = !best.free && !combo(u) && !u.raining;
+    if (best.net < 1.5 || (usesTurn && best.score < attackVal)) return null;    // not worth more than simply attacking
+    return best.act;
+  }
   // battle AI: units far from any enemy march together in one go; the close ones still think one by one
   function aiHorde(mine, foes) {
     const nearest = t => { let b = null; for (const o of foes) { const d = hexDist(t, [o.col, o.row]); if (!b || d < b.d) b = { o, d }; } return b; };
@@ -1912,6 +1970,7 @@
     const sallyStep = () => { if (!sallying || u.moved) return false; const fp = farPath(u, [tgt.col, tgt.row]);   // defenders going out: follow the whole way (stairs, gate) a turn at a time
       if (!fp || !fp.length) return false; let k = Math.min(fp.length, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--;
       if (k <= 0) return false; aiGo({ type: 'move', id: u.id, path: fp.slice(0, k) }); return true; };
+    if (T(u).hero && u.cards && !tgt.ghost) { const sa = aiHeroSkill(u, foes); if (sa) { aiState.skip.delete(u.id); aiGo(sa); return; } }   // a hero first looks at its skill cards
     if (tgt.ghost && sallyStep()) return;
     if (tgt.ghost) { const b0 = reach(u), tl = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t)); let best = null;
       if (!u.moved) for (const t of tl) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
@@ -1921,7 +1980,9 @@
     const walkToward = () => { if (u.moved) return false; let best = null;
       if (sallyStep()) return true;
       for (const t of tiles) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
-      if (!best || (best.t[0] === u.col && best.t[1] === u.row)) return false; aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return true; };
+      if (!best || (best.t[0] === u.col && best.t[1] === u.row)) return false;
+      if (T(u).hero && u.cards && !(aiState.repass = aiState.repass || new Set()).has(u.id)) { aiState.repass.add(u.id); aiState.skip.delete(u.id); }   // after walking up, a hero gets another look at its skills
+      aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return true; };
     if (ty.ranged === 'arc' || ty.magic) {
       const inR = foes.filter(o => hexDist(here, [o.col, o.row]) <= ty.range);
       if (!u.attacked && inR.length && canShootNow(u)) { aiGo({ type: 'shoot', id: u.id, target: inR.sort((a, b2) => a.hp - b2.hp)[0].id }); return; }
