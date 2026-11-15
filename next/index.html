@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.63-preview</div>
+  <div class="t">Medieval Cities 3D · v2.64-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -3402,8 +3402,8 @@
     // turn line sits just above the health bar
     if (hasTurn) {
       ctx.fillStyle = 'rgba(8,10,6,0.8)'; ctx.fillRect(x - 1.5, y - 6, w + 3, 4);
-      ctx.fillStyle = 'rgba(160,128,58,0.95)';                    // half-bright brownish yellow: "has its turn to spend"
-      ctx.fillRect(x, y - 5, u.moved ? w / 2 : w, 2.5);
+      ctx.save(); ctx.shadowColor = 'rgba(255,215,90,0.95)'; ctx.shadowBlur = 7 * dpr;   // bright glowing gold: "has its turn to spend"
+      ctx.fillStyle = 'rgba(255,214,92,1)'; ctx.fillRect(x, y - 5, u.moved ? w / 2 : w, 2.5); ctx.restore();
     }
     ctx.font = '600 9px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     const ty = hasTurn ? y - 7 : y - 2;
