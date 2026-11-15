@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.39-preview</div>
+  <div class="t">Medieval Cities 3D · v2.40-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2091,6 +2091,16 @@
     }
     aiBusyUntil = Date.now() + 60;                                    // nothing useful for this unit: try the next one
   }
+  // AI recruiting: about 1 army in 4 (decided by its id) is all one unit type; the rest get a spread of everything the city offers
+  const idHash = s => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); };
+  function aiPickTroop(id, troops, types, gold) {
+    const plain = types.filter(t => !HEROES.includes(t)), heroes = types.filter(t => HEROES.includes(t)), rnd = a => a[(Math.random() * a.length) | 0];
+    if (idHash(id) % 4 === 0) { const first = troops.find(x => !HEROES.includes(x.type)); if (first) return plain.includes(first.type) ? first.type : null; return plain.length ? rnd(plain) : null; }
+    if (heroes.length && Math.random() < 0.08 && gold >= 45) return rnd(heroes);
+    if (!plain.length) return null;
+    const cnt = t => troops.filter(x => x.type === t).length, w = plain.map(t => 1 / (1 + cnt(t)) ** 2);   // what this army has least of is the likeliest pick
+    let r = Math.random() * w.reduce((x, y) => x + y, 0); for (let i = 0; i < plain.length; i++) { r -= w[i]; if (r <= 0) return plain[i]; } return plain[plain.length - 1];
+  }
   // ---------- campaign AI ----------
   function campPath(from, to, u) {                  // BFS over land to a target tile (units block, except the goal)
     const k0 = key(...from), prev = new Map([[k0, null]]), q = [from];
@@ -2111,7 +2121,8 @@
     if (!aiState.econ) {                                              // buildings and recruits, all at once
       aiState.econ = true;
       const owned = myCities.flatMap(c => c.buildings), count = b => owned.filter(x => x === b).length;
-      const pool = f.style === 'aggressive' ? [...FOOT.slice(0, 3), ...MOUNT, ARCH[0]] : f.style === 'builder' ? [...ARCH, ...FOOT.slice(0, 3), SIEGE[0]] : [FOOT[0], ARCH[0], FOOT[1], MOUNT[0], ARCH[1], FOOT[2], MOUNT[1]];
+      if (!Array.isArray(f.aiOrder)) f.aiOrder = [...FOOT, ...ARCH, ...MOUNT, ...SIEGE].sort(() => Math.random() - 0.5);   // each AI realm its own random taste, siege included
+      const pool = f.aiOrder;
       const unitB = c => recruitable(c).filter(t => !HEROES.includes(t)).length;
       const threat = c => units.some(u => u.troops && hostile(u.team, f.id) && u.dying === null && hexDist([u.col, u.row], [c.col, c.row]) <= 6 && sees(f.id, [u.col, u.row]));
       const nextUnit = c => pool.filter(t => !c.buildings.includes(t)).sort((x, y) => count(x) - count(y) || pool.indexOf(x) - pool.indexOf(y))[0];
@@ -2137,15 +2148,15 @@
         const types = recruitable(c); if (!types.length) continue;
         const near = myArmies().filter(a => hexDist([a.col, a.row], [c.col, c.row]) <= 1);
         for (let tries = 0; tries < 6; tries++) {
-          const r = Math.random(), heroes = types.filter(t => HEROES.includes(t)), ranged = types.filter(t => UNIT_TYPES[t].ranged && !HEROES.includes(t)), mounted = types.filter(t => UNIT_TYPES[t].mounted && !HEROES.includes(t)), foot = types.filter(t => !HEROES.includes(t) && !UNIT_TYPES[t].ranged && !UNIT_TYPES[t].mounted);
-          const pickFrom = heroes.length && r < 0.08 && pts() >= 45 ? heroes : ranged.length && r < 0.4 ? ranged : mounted.length && r < 0.6 ? mounted : foot.length ? foot : types.filter(t => !HEROES.includes(t));
-          if (!pickFrom.length) break; const t = pickFrom[(Math.random() * pickFrom.length) | 0];
           const smallest = Math.min(99, ...myArmies().map(x => x.troops.length));
           const buildFirst = myCities.some(x => !x.buildings.includes('tradepost') || !unitB(x)) ? 20 : 0;   // keep money for the economy unless an army is nearly empty
+          let a = null, t = null; const newId = `army-${f.id}-${Date.now().toString(36)}${tries}`;
+          for (const x of near.filter(x => x.troops.length < MAX_TROOPS).sort((x, y) => y.troops.length - x.troops.length)) { const tt = aiPickTroop(x.id, x.troops, types, pts()); if (tt) { a = x; t = tt; break; } }   // an all-one-type army only takes its own type
+          if (!a) { if (myArmies().length >= maxArmies) break; t = aiPickTroop(newId, [], types, pts()); }
+          if (!t) break;
           if (pts() < unitCost(t) + (smallest < 3 ? 0 : reserve + buildFirst)) break;
-          let a = near.filter(x => x.troops.length < MAX_TROOPS).sort((x, y) => y.troops.length - x.troops.length)[0];
-          if (!a && myArmies().length < maxArmies) { const spot = nbIn(c.col, c.row, CCOLS, CROWS).find(n => !impassable(n) && !unitAt(n) && !cityAt(n));
-            if (spot) { a = runtimeUnit({ id: `army-${f.id}-${Date.now().toString(36)}${tries}`, type: 'army', team: f.id, col: spot[0], row: spot[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [] }); units.push(a); near.push(a); } }
+          if (!a) { const spot = nbIn(c.col, c.row, CCOLS, CROWS).find(n => !impassable(n) && !unitAt(n) && !cityAt(n));
+            if (spot) { a = runtimeUnit({ id: newId, type: 'army', team: f.id, col: spot[0], row: spot[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [] }); units.push(a); near.push(a); } }
           if (!a) break;
           const tr = troop(t);
           if (HEROES.includes(t) && HERO_CARDS[t] && pts() >= unitCost(t) + CARD_PRICE + reserve) { tr.cards = emptyCards(); tr.cards.passive = HERO_CARDS[t].passive[(Math.random() * HERO_CARDS[t].passive.length) | 0]; spend(CARD_PRICE); }   // a hero comes with a passive when affordable
