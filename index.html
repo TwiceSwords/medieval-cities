@@ -89,7 +89,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.67</div>
+  <div class="t">Medieval Cities · v1.68</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2044,7 +2044,7 @@
       if (!u.moved) { const s = closest(t => gapTo(t, T(u).big, tgt) === 1 && okAt(t, tgt) && meleeOk(t, tgt));
         if (s) { aiGo({ type: 'attack', id: u.id, path: pathTo(b, s.t), target: tgt.id, targets: [tgt.id], dir: u.type === 'warrior' ? warriorAim(u, s.t, [tgt.col, tgt.row]) : undefined }); return; } }
       if (breachStep()) return;                                     // a way in is open: some go in, the rest keep breaking walls
-      if (sg() && sg().def !== team && projAt(here, sg().th) < sg().W) { const near2 = neighbors(...here).filter(n => { const p = wallAt(n); return p && p.kind !== 'stair' && !(p.kind === 'gate' && sg().gateOpen) && !liveUnitAt(n); })
+      if (sg() && sg().def !== team && projAt(here, sg().th) < sg().W) { const near2 = neighbors(...here).filter(n => { const p = wallAt(n), on = liveUnitAt(n); return p && p.kind !== 'stair' && !(p.kind === 'gate' && sg().gateOpen) && !(on && meleeOk(here, on)); })   // a wall with a defender on top is still hit (the defender falls with it)
           .sort((x, y) => (wallAt(y).kind === 'gate') - (wallAt(x).kind === 'gate'));
         if (near2.length && !u.attacked && !taunt.length) { aiGo({ type: 'hitwall', id: u.id, col: near2[0][0], row: near2[0][1] }); return; } }
       if (r && walkToward()) return;
@@ -4119,7 +4119,7 @@
     if (u.climb) { hint('On the ladder: right-click the wall to climb on', here); return true; }
     const mate = units.find(o => o !== u && hostile(o.team, u.team) && o.col === u.col && o.row === u.row && o.dying === null);
     if (mate && ty.ranged && tgt !== mate) { hint('Fighting on the same tile: only that enemy', here); return true; }
-    if (!p || p.kind === 'stair' || (tgt && !(p.kind === 'gate' && tgt.team === u.team))) return false;
+    if (!p || p.kind === 'stair' || (tgt && !(p.kind === 'gate' && tgt.team === u.team) && (ty.ranged || meleeOk(here, tgt)))) return false;   // a unit up on the wall that melee can't reach: attack the wall under it instead
     if (p.kind === 'gate' && !hostile(u.team, s2.def)) return false;   // your own gate: just walk into it (it opens for you)
     if (!hostile(u.team, s2.def) || isWallTop(here)) return false;      // your own walls are walked on, not attacked; and nobody on a wall top attacks the walls
     if (p.kind === 'gate' && s2.gateOpen) return false;
