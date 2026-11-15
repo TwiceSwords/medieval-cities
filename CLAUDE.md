@@ -49,3 +49,15 @@ Always list the changes or decisions you made on your own initiative, beyond wha
 - A rotatable or tiltable camera: now possible in 3D, but pick() and the 2D overlays would have to move onto raycasts and the 3D ground.
 - True 3D terrain (trees, rocks, water mesh) to replace the painted ground.
 - GLB models for cities and wall pieces (same pooling; keys `city:*`, `piece:*`).
+
+## Big job in progress: AI & undead difficulty (started 2026-11-15)
+Each stage is pushed on its own. Default settings (AI Normal, Undead Easy) must keep the old behaviour.
+Changes go into BOTH `index.html` and `next/index.html` (same patch, small Python scripts with exact-match asserts).
+Helpers: `aiDiff(fid)` → 'easy' | 'normal' | 'hard' (per faction, `faction.diff`, set in the lobby); `undeadDiff()` → `game.opts.undeadDiff`.
+- [x] 1. Lobby: difficulty buttons per AI seat + undead difficulty. Undead: medium 1.5× wave skeletons, hard 2×, extreme 2× + every dead living unit rises twice (`recordDeaths`).
+- [ ] 2. Easy AI: battles = headbutt (random nearest target, no tactics); campaign = never uses roads.
+- [ ] 3. Intel: per-faction memory `game.intel[fid]` of enemy armies (unit types seen, round) and cities (buildings seen); updated on sight, after battles (headbutts) and when a city is attacked.
+- [ ] 4. Counter recruiting (normal: light, hard: full) from intel: ranged vs horse archers/horses, lancers vs no bracing units, horse archers vs slow foot, trebuchets vs walls or with stunners; spears vs cavalry.
+- [ ] 5. Scouts: medium/hard keep a 1-unit scout army for city spots, mines, enemies; hard scouts headbutt enemy armies/cities to reveal troops & buildings.
+- [ ] 6. Hard battle AI: dodge trebuchet marks / arrow rain when the damage matters; focus archers at the back with cavalry; guard vulnerable units; ballistas placed like a chess rook (cover open lanes); stun → boulder combo.
+- [ ] 7. Hard campaign AI: hold choke points, defensive buildings only in frontier cities, expand away from danger (let the undead hit others), retreat/sacrifice when it's the smaller loss.
