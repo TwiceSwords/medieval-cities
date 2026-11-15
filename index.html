@@ -89,7 +89,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.69</div>
+  <div class="t">Medieval Cities · v1.70</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2637,7 +2637,7 @@
     if (ld.n === 1 || (ld.n === 2 && hasPassive(u, 'halberd'))) return ld.d;
     return null;
   }
-  const HP_PER_POINT = 2, MANA_CAP = 10, STAT_MULT = 10, HP_PRICE = 1 * STAT_MULT, DMG_PRICE = 2 * STAT_MULT;   // hero stat prices (×10 since v1.63)
+  const HP_PER_POINT = 2, MANA_CAP = 8, STAT_MULT = 10, HP_PRICE = 1 * STAT_MULT, DMG_PRICE = 2 * STAT_MULT;   // hero stat prices (×10 since v1.63)
   const manaPrice = bought => (1 + (bought || 0)) * STAT_MULT;
   const baseDmg = u => hasPassive(u, 'siphon') ? 1 : u.dmg + (hasPassive(u, 'keeneye') || (u.type === 'warrior' && hasPassive(u, 'greatsword')) ? 2 : 0);
   const noMoveShoot = u => !!T(u).noMoveShoot && !hasPassive(u, 'skirmisher');
@@ -2724,6 +2724,7 @@
   }
   // start-of-turn upkeep for every unit of the side whose turn begins: DoT first, then mana, then expiring tokens
   function turnStartUpkeep(team) {
+    for (const h of units) if (h.team === team && h.manaMax > MANA_CAP) { h.manaMax = MANA_CAP; h.mana = Math.min(h.mana || 0, MANA_CAP); }   // heroes over the mana cap (it was 10 before v1.70) come down to it
     for (const u of units) if (u.team === team && u.dying === null && u.hp > 0 && u.dots && u.dots.length) {
       for (const d of u.dots) { const amt = steadfast(u, Math.max(0, d.dmg - (d.red || 0))); hitUnit(u, amt); d.turns -= 1; }
       u.dots = u.dots.filter(d => d.turns > 0);
