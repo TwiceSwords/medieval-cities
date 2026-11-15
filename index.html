@@ -89,7 +89,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.56</div>
+  <div class="t">Medieval Cities · v1.57</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1199,7 +1199,7 @@
   // ===================== CAMPAIGN RULES =====================
   const FOOT = ['swordsman', 'spearman', 'halberdier', 'swordmaster'], ARCH = ['archer', 'crossbow'], MOUNT = ['horseman', 'lancer', 'horsearcher'],
         SIEGE = ['trebuchet', 'ballista'], HEROES = ['knight', 'ranger', 'mage', 'assassin', 'warrior'];
-  const unitCost = t => HEROES.includes(t) ? 20 : MOUNT.includes(t) ? 18 : SIEGE.includes(t) ? 20 : 10;
+  const unitCost = t => HEROES.includes(t) ? 20 : MOUNT.includes(t) ? 15 : SIEGE.includes(t) ? 20 : 10;
   const BUILDINGS = {
     tradepost: { name: 'Trade post', cost: 20, text: '+1 gold per turn for this city (multiplied by its road links like the city itself)' },
     garrison:  { name: 'Garrison', cost: 10, text: '+1 swordsman defender, +1 defender of each unit type this city can recruit' },
