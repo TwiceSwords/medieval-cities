@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.59-preview</div>
+  <div class="t">Medieval Cities 3D · v2.60-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1129,6 +1129,7 @@
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
     CROWS = rowsOf(st); CCOLS = colsOf(st);
+    for (const f of Array.isArray(st.factions) ? st.factions : []) if (f && f.id && Array.isArray(f.col)) TEAM[f.id] = f.col;   // faction colours first, so units are built in the right colour
     const old = new Map(units.map(u => [u.id, u]));
     units = st.units.map(s => { const o = old.get(s.id);
       if (!o || o.type !== (UNIT_TYPES[s.type] ? s.type : 'swordsman') || o.team !== s.team) return runtimeUnit(s);
@@ -3296,6 +3297,7 @@
         ctx.strokeStyle = 'rgba(255,210,58,0.95)'; ctx.lineWidth = 4; ctx.setLineDash([9, 6]); ctx.lineDashOffset = -t * 30;
         ctx.beginPath(); ctx.ellipse(bx, by, U * 0.85 * pr, U * 0.85 * SQ * pr, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
       }
+      { const tk = u.team + ':' + (TEAM[u.team] || TEAM.blue).join(); if (u.meshTeam !== tk) { u.meshTeam = tk; if (u.type === 'warrior') u.meshKey = null; else u.mesh = meshFor(u.type, u.team); } }   // a unit made before its faction colour was known (load, sync) would stay blue: rebuild it in the right colour
       if (u.type === 'warrior') { const w = weaponOf(u); if (u.meshKey !== w) { u.mesh = meshFor('warrior', u.team, w); u.meshKey = w; } }
       R3.tag = { key: 'unit:' + u.id, u, gy: groundY(u), ringA: spent ? 0.25 : 0.75 };
       drawMesh(ctx, u.mesh, bx, by - walk * 0.6 + Math.max(0, (u.dying || 0) - 0.5) * 8, u.face, t + u.phase, u.flash, dz ? 1 : 0,
