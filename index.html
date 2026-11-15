@@ -89,7 +89,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities · v1.66</div>
+  <div class="t">Medieval Cities · v1.67</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2166,7 +2166,10 @@
     let goal = null, mode2 = null;
     const force = t => myArmies().filter(o => o === a || hexDist([o.col, o.row], t) <= 3).reduce((x, o) => x + troopStrength(o.troops), 0);   // this army plus friends close to the target (they join the fight)
     const bigEnough = a.troops.length >= ({ aggressive: 6, balanced: 8, builder: 10 })[f.style || 'balanced'] || a.troops.length >= MAX_TROOPS - 2;
-    const mine2 = myArmies(), scoutArmy = mine2.length >= 2 && mine2.slice().sort((x, y) => x.troops.length - y.troops.length)[0] === a && !bigEnough;
+    const mine2 = myArmies();
+    if (bigEnough) a.scoutRole = false;                                               // a scout that grew big enough to fight drops the job
+    if (!bigEnough && !a.scoutRole && mine2.length >= 2 && !mine2.some(o => o !== a && o.scoutRole && o.dying === null) && mine2.slice().sort((x, y) => x.troops.length - y.troops.length)[0] === a) a.scoutRole = true;
+    const scoutArmy = !!a.scoutRole;   // the scout job sticks: one scout per faction, kept until it grows (it used to flip every turn as army sizes changed)
     const raid = game.round < 25 && a.troops.length >= 3;
     const prey = enemies.filter(e => { const d = dist(e.tile); if (e.army && raid && e.s < str * 0.75 && d <= 10) return true;   // early raids on weak armies
         return bigEnough && d <= 26 && force(e.tile) >= e.s * (e.city ? 1.5 : 1.3); })
@@ -2190,11 +2193,19 @@
       const other = myCities.filter(c => c !== home && !connectedCities(home).includes(c)).sort((x, y) => hexDist([home.col, home.row], [x.col, x.row]) - hexDist([home.col, home.row], [y.col, y.row]))[0];
       if (other) { goal = [other.col, other.row]; mode2 = 'road'; }
     }
-    if (!goal && home && !bigEnough && !scoutArmy && a.troops.length < MAX_TROOPS && dist([home.col, home.row]) > 1 && game.round >= 6) { goal = [home.col, home.row]; mode2 = 'home'; }   // not ready yet: back home to grow
-    if (!goal && fogOn() && (scoutArmy || a.troops.length >= (f.style === 'builder' ? 5 : 3))) {      // nothing known nearby: scout unexplored land
-      const ex = (game.explored && game.explored[f.id]) || ''; let best = null;
-      for (let i = 0; i < ex.length; i++) if (ex[i] !== '1') { const t = [i % CCOLS, (i / CCOLS) | 0]; if (impassable(t) || t[1] < WALL_ROW) continue; const d = dist(t) + Math.random() * 4; if (!best || d < best.d) best = { t, d }; }
-      if (best) { goal = best.t; mode2 = 'scout'; } }
+    if (!goal && home && !bigEnough && !scoutArmy && !a.scoutGoal && a.troops.length < MAX_TROOPS && dist([home.col, home.row]) > 1 && game.round >= 6) { goal = [home.col, home.row]; mode2 = 'home'; }   // not ready yet: back home to grow
+    if (!goal && fogOn() && (scoutArmy || bigEnough || a.scoutGoal || a.troops.length >= (f.style === 'builder' ? 5 : 3))) {      // nothing known nearby: scout unexplored land
+      const ex = (game.explored && game.explored[f.id]) || '', unexplored = t => ex[t[1] * CCOLS + t[0]] !== '1';
+      const walls = game.cities.filter(c => c.owner && hostile(c.owner, f.id) && knowsTile(f.id, [c.col, c.row]));   // known enemy cities this army can't take: give that area up, look elsewhere
+      const tooStrong = c => !bigEnough || force([c.col, c.row]) < troopStrength(garrisonOf(c).map(troop)) * ((c.buildings || []).includes('walls') ? 1.6 : 1.15) * 1.5;
+      const avoid = t => walls.some(c => tooStrong(c) && hexDist(t, [c.col, c.row]) <= 3);
+      let keep = a.scoutGoal && a.scoutGoal.split(',').map(Number);
+      if (keep && (!unexplored(keep) || avoid(keep) || (keep[0] === a.col && keep[1] === a.row))) keep = null;   // reached, already seen, or next to a city it can't take: pick a new spot
+      if (!keep && a.scoutGoal && !scoutArmy && !bigEnough && !(a.tripLeft > 0)) { a.scoutGoal = null; keep = 'done'; }   // a small army's scouting trip (up to 5 turns) is over: back home to grow
+      let best = keep === 'done' ? null : keep ? { t: keep } : null;
+      if (!best && keep !== 'done') for (let i = 0; i < ex.length; i++) if (ex[i] !== '1') { const t = [i % CCOLS, (i / CCOLS) | 0]; if (impassable(t) || t[1] < WALL_ROW || avoid(t)) continue; const d = dist(t) + Math.random() * 4; if (!best || d < best.d) best = { t, d }; }
+      if (best) { if (!a.scoutGoal) a.tripLeft = 5; a.tripLeft = (a.tripLeft || 0) - 1; goal = best.t; mode2 = 'scout'; a.scoutGoal = best.t.join(','); } else a.scoutGoal = null; }
+    if (!goal && home && !bigEnough && dist([home.col, home.row]) > 1 && !a.scoutGoal) { goal = [home.col, home.row]; mode2 = 'home'; }
     if (!goal && home && dist([home.col, home.row]) > 1) { goal = [home.col, home.row]; mode2 = 'home'; }   // nothing to do: go home for reinforcements
     if (!goal) { aiBusyUntil = Date.now() + 50; return; }
     if (mode2 === 'road' && pts() >= ROAD_COST + 6 + reserve && !hasRoad(here) && !cityAt(here)) { game.roads = [...(game.roads || []), key(...here)]; spend(ROAD_COST); }
