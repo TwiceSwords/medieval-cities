@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.52-preview</div>
+  <div class="t">Medieval Cities 3D · v2.53-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -4236,6 +4236,7 @@
     if (mate && ty.ranged && tgt !== mate) { hint('Fighting on the same tile: only that enemy', here); return true; }
     if (!p || p.kind === 'stair' || (tgt && !(p.kind === 'gate' && tgt.team === u.team))) return false;
     if (p.kind === 'gate' && !hostile(u.team, s2.def)) return false;   // your own gate: just walk into it (it opens for you)
+    if (!hostile(u.team, s2.def) || isWallTop(here)) return false;      // your own walls are walked on, not attacked; and nobody on a wall top attacks the walls
     if (p.kind === 'gate' && s2.gateOpen) return false;
     if (u.attacked) { hint('Already attacked', here); return true; }
     const d = hexDist(here, h);
