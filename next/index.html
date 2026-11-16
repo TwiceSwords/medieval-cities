@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.69-preview</div>
+  <div class="t">Medieval Cities 3D · v2.70-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button: move camera · Wheel: zoom · Left-click: select · Left-drag: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2213,7 +2213,14 @@
       if (breachStep()) return;                                     // a way in is open: some go in, the rest keep breaking walls
       if (sg() && sg().def !== team && projAt(here, sg().th) < sg().W) { const near2 = neighbors(...here).filter(n => { const p = wallAt(n), on = liveUnitAt(n); return p && p.kind !== 'stair' && !(p.kind === 'gate' && sg().gateOpen) && !(on && meleeOk(here, on)); })   // a wall with a defender on top is still hit (the defender falls with it)
           .sort((x, y) => (wallAt(y).kind === 'gate') - (wallAt(x).kind === 'gate'));
-        if (near2.length && !u.attacked && !taunt.length) { aiGo({ type: 'hitwall', id: u.id, col: near2[0][0], row: near2[0][1] }); return; } }
+        if (near2.length && !u.attacked && !taunt.length) { aiGo({ type: 'hitwall', id: u.id, col: near2[0][0], row: near2[0][1] }); return; } 
+        if (!near2.length && !u.moved && !u.attacked && !taunt.length && !isWallTop(here)) {   // not next to a wall yet: walk up to one and hit it in the same turn (like a melee attack after a move)
+          const s2 = sg(), b2 = reach(u); let best = null;
+          for (const [k, dd] of b2.dist) { if (dd === 0) continue; const t = k.split(',').map(Number); if (unitAt(t) || isWallTop(t) || wallAt(t) || projAt(t, s2.th) >= s2.W) continue;
+            for (const n of neighbors(...t)) { const p = wallAt(n), on = liveUnitAt(n); if (!p || p.kind === 'stair' || (p.kind === 'gate' && s2.gateOpen) || (on && meleeOk(t, on))) continue;
+              const sc = (p.kind === 'gate' ? -3 : 0) + hexDist(n, [tgt.col, tgt.row]) + dd * 0.3;
+              if (!best || sc < best.sc) best = { sc, t, n }; } }
+          if (best) { aiGo({ type: 'hitwall', id: u.id, col: best.n[0], row: best.n[1], path: pathTo(b2, best.t) }); return; } } }
       if (r && walkToward()) return;
     }
     aiBusyUntil = Date.now() + 60;                                    // nothing useful for this unit: try the next one
