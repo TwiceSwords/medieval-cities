@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.80-preview</div>
+  <div class="t">Medieval Cities 3D · v2.81-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2362,10 +2362,11 @@
         else if (f.style === 'builder' && c.buildings.filter(x => x === 'tower').length < 2) want = 'tower';
         if (!want || !BUILDINGS[want]) continue;
         const keep = (want === 'tradepost' || !unitB(c)) ? 0 : reserve;               // trade and the first unit building don't wait for settling money
-        if (pts() >= BUILDINGS[want].cost + keep && canBuild(BUILDINGS[want].cost)) { c.buildings = [...c.buildings, want]; c.acted = true; spend(BUILDINGS[want].cost); f.bGold = (f.bGold || 0) + BUILDINGS[want].cost; owned.push(want); }
+        if (pts() >= BUILDINGS[want].cost + keep && (want === 'tradepost' || canBuild(BUILDINGS[want].cost))) { c.buildings = [...c.buildings, want]; c.acted = true; spend(BUILDINGS[want].cost); f.bGold = (f.bGold || 0) + BUILDINGS[want].cost; owned.push(want); }
       }
       // recruits: fill the armies at home with a mix of what the cities offer
-      const maxArmies = Math.max(2, myCities.length + 1);
+      const troopsAll = myArmies().reduce((n, x) => n + x.troops.length, 0), biggest = Math.max(0, ...myArmies().map(x => x.troops.length));
+      const maxArmies = Math.min(Math.max(2, myCities.length + 1), 3 + Math.floor(Math.max(0, biggest - 8) / 6));   // scout + settler + one main army that fills up first (towards 20); more armies once it is big
       for (const c of myCities.slice().sort(() => Math.random() - 0.5)) {
         const types = recruitable(c); if (!types.length) continue;
         const near = myArmies().filter(a => hexDist([a.col, a.row], [c.col, c.row]) <= 1);
@@ -2374,9 +2375,11 @@
           const buildFirst = (f.uGold || 0) < (f.bGold || 0) ? 0 : myCities.some(x => !x.buildings.includes('tradepost') || !unitB(x)) ? 20 : 0;   // units behind buildings: no holding back   // keep money for the economy unless an army is nearly empty
           let a = null, t = null; const newId = `army-${f.id}-${Date.now().toString(36)}${tries}`;
           for (const x of near.filter(x => x.troops.length < MAX_TROOPS && (x.recruitN || 0) < MAX_RECRUIT_TURN).sort((x, y) => y.troops.length - x.troops.length)) { const tt = aiPickTroop(x.id, x.troops, types, pts(), f); if (tt) { a = x; t = tt; break; } }   // an all-one-type army only takes its own type
-          if (!a) { if (myArmies().length >= maxArmies) break; t = aiPickTroop(newId, [], types, pts(), f); }
+          const anyHome = myArmies().some(x => myCities.some(cc => hexDist([x.col, x.row], [cc.col, cc.row]) <= 1));
+          if (!a) { if (myArmies().length >= maxArmies) break; t = aiPickTroop(newId, [], types, pts(), f); }   // nobody at home to fill: a new army here becomes the one that grows
           if (!t) break;
-          const cost = unitCost(t, f.id); if (pts() < cost + (smallest < 3 ? 0 : reserve + buildFirst)) break;
+          const biggestNow = Math.max(0, ...myArmies().map(x => x.troops.length));
+          const cost = unitCost(t, f.id); if (pts() < cost + (biggestNow < 3 ? 0 : reserve + buildFirst)) break;   // keep the money saved for a new city unless every army is tiny
           if (!a) { const spot = nbIn(c.col, c.row, CCOLS, CROWS).find(n => !impassable(n) && !unitAt(n) && !cityAt(n));
             if (spot) { a = runtimeUnit({ id: newId, type: 'army', team: f.id, col: spot[0], row: spot[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [] }); units.push(a); near.push(a); } }
           if (!a) break;
@@ -2428,7 +2431,7 @@
       if (other) { goal = [other.col, other.row]; mode2 = 'road'; }
     }
     const homeArmy = myArmies().some(o => o !== a && myCities.some(c => hexDist([o.col, o.row], [c.col, c.row]) <= 1));
-    const goGrow = !homeArmy && pts() >= 20 + reserve && !bigEnough;   // gold is piling up and no army at home to spend it on: grow first, mines later
+    const goGrow = !homeArmy && pts() >= 15 && !bigEnough;   // gold is piling up and no army at home to spend it on: grow first, mines later
     if (!goal && mode2 === null && !goGrow) {                        // nothing better to do: hold a gold mine
       if (mineAt(here)) { aiBusyUntil = Date.now() + 50; return; }
       const mn = (game.mines || []).filter(m => knowsTile(f.id, m) && !impassable(m) && !units.some(o => o !== a && o.troops && o.dying === null && o.col === m[0] && o.row === m[1]) && !myArmies().some(o => o !== a && o.mineGoal === m.join()))
