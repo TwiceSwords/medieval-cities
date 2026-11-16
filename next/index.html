@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.81-preview</div>
+  <div class="t">Medieval Cities 3D · v2.82-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2947,6 +2947,7 @@
     if (t.climb) amt *= 2;                                // on a ladder: double damage
     if (src && (src.turner || T(src).turner) && hostile(t.team, src.team) && !T(t).structure && !T(t).big && t.team !== 'undead') {   // the King/Queen and their thralls turn the living
       t.team = src.team; t.turner = true; t.mesh = meshFor(t.type, t.team); t.flash = 1; floatOn(t, 'TURNED!', '#9fd8ff', 0, 18); return { blocked: false, dealt: 0 }; }
+    if (t.type === 'horsearcher' && src && !melee && ['archer', 'crossbow', 'ranger', 'mage'].includes(src.type)) amt *= 2;   // foot archers, crossbowmen, rangers and mages: double damage against horse archers
     if (t.team === 'undead' && src && game.bt && game.bt.siegeCity) { const wc = game.cities.find(c => c.id === game.bt.siegeCity); if (wc && wc.wall && wc.buildings.includes('nightswatch') && src.team === wc.owner) amt *= 2; }
     const g = t.guard && units.find(x => x.id === t.guard.by && x.dying === null && x.hp > 0);
     if (g && g !== t) {                                     // Guardian's Oath: damage goes to the paladin instead
