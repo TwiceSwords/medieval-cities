@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.78-preview</div>
+  <div class="t">Medieval Cities 3D · v2.79-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -4050,6 +4050,8 @@
     const ty = T(u);
     if (ty.noMoveShoot) return !!u.moved;                    // these can't move and shoot in the same turn
     if (!u.moved) return false;
+    if (ty.charge && moveOf(u) > 0) for (let d = 0; d < 6; d++) { const P = chargePlan(u, [u.col, u.row], d), t = P.tgt;   // a lancer that walked can still charge: its turn isn't over while a charge lane is open
+      if (t && hostile(t.team, u.team) && (P.reached || P.braced) && hexDist([u.col, u.row], [t.col, t.row]) >= 4 && !(u.team === viewer() && hiddenFromMe(t))) { const ts = tauntSet(u, [u.col, u.row]); if (!ts.length || ts.includes(t)) return false; } }
     const r = ty.ranged === 'arc' ? ty.range : (ty.reach || 1);   // moved: still has a turn if an enemy is in reach
     return !units.some(o => hostile(o.team, u.team) && o.dying === null && o.hp > 0 && hexDist([u.col, u.row], [o.col, o.row]) <= r);
   }
