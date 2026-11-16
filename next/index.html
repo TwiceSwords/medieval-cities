@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.01-preview</div>
+  <div class="t">Medieval Cities 3D · v3.02-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2916,7 +2916,7 @@
   HERO_CARDS.ranger = { passive: ['skirmisher', 'quickdraw', 'keeneye', 'evasion'], skill: ['drive', 'rain', 'tumble', 'snipe', 'overwatch', 'cripple'] };
   // Mage cards
   Object.assign(CARDS, {
-    mender: { kind: 'passive', name: "Healer's Touch", text: () => 'Basic attack no longer hurts: it heals an ally or himself for 3 (range 5). Healing burns the undead for double.' },
+    mender: { kind: 'passive', name: "Healer's Touch", text: () => `Basic attack no longer hurts: it heals an ally or himself for ${MENDER_HEAL} (range 5). Healing burns the undead for double.` },
     siphon: { kind: 'passive', name: 'Mana Siphon', text: () => 'Basic attack deals 1 instead of 2, but every enemy hit gives back 1 mana.' },
     firebolt: { kind: 'skill', name: 'Firebolt', cost: () => 2, target: 'line', range: () => 5,
       hit: l => lv([1, 1, 1, 2, 2], l), burn: l => lv([[1, 1], [1, 2], [2, 2], [2, 2], [2, 3]], l),
@@ -2938,6 +2938,7 @@
     for (let i = 0; i < out.length; i++) for (const n of neighbors(...out[i])) { const k = key(...n); if (!seen.has(k) && waterAt(n)) { seen.add(k); out.push(n); } }
     return out;
   }
+  const MENDER_HEAL = 2;                               // Healer's Touch: what the mage's basic attack heals
   // healing: the undead take double the healing as damage instead
   function healUnit(t, n, src) {
     if (!t || t.dying !== null || t.hp <= 0 || T(t).structure) return;                 // a tower is a building: nothing heals it
@@ -3243,9 +3244,9 @@
         const t = units.find(x => x.id === a.target);
         if (t && t.dying === null && ty.magic) {
           if (t !== u) faceToward(u, t); const healer = hasPassive(u, 'mender');
-          if (healer && t === u) { const p = upos(u); effects.push({ x: p.x, y: p.y, t: 0, color: '120,255,150', r: S * 1.2 }); healUnit(u, 3, u); u.attacked = true; if (!hasPassive(u, 'skirmisher')) u.moved = true; return; }   // healing himself: no orb to throw (still his action)
+          if (healer && t === u) { const p = upos(u); effects.push({ x: p.x, y: p.y, t: 0, color: '120,255,150', r: S * 1.2 }); healUnit(u, MENDER_HEAL, u); u.attacked = true; if (!hasPassive(u, 'skirmisher')) u.moved = true; return; }   // healing himself: no orb to throw (still his action)
           fire('orb', shotFrom(u), shotAt(t), () => {
-            if (healer) { healUnit(t, 3, u); return; }
+            if (healer) { healUnit(t, MENDER_HEAL, u); return; }
             const r = dealDamage(t, baseDmg(u), { physical: false, src: u });
             if (hasPassive(u, 'siphon') && hostile(t.team, u.team) && !r.blocked && u.mana < u.manaMax) { u.mana += 1; floatOn(u, '+1 mana', '#8fb8ff', 0, 15); }
           });
@@ -3645,7 +3646,7 @@
     }
     ctx.font = '600 9px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     const ty = hasTurn ? y - 7 : y - 2;
-    { const hpT = `${u.hp}/${u.maxHp}`, heal = hasPassive(u, 'mender'), dT = `${heal ? '✚' : '⚔'}${heal ? 3 : baseDmg(u)}`;   // health, then the damage of a basic attack (a healer: how much it heals)
+    { const hpT = `${u.hp}/${u.maxHp}`, heal = hasPassive(u, 'mender'), dT = `${heal ? '✚' : '⚔'}${heal ? MENDER_HEAL : baseDmg(u)}`;   // health, then the damage of a basic attack (a healer: how much it heals)
       ctx.textAlign = 'left'; const wH = ctx.measureText(hpT).width, wD = ctx.measureText(dT).width, gap = 4, x0 = bx - (wH + gap + wD) / 2;
       ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillText(hpT, x0 + 0.6, ty + 0.6); ctx.fillText(dT, x0 + wH + gap + 0.6, ty + 0.6);
       ctx.fillStyle = '#e9e4cf'; ctx.fillText(hpT, x0, ty);
@@ -3783,7 +3784,7 @@
       return;
     }
     if (ty.ranged === 'mark' && !u.moved && hexDist(here, hover) <= ty.range && !(hexDist(here, hover) === 1 && !tgt)) { drawCrosshair(hover, 'rgba(255,150,110,0.7)', 1, t); return; }
-    if (ty.magic && hasPassive(u, 'mender') && tgt && tgt.team === u.team && hexDist(here, hover) <= ty.range && canShootNow(u)) { outlineHex(hover, 'rgba(120,255,160,0.95)', 4); label(tgt, `+${Math.min(3, tgt.maxHp - tgt.hp)}`, '#9dffb4'); return; }
+    if (ty.magic && hasPassive(u, 'mender') && tgt && tgt.team === u.team && hexDist(here, hover) <= ty.range && canShootNow(u)) { outlineHex(hover, 'rgba(120,255,160,0.95)', 4); label(tgt, `+${Math.min(MENDER_HEAL, tgt.maxHp - tgt.hp)}`, '#9dffb4'); return; }
     if (!tgt || tgt.team === u.team || hiddenFromMe(tgt)) return;
     if (u.type === 'warrior' && canCommand(u) && !u.attacked) { const d = warriorAim(u, here, hover);
       if (d !== null) { const tiles = hasPassive(u, 'halberd') ? halberdTiles(here, d) : [hover];
