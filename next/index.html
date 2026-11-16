@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.99-preview</div>
+  <div class="t">Medieval Cities 3D · v3.00-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -3460,7 +3460,8 @@
       const to = tileAt(g.tile);
       fire('boulder', shotFrom(tr), to, () => {
         effects.push({ x: to.x, y: to.y, t: 0 });
-        if (applyDamage) { const t = liveUnitAt(g.tile); if (t) dealDamage(t, rangedDmg(tr.dmg, t), { src: tr, aoe: true }); }
+        if (applyDamage) { const t = liveUnitAt(g.tile); if (t) dealDamage(t, rangedDmg(tr.dmg, t), { src: tr, aoe: true });
+          const pc = typeof sg === 'function' && sg() && wallAt(g.tile); if (pc && pc.kind !== 'stair') hitPiece(g.tile, tr.dmg); }   // a wall / gate piece under the mark is hit too (with or without someone on it)
         else addFloat(to.x, to.y - 20, '💥', '#fff', 22);
       });
       projectiles[projectiles.length - 1].t = -i * 0.25;          // several boulders on one spot arrive one after another
@@ -4710,10 +4711,10 @@
     if (u.attacked) { hint('Already attacked', here); return true; }
     const d = hexDist(here, h);
     if (tauntSet(u, here).length && (d <= (ty.ranged ? ty.range : 1) || u.moved)) { hint('Taunted: must target the Paladin', h); return true; }
-    if (ty.ranged === 'mark') {                           // trebuchet: a boulder straight at the wall / gate
+    if (ty.ranged === 'mark') {                           // trebuchet: marks the wall / gate tile like any other; the boulder lands on its next turn
       if (u.moved) { hint("Moved: can't fire this turn", here); return true; }
       if (d > ty.range) { hint('Out of range', h); return true; }
-      go({ type: 'hitwall', id: u.id, col: h[0], row: h[1] }); return true; }
+      go({ type: 'mark', id: u.id, col: h[0], row: h[1] }); return true; }
     if (d === 1 && p.kind === 'wall' && canLadder && !onWall(u) && !lad) { wallChoice = { id: u.id, col: h[0], row: h[1] };
       showModal(`<div class="mbox"><div class="t">🧱 The wall</div><div>Put a wooden ladder against it (climbing takes 2 turns, double damage while on it), or hit the wall (${WALL_HP} HP a piece)?</div>
         <div class="row"><button data-wall="ladder">Put up a ladder</button><button data-wall="hit">Attack the wall</button><button data-wall="no">Cancel</button></div></div>`); return true; }
