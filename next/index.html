@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.97-preview</div>
+  <div class="t">Medieval Cities 3D · v2.98-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -4229,6 +4229,9 @@
   }
   function commit(action) {
     game.seq += 1;
+    if (ctlOn() && ownerOfTeam(game.turn) === testCtl && action && action.type !== 'end') {   // test mode control: nothing runs out (moves, attacks, recruits, building)
+      for (const u of units) if (ownerOfTeam(u.team) === testCtl && u.dying === null) { u.moved = false; u.attacked = false; u.recruitN = 0; u.skillUsed = false; }
+      for (const c of game.cities || []) if (c.owner === testCtl) c.acted = false; }
     try { syncHero(); } catch (e) {}
     try { offImpassable(); } catch (e) {}
     if (game.view === 'campaign' && fogOn()) markExplored();
@@ -4305,8 +4308,11 @@
   // ===================== CAMPAIGN UI =====================
 
   let selCity = null, placingArmy = null, lastHuman = null;
+  let testCtl = null;                                 // test mode: the faction the host is playing as (besides its own)
+  const ctlOn = () => !!(testCtl && testOn && isHost() && faction(testCtl) && faction(testCtl).alive !== false);
   function viewer() {
     if (game.opts && game.opts.god && game.view !== 'lobby') return null;      // the god watches as nobody
+    if (ctlOn() && ownerOfTeam(game.turn) === testCtl) return testCtl;     // playing a faction in test mode: see what it sees on its turn
     if (mode === 'online') return mySeat;
     const f = faction(ownerOfTeam(game.turn)); if (f && !f.ai) { lastHuman = f.id; return f.id; }
     return lastHuman || ((game.factions || []).find(x => !x.ai && x.kind !== 'ai') || {}).id || null;
@@ -4736,7 +4742,7 @@
   let seenTurn = 'blue', seenWinner = null, vicTimer = null;
   const fmt = h => h ? `${h[0]}, ${h[1]}` : '–';
   const myTurn = () => { if (game.view === 'lobby' || (game.bt && game.view === 'battle' && game.bt.phase !== 'fight') || spectating()) return false; const fid = ownerOfTeam(game.turn), f = faction(fid);
-    if (!f) return mode === 'local' || game.turn === mySeat; if (f.ai || autoFor(fid)) return false; return mode === 'local' || fid === mySeat; };
+    if (!f) return mode === 'local' || game.turn === mySeat; if (f.ai || autoFor(fid)) return false; return mode === 'local' || fid === mySeat || (ctlOn() && fid === testCtl); };
   const canCommand = u => u && !winner() && u.team === game.turn && myTurn() && (T(u).hero ? heroCanAct(u, false) : !(u.moved && u.attacked));
 
   function statusOf(u) {
@@ -4910,7 +4916,7 @@
     h += `<div class="sub">⌛ ${tr('Battle turn limit')}</div><div class="row"><input data-v="bturns" type="number" min="0" max="999" value="${testUI.bturns ?? battleLimit()}" style="width:64px"><button data-t="bturns">Set</button><span class="k">(0 = no limit)</span></div>`;
     h += `<div class="sub">⚡ ${tr('AI battle speed')}</div><div class="row">${[1, 2, 4, 8].map(k => `<button data-t="aispd" data-k="${k}" class="${((game.opts && game.opts.aiSpeed) || 1) === k ? 'on' : ''}">${k}×</button>`).join('')}</div>`;
     h += `<div class="sub">Gold</div><div class="row"><select data-v="fid">${fOpt(testUI.fid, f => !f.undead)}</select><input data-v="gold" type="number" value="${testUI.gold}"><button data-t="gold">Give</button><span class="k">(negative takes)</span></div>`;
-    h += `<div class="sub">Who plays each faction</div>` + fs.filter(f => !f.undead).map(f => `<div class="tr"><span style="color:rgb(${f.col.map(v => Math.min(255, v + 70))})">${f.name}${f.joined ? ' · connected' : ''}${f.id === hostSeat() ? ' · you' : ''}</span><span>${f.id === hostSeat() ? '' : `<button data-t="seat" data-f="${f.id}">${f.ai ? '→ Player seat' : '→ AI'}</button>`}</span></div>`).join('');
+    h += `<div class="sub">Who plays each faction</div>` + fs.filter(f => !f.undead).map(f => `<div class="tr"><span style="color:rgb(${f.col.map(v => Math.min(255, v + 70))})">${f.name}${f.joined ? ' · connected' : ''}${f.id === hostSeat() ? ' · you' : ''}</span><span>${f.id === hostSeat() ? '' : testCtl === f.id ? `<button data-t="ctl" data-f="${f.id}" class="on">⏹ Leave</button>` : `<button data-t="ctl" data-f="${f.id}">🎮 Play as</button> <button data-t="seat" data-f="${f.id}">${f.ai ? '→ Player seat' : '→ AI'}</button>`}</span></div>`).join('') + (testCtl ? `<div class="k">🎮 You are playing ${faction(testCtl) ? faction(testCtl).name : ''} too · no per-turn limits for it (recruits, buildings, moves, attacks)</div>` : '');
     if (camp) {
       if (c) h += `<div class="sub">City · ${c.name}${c.wall ? ' (Frostgate)' : ''}</div><div class="row">Owner: <select data-v="cityowner">${fOpt(c.owner || '', f => !f.undead)}<option value="" ${!c.owner ? 'selected' : ''}>— free spot —</option></select><button data-t="cityset" data-c="${c.id}">Set</button></div>`;
       if (a) { const fa = faction(a.team);
@@ -4937,6 +4943,10 @@
     if (t === 'bturns') { const v = Math.max(0, Math.min(999, Math.floor(Number(testUI.bturns ?? battleLimit())) || 0)); game.opts = { ...(game.opts || {}), battleTurns: v }; delete testUI.bturns; return done(v ? `Battle turn limit: ${v}` : 'No battle turn limit'); }
     if (t === 'aispd') { game.opts = { ...(game.opts || {}), aiSpeed: +b.dataset.k }; return done(`AI battle speed ${b.dataset.k}×`); }
     if (t === 'gold') { const n = Math.round(Number(testUI.gold) || 0); game.points = { ...game.points, [testUI.fid]: Math.max(0, (game.points[testUI.fid] || 0) + n) }; return done(`${faction(testUI.fid).name}: ${n >= 0 ? '+' : ''}${n} gold`); }
+    if (t === 'ctl') { const f = faction(b.dataset.f); if (!f) return;
+      if (testCtl === f.id) { f.ai = !!f.testAi; f.kind = f.ai ? 'ai' : 'human'; delete f.testAi; testCtl = null; aiState = null; return done(`${f.name} is back to ${f.ai ? 'the AI' : 'its player seat'}`); }
+      if (testCtl) { const o = faction(testCtl); if (o) { o.ai = !!o.testAi; o.kind = o.ai ? 'ai' : 'human'; delete o.testAi; } }   // only one at a time
+      f.testAi = !!f.ai; f.ai = false; f.kind = 'human'; testCtl = f.id; aiState = null; return done(`You are playing ${f.name} too (no limits)`); }
     if (t === 'seat') { const f = faction(b.dataset.f); if (!f) return; f.ai = !f.ai; f.kind = f.ai ? 'ai' : 'human'; if (f.ai) f.joined = false; aiState = null; return done(`${f.name} is now ${f.ai ? 'played by the AI' : 'a Player seat · share your code to let a friend take it'}`); }
     if (t === 'cityset') { const c = game.cities.find(x => x.id === b.dataset.c); if (!c) return; const o = document.querySelector('#tst select[data-v="cityowner"]').value || null;
       c.owner = o; if (!o) c.buildings = []; c.acted = false; checkDefeats(); return done(o ? `${c.name} now belongs to ${faction(o).name}` : `${c.name} is a free city spot again`); }
