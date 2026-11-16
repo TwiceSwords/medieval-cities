@@ -93,7 +93,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.95-preview</div>
+  <div class="t">Medieval Cities 3D · v2.96-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -5157,6 +5157,10 @@
     const placeGrab = u && !busy() && !dmActive() && game.view === 'battle' && game.bt && game.bt.phase !== 'fight' && u.placing && u.team === viewer() && !(game.bt.ready || {})[u.team] ? u : null;   // battle placement: drag your own units
     down = { x: e.clientX, y: e.clientY, ox: off.x, oy: off.y, grab: (dmActive() && !placing && u && !busy() ? u : null) || placeGrab };
     dragging = false; cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('dblclick', e => {                // battle: double-click one of your units to select every unit of that type
+    if (!boxable()) return; const h = pick(e.clientX, e.clientY), u = h && unitAt(h); if (!u || !ownSel(u)) return;
+    group = units.filter(o => ownSel(o) && o.type === u.type).map(o => o.id); selUnit = u; sel = [u.col, u.row]; selCity = null; armed = null; refreshUI();
   });
   cv.addEventListener('pointermove', e => {
     if (sidePan) { if (!(e.buttons & sidePan.mask)) { sidePan = null; cv.classList.remove('drag'); } else { off.x = sidePan.ox + e.clientX - sidePan.x; off.y = sidePan.oy + e.clientY - sidePan.y; camHand = performance.now(); return; } }
