@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.73-preview</div>
+  <div class="t">Medieval Cities 3D · v2.74-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1362,15 +1362,15 @@
         SIEGE = ['trebuchet', 'ballista'], HEROES = ['knight', 'ranger', 'mage', 'assassin', 'warrior'];
   const unitCost = t => HEROES.includes(t) ? 20 : MOUNT.includes(t) ? 15 : SIEGE.includes(t) ? 20 : 10;
   const BUILDINGS = {
-    tradepost: { name: 'Trade post', cost: 20, text: '+1 gold per turn for this city (multiplied by its road links like the city itself)' },
+    tradepost: { name: 'Trade post', cost: 10, text: '+1 gold per turn for this city (multiplied by its road links like the city itself)' },
     garrison:  { name: 'Garrison', cost: 10, text: '+1 swordsman defender, +1 defender of each unit type this city can recruit' },
-    nightswatch: { name: "Night's Watch", cost: 40, wallOnly: true, text: 'Defenders of this city deal double damage to the undead' },
-    walls:     { name: 'Walls', cost: 20, text: 'Stone walls with a 3-tile gate and stairs when this city is besieged' },
-    tower:     { name: 'Tower', cost: 20, text: 'A defence tower (24 HP, range 5, 3 damage) placed like a unit when besieged · up to 2' },
+    nightswatch: { name: "Night's Watch", cost: 20, wallOnly: true, text: 'Defenders of this city deal double damage to the undead' },
+    walls:     { name: 'Walls', cost: 10, text: 'Stone walls with a 3-tile gate and stairs when this city is besieged' },
+    tower:     { name: 'Tower', cost: 10, text: 'A defence tower (24 HP, range 5, 3 damage) placed like a unit when besieged · up to 2' },
     heroes:    { name: "Heroes' hall", cost: 20, text: 'Recruit any hero (base stats, no cards)', units: HEROES },
   };
-  for (const t of [...FOOT, ...ARCH, ...MOUNT, ...SIEGE]) BUILDINGS[t] = { name: `${UNIT_TYPES[t].name} ${MOUNT.includes(t) ? 'stables' : ARCH.includes(t) ? 'range' : SIEGE.includes(t) ? 'workshop' : 'barracks'}`, cost: 10, text: `Recruit ${UNIT_TYPES[t].name}s here (${unitCost(t)} gold each)`, units: [t], cost: 20 };
-  const CITY_SLOTS = 6, FOUND_COST = 20, ROAD_COST = 5, DESTROY_COST = 10, MAX_TROOPS = 20, MAX_DEFENDERS = 10, MAX_RECRUIT_TURN = 5;   // an army takes at most 5 recruits a campaign turn, and can't move in a turn it recruited
+  for (const t of [...FOOT, ...ARCH, ...MOUNT, ...SIEGE]) BUILDINGS[t] = { name: `${UNIT_TYPES[t].name} ${MOUNT.includes(t) ? 'stables' : ARCH.includes(t) ? 'range' : SIEGE.includes(t) ? 'workshop' : 'barracks'}`, text: `Recruit ${UNIT_TYPES[t].name}s here (${unitCost(t)} gold each)`, units: [t], cost: 10 };
+  const CITY_SLOTS = 6, FOUND_COST = 20, ROAD_COST = 5, DESTROY_COST = 5, MAX_TROOPS = 20, MAX_DEFENDERS = 10, MAX_RECRUIT_TURN = 5;   // an army takes at most 5 recruits a campaign turn, and can't move in a turn it recruited
   const recruitable = city => [...new Set((city.buildings || []).flatMap(b => (BUILDINGS[b] && BUILDINGS[b].units) || []))];
   const cityValue = city => FOUND_COST + (city.buildings || []).reduce((s, b) => s + (BUILDINGS[b] ? BUILDINGS[b].cost : 0), 0);
   function garrisonOf(city) {                       // every city: 1 swordsman; a Garrison adds 1 more + 1 of each recruitable (non-hero) type
