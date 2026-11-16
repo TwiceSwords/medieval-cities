@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.79-preview</div>
+  <div class="t">Medieval Cities 3D · v2.80-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1428,7 +1428,7 @@
     let w = null; for (let i = 0; i < 70 && !(w && w.ok); i++) { const t = genWorld((Math.random() * 4e9) >>> 0, nSpots, i < 25 ? 6 : i < 50 ? 5 : 4); if (!w || t.ok || t.spots.length > w.spots.length) w = t; }
     const R = w.R, names = CITY_NAMES.slice(); for (let i = names.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [names[i], names[j]] = [names[j], names[i]]; }
     const spots = w.spots.slice(); for (let i = spots.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }
-    const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai' || (game.opts && game.opts.god), alive: true, ...(f.diff ? { diff: f.diff } : {}), ...(f.tm ? { tm: f.tm } : {}), ...(f.pname ? { pname: f.pname } : {}), style: ['aggressive', 'builder', 'balanced'][(R() * 3) | 0] }));
+    const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai' || (game.opts && game.opts.god), alive: true, ...(f.diff ? { diff: f.diff } : {}), ...(f.tm ? { tm: f.tm } : {}), ...(f.pname ? { pname: f.pname } : {}), style: 'balanced' }));
     if (game.opts && game.opts.blessed) factions[(Math.random() * factions.length) | 0].blessed = true;   // a secret: one realm gets 3 passive gold a turn
     if (game.opts && game.opts.coop) {                 // co-op: each team starts together, the two teams at opposite ends of the land
       const team = side => factions.map((f, i) => i).filter(i => !!factions[i].ai === side), H = team(false), A = team(true);
@@ -2167,6 +2167,7 @@
     if (!foes.length && allFoes.length) {              // nothing in sight: scout towards where the enemy lined up
       const zs = Object.entries(game.bt.zones || {}).filter(([fid]) => fid !== team && allFoes.some(o => o.team === fid)).map(([, z]) => z.a);
       const goal = zs[0] || [BCOLS >> 1, BROWS >> 1]; foes = [{ col: goal[0], row: goal[1], hp: 99, id: null, ghost: true }]; }
+    if (!aiState.noted) { aiState.noted = true; const fa = faction(team), by = {}; for (const o of allFoes) if (sees(team, [o.col, o.row])) (by[o.team] = by[o.team] || []).push(o.type); for (const k in by) aiNote(fa, by[k]); }   // remember what the enemy fields
     const mine = units.filter(u => u.team === team && u.dying === null && u.hp > 0 && !unitDone(u) && !aiState.skip.has(u.id) && !isStunned(u));
     if (aiState.walkers && aiState.walkers.length && (!mine.length || !foes.length)) {   // the walkers that had nothing to hit move together now
       const ws = aiState.walkers.map(w => units.find(x => x.id === w.id)).filter(x => x && x.dying === null && !x.moved), g = new Map(aiState.walkers.map(w => [w.id, w.goal])); aiState.walkers = null;
@@ -2256,8 +2257,34 @@
   }
   // AI recruiting: about 1 army in 4 (decided by its id) is all one unit type; the rest get a spread of everything the city offers
   const idHash = s => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); };
-  function aiPickTroop(id, troops, types, gold) {
+  // ---------- what an AI has seen of its enemies (Medium and up): it remembers the unit types and recruits counters ----------
+  function aiNote(f, types) {                         // one enemy group seen (an army on the map, a side in a battle)
+    if (!f || f.undead || !f.ai || f.diff === 'easy' || !types.length) return; const c = {}; for (const t of types) if (UNIT_TYPES[t] && !HEROES.includes(t) && !T({ type: t }).structure) c[t] = (c[t] || 0) + 1;
+    f.intel = f.intel || {}; for (const t in c) { const o = f.intel[t], old = o ? o.n * Math.pow(0.85, game.round - o.r) : 0; f.intel[t] = { n: Math.round(Math.max(c[t], old) * 10) / 10, r: game.round, share: Math.max(o ? o.share || 0 : 0, c[t] / types.length) }; }
+  }
+  function aiThreats(f) {                             // remembered enemy types, fading over the campaign turns
+    const out = {}; for (const [t, o] of Object.entries((f && f.intel) || {})) { const n = o.n * Math.pow(0.85, Math.max(0, game.round - o.r)); if (n >= 0.6) out[t] = { n, share: o.share || 0 }; } return out;
+  }
+  const RANGED_C = ['archer', 'crossbow'], CAV_C = ['horseman', 'lancer'], BRACE_C = ['spearman', 'halberdier'];
+  function aiCounterWants(f) {                        // type -> how much the AI wants it as an answer to what it saw
+    const th = aiThreats(f), w = {}, add = (ts, v) => { for (const t of ts) w[t] = (w[t] || 0) + v; };
+    for (const [t, { n, share }] of Object.entries(th)) {
+      if (t === 'horsearcher') { if (n >= 5 || share >= 0.6) add([...CAV_C, ...RANGED_C], n); else add([...CAV_C, ...RANGED_C, 'horsearcher'], n); }   // a whole army of horse archers: only the counters
+      else if (CAV_C.includes(t)) add(BRACE_C, n * 1.2);
+      else if (RANGED_C.includes(t)) add([...CAV_C, 'horsearcher'], n);
+      else if (BRACE_C.includes(t)) add([...RANGED_C, 'swordmaster'], n);
+      else if (t === 'swordsman' || t === 'swordmaster') add([...RANGED_C, 'halberdier'], n * 0.8);
+      else if (SIEGE.includes(t)) add(CAV_C, n * 1.5);
+      else if (UNIT_TYPES[t] && UNIT_TYPES[t].undead) add([...RANGED_C, 'swordmaster'], n * 0.5);
+    }
+    if (Object.keys(th).length && !BRACE_C.some(t => th[t])) add(['lancer'], 2);    // no bracing units seen: lancers ride free
+    return w;
+  }
+  function aiPickTroop(id, troops, types, gold, f) {
     const plain = types.filter(t => !HEROES.includes(t)), heroes = types.filter(t => HEROES.includes(t)), rnd = a => a[(Math.random() * a.length) | 0];
+    if (f && f.diff !== 'easy' && plain.length && !(idHash(id) % 4 === 0 && troops.length)) {   // answer what it has seen (an all-one-type army keeps its type)
+      const cw = aiCounterWants(f), opts = plain.filter(t => cw[t] > 0), tot = opts.reduce((x, t) => x + cw[t], 0);
+      if (opts.length && Math.random() < Math.min(0.75, 0.25 + tot / 20)) { let r = Math.random() * tot; for (const t of opts) { r -= cw[t]; if (r <= 0) return t; } return opts[opts.length - 1]; } }
     if (idHash(id) % 4 === 0) { const first = troops.find(x => !HEROES.includes(x.type)); if (first) return plain.includes(first.type) ? first.type : null; return plain.length ? rnd(plain) : null; }
     if (heroes.length && Math.random() < 0.15 && gold >= 45) return rnd(heroes);
     if (!plain.length) return null;
@@ -2305,18 +2332,22 @@
   function aiCampaignStep(f) {
     if (!aiState || aiState.kind !== 'camp' || aiState.fid !== f.id) aiState = { kind: 'camp', fid: f.id, econ: false, done: new Set() };
     const pts = () => game.points[f.id] || 0, spend = n => { game.points = { ...game.points, [f.id]: pts() - n }; };
+    f.style = 'balanced';                                             // no more personalities: every AI plays the same balanced way
     const myCities = game.cities.filter(c => c.owner === f.id), myArmies = () => units.filter(u => u.troops && u.team === f.id && u.dying === null && !u.inBattle);
     const freeSpots = game.cities.filter(c => !c.owner && knowsTile(f.id, [c.col, c.row]));
     const settleTarget = myCities.length < 6 && freeSpots.length ? freeSpots.map(c => ({ c, d: Math.min(...myCities.map(m => hexDist([m.col, m.row], [c.col, c.row])), ...myArmies().map(a => hexDist([a.col, a.row], [c.col, c.row]))) })).sort((x, y) => x.d - y.d)[0] : null;
     const reserve = settleTarget && settleTarget.d <= 20 && (f.style !== 'aggressive' || myCities.length < 4) ? FOUND_COST : 0;   // save up to found a city
     if (!aiState.econ) {                                              // buildings and recruits, all at once
       aiState.econ = true;
+      for (const u of units) if (u.troops && hostile(u.team, f.id) && u.dying === null && u.team !== 'undead' && sees(f.id, [u.col, u.row])) aiNote(f, u.troops.map(x => x.type));   // remember the enemy armies in sight
+      const canBuild = cost => (f.bGold || 0) + cost <= (f.uGold || 0) + 20;   // at least as much gold goes to units as to buildings (start allowance: a trade post and a first barracks)
       const owned = myCities.flatMap(c => c.buildings), count = b => owned.filter(x => x === b).length;
       if (!Array.isArray(f.aiOrder)) f.aiOrder = [...FOOT, ...ARCH, ...MOUNT, ...SIEGE].sort(() => Math.random() - 0.5);   // each AI realm its own random taste, siege included
       const pool = f.aiOrder;
       const unitB = c => recruitable(c).filter(t => !HEROES.includes(t)).length;
       const threat = c => units.some(u => u.troops && hostile(u.team, f.id) && u.dying === null && hexDist([u.col, u.row], [c.col, c.row]) <= 6 && sees(f.id, [u.col, u.row]));
-      const nextUnit = c => pool.filter(t => !c.buildings.includes(t)).sort((x, y) => count(x) - count(y) || pool.indexOf(x) - pool.indexOf(y))[0];
+      const cw = f.diff === 'easy' ? {} : aiCounterWants(f), haveT = t => myCities.some(x => x.buildings.includes(t));
+      const nextUnit = c => pool.filter(t => !c.buildings.includes(t)).sort((x, y) => ((cw[y] || 0) > 1.5 && !haveT(y)) - ((cw[x] || 0) > 1.5 && !haveT(x)) || count(x) - count(y) || pool.indexOf(x) - pool.indexOf(y))[0];   // a counter it lacks comes first
       for (const c of myCities) {
         if (c.acted || c.buildings.length >= CITY_SLOTS) continue;
         let want = null;
@@ -2331,7 +2362,7 @@
         else if (f.style === 'builder' && c.buildings.filter(x => x === 'tower').length < 2) want = 'tower';
         if (!want || !BUILDINGS[want]) continue;
         const keep = (want === 'tradepost' || !unitB(c)) ? 0 : reserve;               // trade and the first unit building don't wait for settling money
-        if (pts() >= BUILDINGS[want].cost + keep) { c.buildings = [...c.buildings, want]; c.acted = true; spend(BUILDINGS[want].cost); owned.push(want); }
+        if (pts() >= BUILDINGS[want].cost + keep && canBuild(BUILDINGS[want].cost)) { c.buildings = [...c.buildings, want]; c.acted = true; spend(BUILDINGS[want].cost); f.bGold = (f.bGold || 0) + BUILDINGS[want].cost; owned.push(want); }
       }
       // recruits: fill the armies at home with a mix of what the cities offer
       const maxArmies = Math.max(2, myCities.length + 1);
@@ -2340,10 +2371,10 @@
         const near = myArmies().filter(a => hexDist([a.col, a.row], [c.col, c.row]) <= 1);
         for (let tries = 0; tries < 6; tries++) {
           const smallest = Math.min(99, ...myArmies().map(x => x.troops.length));
-          const buildFirst = myCities.some(x => !x.buildings.includes('tradepost') || !unitB(x)) ? 20 : 0;   // keep money for the economy unless an army is nearly empty
+          const buildFirst = (f.uGold || 0) < (f.bGold || 0) ? 0 : myCities.some(x => !x.buildings.includes('tradepost') || !unitB(x)) ? 20 : 0;   // units behind buildings: no holding back   // keep money for the economy unless an army is nearly empty
           let a = null, t = null; const newId = `army-${f.id}-${Date.now().toString(36)}${tries}`;
-          for (const x of near.filter(x => x.troops.length < MAX_TROOPS && (x.recruitN || 0) < MAX_RECRUIT_TURN).sort((x, y) => y.troops.length - x.troops.length)) { const tt = aiPickTroop(x.id, x.troops, types, pts()); if (tt) { a = x; t = tt; break; } }   // an all-one-type army only takes its own type
-          if (!a) { if (myArmies().length >= maxArmies) break; t = aiPickTroop(newId, [], types, pts()); }
+          for (const x of near.filter(x => x.troops.length < MAX_TROOPS && (x.recruitN || 0) < MAX_RECRUIT_TURN).sort((x, y) => y.troops.length - x.troops.length)) { const tt = aiPickTroop(x.id, x.troops, types, pts(), f); if (tt) { a = x; t = tt; break; } }   // an all-one-type army only takes its own type
+          if (!a) { if (myArmies().length >= maxArmies) break; t = aiPickTroop(newId, [], types, pts(), f); }
           if (!t) break;
           const cost = unitCost(t, f.id); if (pts() < cost + (smallest < 3 ? 0 : reserve + buildFirst)) break;
           if (!a) { const spot = nbIn(c.col, c.row, CCOLS, CROWS).find(n => !impassable(n) && !unitAt(n) && !cityAt(n));
@@ -2351,7 +2382,7 @@
           if (!a) break;
           const tr = troop(t);
           if (HEROES.includes(t) && HERO_CARDS[t] && pts() >= cost + CARD_PRICE + reserve) { tr.cards = emptyCards(); tr.cards.passive = HERO_CARDS[t].passive[(Math.random() * HERO_CARDS[t].passive.length) | 0]; spend(CARD_PRICE); }   // a hero comes with a passive when affordable
-          a.troops = [...a.troops, tr]; spend(cost); a.recruitN = (a.recruitN || 0) + 1; a.moved = true;
+          a.troops = [...a.troops, tr]; spend(cost); f.uGold = (f.uGold || 0) + cost; a.recruitN = (a.recruitN || 0) + 1; a.moved = true;
         }
       }
       aiHeroShop(f, pts, spend, reserve + 10);
@@ -2396,12 +2427,14 @@
       const other = myCities.filter(c => c !== home && !connectedCities(home).includes(c)).sort((x, y) => hexDist([home.col, home.row], [x.col, x.row]) - hexDist([home.col, home.row], [y.col, y.row]))[0];
       if (other) { goal = [other.col, other.row]; mode2 = 'road'; }
     }
-    if (!goal && mode2 === null) {                                   // nothing better to do: hold a gold mine
+    const homeArmy = myArmies().some(o => o !== a && myCities.some(c => hexDist([o.col, o.row], [c.col, c.row]) <= 1));
+    const goGrow = !homeArmy && pts() >= 20 + reserve && !bigEnough;   // gold is piling up and no army at home to spend it on: grow first, mines later
+    if (!goal && mode2 === null && !goGrow) {                        // nothing better to do: hold a gold mine
       if (mineAt(here)) { aiBusyUntil = Date.now() + 50; return; }
       const mn = (game.mines || []).filter(m => knowsTile(f.id, m) && !impassable(m) && !units.some(o => o !== a && o.troops && o.dying === null && o.col === m[0] && o.row === m[1]) && !myArmies().some(o => o !== a && o.mineGoal === m.join()))
         .sort((x, y) => dist(x) - dist(y))[0];
       if (mn && dist(mn) <= 12 && a.troops.length <= 4) { goal = mn; mode2 = 'mine'; a.mineGoal = mn.join(); } }
-    if (!goal && home && !bigEnough && !scoutArmy && !a.scoutGoal && a.troops.length < MAX_TROOPS && dist([home.col, home.row]) > 1 && game.round >= 6) { goal = [home.col, home.row]; mode2 = 'home'; }   // not ready yet: back home to grow
+    if (!goal && home && !bigEnough && !scoutArmy && !a.scoutGoal && a.troops.length < MAX_TROOPS && dist([home.col, home.row]) > 1 && (game.round >= 6 || goGrow)) { goal = [home.col, home.row]; mode2 = 'home'; }   // not ready yet: back home to grow
     if (!goal && fogOn() && (scoutArmy || bigEnough || a.scoutGoal || a.troops.length >= (f.style === 'builder' ? 5 : 3))) {      // nothing known nearby: scout unexplored land
       const ex = (game.explored && game.explored[f.id]) || '', unexplored = t => ex[t[1] * CCOLS + t[0]] !== '1';
       const walls = game.cities.filter(c => c.owner && hostile(c.owner, f.id) && knowsTile(f.id, [c.col, c.row]));   // known enemy cities this army can't take: give that area up, look elsewhere
