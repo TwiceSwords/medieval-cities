@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.86-preview</div>
+  <div class="t">Medieval Cities 3D · v2.87-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -4281,7 +4281,7 @@
     const rows = game.factions.map((f, i) => {
       const mine = host || f.id === me, kinds = [['human', 'Player'], ['ai', 'AI'], ['off', 'None']];
       const kindSel = host ? kinds.map(([k, l]) => `<button data-kind="${i}:${k}" class="${f.kind === k ? 'on' : ''}" ${i === 0 && k !== 'human' ? 'disabled' : ''}>${l}</button>`).join('') : `<b>${f.kind === 'human' ? 'Player' : f.kind === 'ai' ? 'AI' : 'None'}</b>`;
-      const sw = PALETTE.map(p => `<button class="sw ${f.color === p.key ? 'on' : ''}" data-color="${i}:${p.key}" style="background:rgb(${p.col})" ${mine && (f.color === p.key || !taken.has(p.key)) ? '' : 'disabled'} title="${p.name}"></button>`).join('');
+      const sw = PALETTE.map(p => `<button class="sw ${f.color === p.key ? 'on' : ''}" data-color="${i}:${p.key}" style="background:rgb(${p.col})" ${mine ? '' : 'disabled'} title="${p.name}"></button>`).join('');
       const who = mode === 'online' && f.kind === 'human' ? (i === 0 ? ' · host' : f.joined ? ' · joined' : ' · waiting for a friend…') : '';
       const canName = f.kind === 'human' && (mode === 'online' ? f.id === me : true);
       const nameB = f.kind !== 'human' ? '' : canName ? `<input class="pname" data-pname="${i}" maxlength="16" placeholder="${tr('Your name')}" value="${f.pname || ''}" style="width:120px;margin-top:3px;font-size:12px">` : (f.pname ? `<b style="color:#f0e2a8;font-size:12px">${f.pname}</b>` : '');
@@ -4331,8 +4331,8 @@
     if (b.id === 'lbless' && isHost()) { game.opts = { ...(game.opts || {}), blessed: !(game.opts && game.opts.blessed) }; commit({ type: 'setup' }); return; }
     if (b.dataset.kind && isHost()) { const [i, k] = b.dataset.kind.split(':'); game.factions[i].kind = k; commit({ type: 'setup' }); }
     if (b.dataset.color) { const [i, k] = b.dataset.color.split(':'), f = game.factions[i], p = PALETTE.find(x => x.key === k);
-      if (!(isHost() || f.id === mySeat) || game.factions.some(o => o !== f && o.color === k)) return;
-      f.color = k; f.col = p.col; f.name = p.name; commit({ type: 'setup' }); }
+      if (!(isHost() || f.id === mySeat)) return;                    // any colour, even one someone else has
+      f.color = k; f.col = p.col; const same = game.factions.filter(o => o !== f && o.color === k).length; f.name = same ? `${p.name} ${same + 1}` : p.name; commit({ type: 'setup' }); }
   });
   lobbyEl.addEventListener('change', e => { const sl = e.target;
     if (sl && sl.dataset && (sl.dataset.diffsel !== undefined || sl.dataset.teamsel !== undefined) && isHost() && game.view === 'lobby') {   // the difficulty / team dropdowns
