@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.72-preview</div>
+  <div class="t">Medieval Cities 3D · v2.73-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2131,13 +2131,25 @@
     return best.act;
   }
   // battle AI: units far from any enemy march together in one go; the close ones still think one by one
+  // a unit that can't reach anything this turn marches with the horde (one group move instead of one move per unit); close ones still act one by one
+  function aiFarGoal(u, foes) {
+    if (u.moved || u.climb || moveOf(u) <= 0) return null;
+    const here = [u.col, u.row], s2 = typeof sg === 'function' ? sg() : null;
+    const nearest = (list, f) => { let b = null; for (const o of list) { const t = f(o), d = hexDist(here, t); if (!b || d < b.d) b = { t, d, o }; } return b; };
+    if (s2 && hostile(u.team, s2.def)) {               // siege attackers: march up to the walls together, then break them one by one
+      if (isWallTop(here) || projAt(here, s2.th) >= s2.W) return null;
+      const w = nearest(Object.entries(s2.pieces).filter(([, p]) => p.kind !== 'stair' && !(p.kind === 'gate' && s2.gateOpen)).map(([k]) => k.split(',').map(Number)), t => t);
+      const n = nearest(foes, o => [o.col, o.row]);
+      if (n && !n.o.ghost && n.d <= moveOf(u) + Math.max(T(u).range || 1, 1) + 1) return null;   // an enemy in reach (a sally, a breach): think
+      if (!w) return n ? n.t : null; return w.d > moveOf(u) + 1 + (T(u).ranged ? (T(u).range || 1) : 0) ? w.t : null; }
+    if (s2 && neighbors(u.col, u.row).some(x => wallAt(x))) return null;
+    const n = nearest(foes, o => [o.col, o.row]); if (!n) return null;
+    return n.o.ghost || n.d > moveOf(u) + Math.max(T(u).range || 1, 1) + 1 ? n.t : null;
+  }
   function aiHorde(mine, foes) {
-    const nearest = t => { let b = null; for (const o of foes) { const d = hexDist(t, [o.col, o.row]); if (!b || d < b.d) b = { o, d }; } return b; };
-    const far = mine.filter(u => { if (u.moved || u.climb || moveOf(u) <= 0) return false; const n = nearest([u.col, u.row]); if (!n) return false;
-      if (typeof sg === 'function' && sg() && (hostile(u.team, sg().def) || neighbors(u.col, u.row).some(x => wallAt(x)))) return false;      // a siege: the attackers think one by one (breaches, walls)
-      return n.o.ghost || n.d > moveOf(u) + Math.max(T(u).range || 1, 1) + 2; });
+    const goal = new Map(); for (const u of mine) { const g = aiFarGoal(u, foes); if (g) goal.set(u.id, g); }
+    const far = mine.filter(u => goal.has(u.id));
     if (far.length < 2) return null;
-    const goal = new Map(far.map(u => { const n = nearest([u.col, u.row]); return [u.id, [n.o.col, n.o.row]]; }));
     const plan = planMarch(far, u => goal.get(u.id), false), moves = [];
     for (const u of far) { const p = plan.get(u.id); if (p && p.length) moves.push({ id: u.id, path: p }); }
     return moves.length >= 2 ? moves : null;
@@ -2151,8 +2163,14 @@
       const zs = Object.entries(game.bt.zones || {}).filter(([fid]) => fid !== team && allFoes.some(o => o.team === fid)).map(([, z]) => z.a);
       const goal = zs[0] || [BCOLS >> 1, BROWS >> 1]; foes = [{ col: goal[0], row: goal[1], hp: 99, id: null, ghost: true }]; }
     const mine = units.filter(u => u.team === team && u.dying === null && u.hp > 0 && !unitDone(u) && !aiState.skip.has(u.id) && !isStunned(u));
+    if (aiState.walkers && aiState.walkers.length && (!mine.length || !foes.length)) {   // the walkers that had nothing to hit move together now
+      const ws = aiState.walkers.map(w => units.find(x => x.id === w.id)).filter(x => x && x.dying === null && !x.moved), g = new Map(aiState.walkers.map(w => [w.id, w.goal])); aiState.walkers = null;
+      const plan = planMarch(ws, x => g.get(x.id), false), moves = []; for (const x of ws) { const p = plan.get(x.id); if (p && p.length) moves.push({ id: x.id, path: p }); }
+      if (moves.length) { aiGo({ type: 'gmove', moves }); return; } }
     if (!mine.length || !foes.length) { aiBusyUntil = Date.now() + 400; commit({ type: 'end' }); return; }
     if (!aiState.horde) { aiState.horde = true; const hm = aiHorde(mine, foes); if (hm) { for (const m of hm) aiState.skip.add(m.id); aiGo({ type: 'gmove', moves: hm }); return; } }   // far from the fight: march as one horde
+    if (mine.length > 1) { const fr = new Set(mine.filter(x => aiFarGoal(x, foes)).map(x => x.id)); mine.sort((x, y) => fr.has(x.id) - fr.has(y.id));   // the ones that can fight act first, one by one
+      if (fr.has(mine[0].id) && !aiState.horde2) { aiState.horde2 = true; const hm = aiHorde(mine, foes); if (hm) { for (const m of hm) aiState.skip.add(m.id); aiGo({ type: 'gmove', moves: hm }); return; } } }   // ...then the rest march together
     const u = mine[0], ty = T(u), here = [u.col, u.row]; aiState.skip.add(u.id);
     const taunt = tauntSet(u, here); if (taunt.length) foes = taunt;                  // Challenged: only the Paladin(s) may be attacked
     const okAt = (t, target) => tauntOk(u, t, target);
@@ -2187,6 +2205,7 @@
       for (const t of tiles) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
       if (!best || (best.t[0] === u.col && best.t[1] === u.row)) return false;
       if (T(u).hero && u.cards && !(aiState.repass = aiState.repass || new Set()).has(u.id)) { aiState.repass.add(u.id); aiState.skip.delete(u.id); }   // after walking up, a hero gets another look at its skills
+      if (!T(u).hero) { (aiState.walkers = aiState.walkers || []).push({ id: u.id, goal: [tgt.col, tgt.row] }); aiBusyUntil = Date.now() + 10; return true; }   // nothing to hit this turn: walks with the others at the end (one group move)
       aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return true; };
     if (ty.ranged === 'arc' || ty.magic) {
       if (ty.mounted && !u.moved && !u.attacked && canShootNow(u)) {    // horse archer kites: ride to the tile farthest from every enemy that still has one in range, then shoot
