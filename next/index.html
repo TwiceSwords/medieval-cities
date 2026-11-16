@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.98-preview</div>
+  <div class="t">Medieval Cities 3D · v2.99-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1638,7 +1638,7 @@
       units.push(runtimeUnit({ ...t, id: `${prefix}.${i}`, team: j.fid, col: h[0], row: h[1], face: faceAng(h, mid), moved: false, attacked: false, ...(enter > 1 ? { enter } : {}) })); });
   }
   function faceAng(a, b) { const p = center(a[0], a[1]), q = center(b[0], b[1]); return Math.atan2(q.x - p.x, (q.y - p.y) / SQ); }
-  function survivorsOf(list) { return list.map(u => ({ type: u.type, hp: u.hp, maxHp: u.maxHp, mana: u.mana, manaMax: u.manaMax, ...(u.cards ? { cards: u.cards } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}) })); }
+  function survivorsOf(list) { return list.map(u => ({ type: u.type, hp: u.maxHp, maxHp: u.maxHp, mana: u.manaMax, manaMax: u.manaMax, ...(u.cards ? { cards: u.cards } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}) })); }
   // ---------- placement (hidden from everyone else until all are ready) ----------
   const autoFor = fid => !!(game.bt && Array.isArray(game.bt.auto) && game.bt.auto.includes(fid));   // a player's side handed to the AI for this battle
   function placingSides() { const b = bt(); return b && game.view === 'battle' ? Object.keys({ ...b.zones, ...b.pockets }).filter(f => units.some(u => u.team === f && u.placing) && !b.ready[f] && !autoFor(f)) : []; }
@@ -1747,7 +1747,7 @@
     const wSide = w; w = (b.joined.find(j => sideOf(j.fid) === wSide) || {}).fid || w; list[w] = list[wSide];
     const total = Object.values(list).reduce((a, x) => a + x, 0), ratio = Math.min(0.9, (total - list[w]) / Math.max(1, list[w]) * 0.7);
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
-      if (!hostile(j.fid, w)) { const keep = a.troops.slice().sort((x, y) => troopStrength([y]) - troopStrength([x])); const k2 = Math.max(1, Math.round(keep.length * (1 - ratio))); if (j.fid !== 'undead') recordDeaths(keep.slice(k2).map(t => t.type), b.center && b.center[1] < WALL_ROW ? 2 : 1); a.troops = keep.slice(0, k2); }
+      if (!hostile(j.fid, w)) { const keep = a.troops.slice().sort((x, y) => troopStrength([y]) - troopStrength([x])); const k2 = Math.max(1, Math.round(keep.length * (1 - ratio))); if (j.fid !== 'undead') recordDeaths(keep.slice(k2).map(t => t.type), b.center && b.center[1] < WALL_ROW ? 2 : 1); a.troops = keep.slice(0, k2).map(t => ({ ...t, hp: t.maxHp || t.hp, mana: t.manaMax ?? t.mana })); }
       else { if (j.fid !== 'undead') recordDeaths(a.troops.map(t => t.type), b.center && b.center[1] < WALL_ROW ? 2 : 1); a.dead = true; } }
     const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity);
     if (sc && w && hostile(sc.owner, w)) { const att = units.find(u => u.team === w && !u.dead && b.joined.some(j => j.id === u.id)); if (att) { att.col = sc.col; att.row = sc.row; } game.pending = { type: 'capture', city: sc.id, by: w, army: att ? att.id : null }; }
