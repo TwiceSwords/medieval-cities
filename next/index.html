@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.02-preview</div>
+  <div class="t">Medieval Cities 3D · v3.03-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1302,13 +1302,16 @@
       const k = tAt(c, r), m = center(c, r), cx = m.x + OX, cy = m.y + OY - elevPx(c, r), spot = () => { const a = rnd() * 7, rr = Math.sqrt(rnd()) * S * 0.7; return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * SQ]; };
       if (k === 'i') {                                                // the great ice wall: a few crystals on top
         for (let i = 0; i < 3; i++) { const [x, y] = spot(); b.fillStyle = 'rgba(255,255,255,0.8)'; b.beginPath(); b.moveTo(x, y - 9); b.lineTo(x + 3, y); b.lineTo(x - 3, y); b.closePath(); b.fill(); }
-      } else if (k === 'm' || k === 'r') {                                  // mountains / rocks: grey peaks
-        const n = k === 'm' ? 3 : 2;
+      } else if (k === 'm' || k === 'r') {                                  // mountains / rocks: grey peaks (gold nodes near a mine: gold-streaked)
+        const n = k === 'm' ? 3 : 2, goldN = k === 'r' && game.view === 'battle' && game.bt && Array.isArray(game.bt.goldNodes) && game.bt.goldNodes.includes(key(c, r));
         for (let i = 0; i < n; i++) { const x = cx + (i - (n - 1) / 2) * 24 + (rnd() - 0.5) * 8, y = cy + (rnd() - 0.3) * 10, hh = k === 'm' ? 46 + rnd() * 18 : 22 + rnd() * 10, w = k === 'm' ? 30 : 20;
           b.fillStyle = 'rgba(0,0,0,0.3)'; b.beginPath(); b.ellipse(x + 6, y + 3, w, w * 0.4, 0, 0, 7); b.fill();
           b.fillStyle = '#6e6a63'; b.beginPath(); b.moveTo(x - w, y); b.lineTo(x - w * 0.15, y - hh); b.lineTo(x + w, y); b.closePath(); b.fill();
           b.fillStyle = '#8f8a80'; b.beginPath(); b.moveTo(x - w, y); b.lineTo(x - w * 0.15, y - hh); b.lineTo(x - w * 0.05, y); b.closePath(); b.fill();
-          if (k === 'm') { b.fillStyle = 'rgba(240,242,245,0.9)'; b.beginPath(); b.moveTo(x - w * 0.15, y - hh); b.lineTo(x - w * 0.42, y - hh * 0.68); b.lineTo(x + w * 0.2, y - hh * 0.66); b.closePath(); b.fill(); } }
+          if (k === 'm') { b.fillStyle = 'rgba(240,242,245,0.9)'; b.beginPath(); b.moveTo(x - w * 0.15, y - hh); b.lineTo(x - w * 0.42, y - hh * 0.68); b.lineTo(x + w * 0.2, y - hh * 0.66); b.closePath(); b.fill(); }
+          if (goldN) { for (let q = 0; q < 4; q++) { const gx = x + (rnd() - 0.5) * w * 1.1, gy = y - rnd() * hh * 0.55 - 2, gs = 3 + rnd() * 3;   // gold lumps in the rock
+            b.fillStyle = '#b8871f'; b.beginPath(); b.moveTo(gx, gy - gs); b.lineTo(gx + gs, gy); b.lineTo(gx, gy + gs * 0.7); b.lineTo(gx - gs, gy); b.closePath(); b.fill();
+            b.fillStyle = '#f4d35e'; b.beginPath(); b.moveTo(gx, gy - gs); b.lineTo(gx + gs * 0.5, gy - gs * 0.1); b.lineTo(gx - gs * 0.3, gy); b.closePath(); b.fill(); } } }
       } else if (k === 'f' || (k === 's' && rnd() < 0.35)) {               // trees (pines in the snow)
         const n = k === 'f' ? 7 : 2, pts = Array.from({ length: n }, spot).sort((a, b2) => a[1] - b2[1]);
         for (const [x, y] of pts) { const hh = 22 + rnd() * 12;
@@ -1530,7 +1533,8 @@
   const angDiff = (x, y) => { let d = Math.abs(x - y) % (Math.PI * 2); return Math.min(d, Math.PI * 2 - d); };
   const inZone = (z, h) => z && (z.siege ? h[0] >= 0 && h[0] < BCOLS && h[1] >= 0 && h[1] < BROWS && inSiegeZone(z, h) : hexDist(z.a, h) <= z.r) && h[0] >= 0 && h[0] < BCOLS && h[1] >= 0 && h[1] < BROWS;
   const zoneTiles = z => { const out = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) if (inZone(z, [c, r])) out.push([c, r]); return out; };
-  function makeBattleGround(base, zones) {
+  let lastGoldNodes = [];
+  function makeBattleGround(base, zones, mine) {
     const g = new Array(BCOLS * BROWS).fill(base), v = VARIETY[base] || base, R = Math.random;
     for (let i = 0; i < 9; i++) { const c = (R() * BCOLS) | 0, r = (R() * BROWS) | 0; for (let c2 = 0; c2 < BCOLS; c2++) for (let r2 = 0; r2 < BROWS; r2++) if (hexDist([c, r], [c2, r2]) <= 2 && R() < 0.7) g[r2 * BCOLS + c2] = v; }
     const free = h => !zones.some(z => hexDist(z.a, h) <= z.r + 1);
@@ -1541,6 +1545,19 @@
       const start = zones[0] ? zones[0].a : [0, 0], seen = new Set([key(...start)]), q = [start];   // every zone must still reach every other
       while (q.length) { const t = q.pop(); for (const n of nbIn(t[0], t[1], BCOLS, BROWS)) { const k = key(...n); if (!seen.has(k) && g[n[1] * BCOLS + n[0]] !== 'r') { seen.add(k); q.push(n); } } }
       if (!zones.every(z => seen.has(key(...z.a)))) cl.forEach((t, j) => g[t[1] * BCOLS + t[0]] = back[j]);
+    }
+    lastGoldNodes = [];
+    if (mine) {                                       // a battle on / next to a gold mine: gold nodes (rock to walk around), a few more clusters and 0-2 chokepoints
+      const reach = () => { const start = zones[0] ? zones[0].a : [0, 0], seen = new Set([key(...start)]), q = [start];
+        while (q.length) { const t = q.pop(); for (const n of nbIn(t[0], t[1], BCOLS, BROWS)) { const k = key(...n); if (!seen.has(k) && g[n[1] * BCOLS + n[0]] !== 'r') { seen.add(k); q.push(n); } } }
+        return zones.every(z => seen.has(key(...z.a))); };
+      const place = tiles => { const cl = tiles.filter(t => t && free(t) && g[t[1] * BCOLS + t[0]] !== 'r'); if (!cl.length) return; const back = cl.map(t => g[t[1] * BCOLS + t[0]]); cl.forEach(t => g[t[1] * BCOLS + t[0]] = 'r');
+        if (!reach()) { cl.forEach((t, j) => g[t[1] * BCOLS + t[0]] = back[j]); return; } for (const t of cl) lastGoldNodes.push(key(...t)); };
+      const nCl = 3 + ((R() * 4) | 0);
+      for (let i = 0; i < nCl; i++) { let h = [(R() * BCOLS) | 0, (R() * BROWS) | 0]; const cl = []; for (let k = 0; k < 2 + ((R() * 3) | 0); k++) { cl.push(h); const n = nbIn(h[0], h[1], BCOLS, BROWS); h = n[(R() * n.length) | 0]; } place(cl); }
+      const nChoke = (R() * 3) | 0;
+      for (let i = 0; i < nChoke; i++) { const h = [4 + ((R() * (BCOLS - 8)) | 0), 4 + ((R() * (BROWS - 8)) | 0)], d = (R() * 6) | 0, len = 5 + ((R() * 3) | 0), gap = 1 + ((R() * (len - 2)) | 0), gw = 1 + ((R() * 2) | 0);
+        const line = Array.from({ length: len }, (_, j) => step(h, d, j)).filter((t, j) => t[0] >= 0 && t[1] >= 0 && t[0] < BCOLS && t[1] < BROWS && (j < gap || j >= gap + gw)); place(line); }   // a short wall of nodes with a 1-2 tile gap
     }
     return g.join('');
   }
@@ -1606,7 +1623,8 @@
     for (const j of b.joined.filter(j => j.dist === 2)) { if (pockets[j.fid]) continue; const a = screenDir(mid, srcTile(j)); let best = null;
       P8.forEach((an, i) => { if (!usedP.has(i) && (!best || angDiff(an.a, a) < best.d)) best = { i, d: angDiff(an.a, a) }; }); usedP.add(best.i); pockets[j.fid] = { a: P8[best.i].h, r: POCKET_R }; }
     b.zones = zones; b.pockets = pockets; b.sides = sides; b.waiting = [...new Set(b.joined.filter(j => j.dist === 2).map(j => j.fid))].filter(f => !sides.includes(f));
-    b.grid = makeBattleGround(b.base, [...Object.values(zones), ...Object.values(pockets)]); b.heights = makeBattleHeights(b.grid);
+    const nearMine = (game.mines || []).some(m => hexDist(m, b.center) <= 1);   // fought on or next to a gold mine: gold nodes on the battlefield
+    b.grid = makeBattleGround(b.base, [...Object.values(zones), ...Object.values(pockets)], nearMine); b.goldNodes = lastGoldNodes.slice(); b.heights = makeBattleHeights(b.grid);
     // lock the armies on the campaign map and remember it
     for (const j of b.joined) if (j.kind === 'army') { const u = units.find(x => x.id === j.id); if (u) u.inBattle = b.id; }
     game.campaign = { armies: exportCampaignUnits(), round: game.round, turn: game.turn };
