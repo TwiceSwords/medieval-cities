@@ -93,7 +93,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.94-preview</div>
+  <div class="t">Medieval Cities 3D · v2.95-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -2293,6 +2293,15 @@
       if (T(u).hero && u.cards && !(aiState.repass = aiState.repass || new Set()).has(u.id)) { aiState.repass.add(u.id); aiState.skip.delete(u.id); }   // after walking up, a hero gets another look at its skills
       if (!T(u).hero) { (aiState.walkers = aiState.walkers || []).push({ id: u.id, goal: [tgt.col, tgt.row] }); aiBusyUntil = Date.now() + 10; return true; }   // nothing to hit this turn: walks with the others at the end (one group move)
       aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return true; };
+    if (ty.charge && !u.attacked && moveOf(u) > 0 && !tgt.ghost && !(easy && Math.random() < 0.5)) {   // lancers: charge when a clean lane is there this turn (no braced lanes; if none, they just fight)
+      const seen = new Set(foes.map(o => o.id)); let best = null;
+      const starts = [here, ...(u.moved ? [] : tiles.filter(t => !(t[0] === u.col && t[1] === u.row)))];
+      for (const st of starts) for (let d = 0; d < 6; d++) { const P = chargePlan(u, st, d), t = P.tgt;
+        if (!t || !hostile(t.team, team) || !seen.has(t.id) || !P.reached || P.braced || P.bracer || T(t).structure) continue;
+        const dd = hexDist(st, [t.col, t.row]); if (dd < 4 || dd > ty.charge || !tauntOk(u, st, t)) continue;
+        const sc = (hard ? hardVal(t) : 1 + 2 * (1 - t.hp / Math.max(1, t.maxHp))) - (st === here ? 0 : b.dist.get(key(...st)) * 0.15);
+        if (!best || sc > best.sc) best = { sc, st, d }; }
+      if (best) { aiGo({ type: 'charge', id: u.id, dir: best.d, ...(best.st === here ? {} : { path: pathTo(b, best.st) }) }); return; } }
     if (ty.ranged === 'arc' || ty.magic) {
       if (ty.mounted && !u.moved && !u.attacked && canShootNow(u)) {    // horse archer kites: ride to the tile farthest from every enemy that still has one in range, then shoot
         let best = null; const seen = allFoes.filter(o => sees(team, [o.col, o.row]));   // only enemies it can see count (fog)
