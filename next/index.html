@@ -5160,5 +5160,18 @@
   }, 30);
 })();
 </script>
+<script>/* version picker (start screen) */(function(){
+  var here = (location.pathname.split('/').pop() || 'index.html');
+  var box = document.createElement('div');
+  box.style.cssText = 'margin:6px 0;color:#e8dfc8;font:13px system-ui,sans-serif';
+  box.innerHTML = '🕰 Game version / Sürüm: <select id="verpick" style="font:13px system-ui"></select>';
+  function show(){ var l = document.getElementById('lobby'); if (!l || !l.getClientRects().length || box.parentNode === l) return; var at = l.querySelector('h1,h2,.lt,div'); l.insertBefore(box, at ? at.nextSibling : l.firstChild); }
+  addEventListener('DOMContentLoaded', function(){ setInterval(show, 500); show();
+    fetch('versions.json?' + Date.now()).then(function(r){ return r.json(); }).then(function(list){
+      var s = document.getElementById('verpick');
+      list.forEach(function(v){ var o = document.createElement('option'); o.value = v.file; o.textContent = v.label; if (v.file === here || (here === '' && v.file === 'index.html')) o.selected = true; s.appendChild(o); });
+      s.onchange = function(){ location.href = s.value + location.search; };
+    }).catch(function(){ box.innerHTML = 'Game version list could not load'; }); });
+})();</script>
 </body>
 </html>
