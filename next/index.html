@@ -92,7 +92,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v2.87-preview</div>
+  <div class="t">Medieval Cities 3D · v2.88-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1410,9 +1410,15 @@
   }
   const seesArmy = (u, fid = viewer()) => !hostile(u.team, fid);
   const aliveFactions = () => (game.factions || []).filter(f => f.alive);
+  const LOST_TURNS = 3;                               // a realm with no city left has 3 turns to take (or found) one, or its armies scatter
   function checkDefeats() {
-    for (const f of game.factions || []) if (f.alive && !f.undead && !(game.cities || []).some(c => c.owner === f.id) && !units.some(u => u.troops && u.team === f.id && u.dying === null)) {
-      f.alive = false; toast(`${f.name} has been defeated`);
+    for (const f of game.factions || []) { if (!f.alive || f.undead) continue;
+      const hasCity = (game.cities || []).some(c => c.owner === f.id), armies = units.filter(u => u.troops && u.team === f.id && u.dying === null);
+      if (hasCity) { if (f.lostAt !== undefined) { delete f.lostAt; toast(`${f.name} holds a city again`); } continue; }
+      if (!armies.length) { f.alive = false; delete f.lostAt; toast(`${f.name} has been defeated`); continue; }
+      if (f.lostAt === undefined) { f.lostAt = game.round; toast(`⏳ ${f.name} has lost every city · ${LOST_TURNS} turns to take one back`); continue; }
+      if (game.view === 'campaign' && !game.bt && game.round - f.lostAt >= LOST_TURNS) {   // time is up: the armies scatter
+        units = units.filter(u => !(u.troops && u.team === f.id)); f.alive = false; delete f.lostAt; toast(`${f.name} could not take a city back · its armies scatter · defeated`); }
     }
     const al = aliveFactions().filter(f => !f.undead), ud = game.undead;          // the last realm must also destroy the undead
     if (!game.cwinner && game.view === 'campaign') { if (!al.length) game.cwinner = 'undead'; else if (new Set(al.map(f => sideOf(f.id))).size === 1 && (!ud || (ud.final && !undeadArmies().length && !ud.pool.length))) game.cwinner = al[0].id; }
@@ -1488,6 +1494,7 @@
     const order = game.factions.map(f => f.id), i0 = order.indexOf(game.turn);
     for (let k = 1; k <= order.length; k++) { const nf = faction(order[(i0 + k) % order.length]);
       if (nf.alive) { if ((i0 + k) >= order.length) game.round += 1; game.turn = nf.id; break; } }
+    checkDefeats();                                   // the countdown for realms without a city
     { const fid = order[i0], f0 = faction(fid);                           // gold mines pay armies that held them all turn
       if (f0 && !f0.undead) { const n = mineArmies(fid).length;   // any army standing on a gold mine
         if (n) { game.points = { ...game.points, [fid]: (game.points[fid] || 0) + n * GOLD_PER_MINE }; if (fid === viewer()) toast(`⛏ Gold mine${n > 1 ? 's' : ''}: +${n * GOLD_PER_MINE} gold`); } } }
@@ -4361,7 +4368,7 @@
       const nc = game.cities.filter(c => c.owner === f.id).length, na = units.filter(u => u.troops && u.team === f.id && u.dying === null).length;
       const cur = f.id === game.turn, inc = f.id === me ? incomeOf(f.id).pts : null;
       return `<div class="frow ${cur ? 'cur' : ''} ${f.alive ? '' : 'dead'}" style="--fc:rgb(${f.col.map(v => Math.min(255, v + 60))})"><span class="fsw" style="background:rgb(${f.col})"></span>
-        <b>${f.undead ? '🧟 ' : ''}${f.name}</b>${f.pname ? ` <span style="color:#f0e2a8">${f.pname}</span>` : ''}${f.id === me ? ' (you)' : f.ai && !f.undead ? ' · AI' : ''}${f.alive ? '' : ' · ✝ defeated'} · ${f.undead ? '' : `🏰 ${nc} · `}⚑ ${na}${f.id === me ? ` · <i class="coin"></i><b style="color:#f2cf62">${pts(f.id)} gold</b> <span class="k">(+${inc}/turn)</span>` : ''}</div>`;
+        <b>${f.undead ? '🧟 ' : ''}${f.name}</b>${f.pname ? ` <span style="color:#f0e2a8">${f.pname}</span>` : ''}${f.id === me ? ' (you)' : f.ai && !f.undead ? ' · AI' : ''}${f.alive ? '' : ' · ✝ defeated'}${f.alive && f.lostAt !== undefined ? ` · <b style="color:#ff8a6a">⏳ ${Math.max(0, LOST_TURNS - (game.round - f.lostAt))} turn${LOST_TURNS - (game.round - f.lostAt) === 1 ? '' : 's'} to retake a city</b>` : ''} · ${f.undead ? '' : `🏰 ${nc} · `}⚑ ${na}${f.id === me ? ` · <i class="coin"></i><b style="color:#f2cf62">${pts(f.id)} gold</b> <span class="k">(+${inc}/turn)</span>` : ''}</div>`;
     }).join('');
     if (facsEl.dataset.h !== html) { facsEl.dataset.h = html; facsEl.innerHTML = html; }
     facsEl.style.display = 'block';
