@@ -112,7 +112,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.25-preview</div>
+  <div class="t">Medieval Cities 3D · v3.26-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1154,7 +1154,7 @@
   }
   function exportState(last) {
     if (shadowSt && spectating()) return { ...shadowSt, last: last || shadowSt.last };
-    return { seq: game.seq, turn: game.turn, round: game.round, dm: !!game.dm, battle: !!game.battle, types: game.types, last: last || null,
+    return { seq: game.seq, by: game.by || null, turn: game.turn, round: game.round, dm: !!game.dm, battle: !!game.battle, types: game.types, last: last || null,
       view: game.view, cities: game.cities, campaign: game.campaign, factions: game.factions, roads: game.roads, terrain: game.terrain, bt: game.bt, pending: game.pending, arReport: game.arReport || null, cwinner: game.cwinner, undead: game.undead, opts: game.opts, heights: game.heights, mapRows: CROWS, explored: game.explored, mines: game.mines || [],
       ...(game.water && game.water.length ? { water: game.water } : {}), units: units.filter(u => u.dying === null && u.hp > 0).map(u => ({ id: u.id, type: u.type, team: u.team, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, sta: u.sta, staMax: u.staMax, mana: u.mana, manaMax: u.manaMax,
         face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, ...(u.recruitN ? { recruitN: u.recruitN } : {}),
@@ -1174,7 +1174,7 @@
       Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, climb: s.climb || 0, turner: !!s.turner, released: !!s.released, horde: !!s.horde, raidCity: s.raidCity || null, raidDone: !!s.raidDone, autoRoad: s.autoRoad || null, fresh: !!s.fresh, replaced: s.replaced || null, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
       return o; });
     const prevView = game.view;
-    game = { seq: st.seq, turn: st.turn, round: st.round, dm: !!st.dm, battle: !!st.battle, types: (st.types && typeof st.types === 'object') ? st.types : {},
+    game = { seq: st.seq, by: st.by || null, turn: st.turn, round: st.round, dm: !!st.dm, battle: !!st.battle, types: (st.types && typeof st.types === 'object') ? st.types : {},
       points: { blue: 0, red: 0, ...(st.points && typeof st.points === 'object' ? st.points : {}) }, water: Array.isArray(st.water) ? st.water : [],
       view: ['campaign', 'lobby'].includes(st.view) ? st.view : 'battle', cities: Array.isArray(st.cities) ? st.cities : [], campaign: st.campaign || null,
       factions: Array.isArray(st.factions) ? st.factions : [], roads: Array.isArray(st.roads) ? st.roads : [], terrain: typeof st.terrain === 'string' ? st.terrain : null,
@@ -2940,7 +2940,7 @@
   // ---------- Saving: autosave in this browser + save/load files ----------
   const SAVE_KEY = 'medieval-cities-3d-save-v1';
   function saveLocal() { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, savedAt: Date.now(), g: exportState(null) })); } catch (e) {} }
-  const rowsOf = st => st && Number.isInteger(st.mapRows) && st.mapRows >= 30 && st.mapRows <= 90 ? st.mapRows : 52;
+  const rowsOf = st => st && Number.isInteger(st.mapRows) && st.mapRows >= 20 && st.mapRows <= 120 ? st.mapRows : 52;   // Wide Small is only 27 rows tall
   const colsOf = st => { const R0 = rowsOf(st); return st && typeof st.terrain === 'string' && st.terrain.length % R0 === 0 && st.terrain.length >= R0 * NARROW ? st.terrain.length / R0 : NARROW; };
   function validState(st) {
     return st && typeof st.seq === 'number' && (st.turn === 'blue' || st.turn === 'red' || (Array.isArray(st.factions) && st.factions.some(f => f.id === st.turn))) && Array.isArray(st.units) &&
@@ -4437,7 +4437,7 @@
     else u[cur] = Math.min(u[max], clampRes(v));
   }
   function healHeroes() { if (!dmActive() || busy()) return; for (const u of units) if (u.team === 'blue') u.hp = u.maxHp; commit({ type: 'edit' }); toast('All heroes healed'); }
-  let room = null, mode = 'local', mySeat = null, peerList = [], lastRemote = null;
+  let room = null, mode = 'local', mySeat = null, peerList = [], lastRemote = null, lastRemoteFrom = null;
   const netEl = document.getElementById('net');
   function publish(last) {
     if (room) room.presence({ seat: mode === 'online' ? mySeat : null, g: exportState(last) }).catch(() => {});
@@ -4518,6 +4518,9 @@
     c.on('data', d => { if (!d || typeof d !== 'object') return; c.heard = Date.now();
       if (d.full) { p2p.lost = null; showLost(); p2pStop('That game has no free player seat'); return; }
       if (d.assign) { mySeat = d.assign; p2p.wantSeat = d.assign; refreshUI(); }
+      if (d.g && d.force && validState(d.g)) { const lost = game.seq > d.g.seq || (game.seq === d.g.seq && game.by !== d.g.by) || game.turn !== d.g.turn; nlog('host resynced me', { mine: game.seq, host: d.g.seq, lost });
+        lastRemote = null; floats = []; selUnit = null; sel = null; group = []; armed = null; applyState(d.g); refreshUI();
+        if (lost) toast('⚠ Your game was out of step with the host · it is back in step now · if your last move is gone, please do it again'); return; }
       if (d.g) onRemoteState(d.g); });
     c.on('close', () => { nlog('link to host closed', { mine: p2p.conn === c }); if (p2p.conn === c) lostHost(); });
     c.on('error', e => nlog('link to host error', errInfo(e)));
@@ -4549,7 +4552,7 @@
       if (d.ping) { c.pinged = true; try { c.send({ pong: 1 }); } catch (e) {} return; }
       if (d.hello) { if (!c.seat) seatUp(d.want); publish(null); }
       if (!c.seat) return;
-      if (d.op) applyOp(d.op, c.seat); if (d.g) onRemoteState(d.g); });
+      if (d.op) applyOp(d.op, c.seat); if (d.g) onRemoteState(d.g, c); });
     c.on('close', () => { nlog('friend link closed', { seat: c.seat, silentS: Math.round((Date.now() - (c.heard || 0)) / 1000) }); dropConn(c); });
     c.on('error', e => nlog('friend link error', errInfo(e)));
   }
@@ -4562,10 +4565,14 @@
     const peer = p2p.peer = new Peer(PREFIX + p2p.code.toLowerCase());
     p2p.ready = false;
     peer.on('open', () => { p2p.ready = true; mode = 'online'; mySeat = hostSeat(); p2p.status = 'Ready · waiting for friends to join…'; refreshUI(); });
-    peer.on('disconnected', () => { nlog('host lost the signalling server'); if (p2p.peer === peer && !peer.destroyed) { p2p.status = 'Lost the server, reconnecting…'; refreshUI(); try { peer.reconnect(); } catch (e) {} } });
+    peer.on('disconnected', () => { nlog('host lost the signalling server'); if (p2p.peer === peer && !peer.destroyed) { p2p.status = 'Lost the server, reconnecting… (friends stay connected)'; refreshUI(); try { peer.reconnect(); } catch (e) {} } });
     peer.on('connection', c => { nlog('friend connecting'); hostAccept(c); });
     peer.on('error', e => { nlog('host peer error', errInfo(e)); if (e.type === 'unavailable-id') { peer.destroy(); p2pHost(); }
-      else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'socket-closed') { p2pStop('Could not reach the connection server (' + e.type + '). Check internet / firewall and try again.'); }
+      else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'socket-closed') {
+        if (p2p.ready && (p2p.conns.length || game.view !== 'lobby')) {   // already hosting: the friends' direct links don't need that server; keep going and retry it quietly
+          p2p.status = 'Connection server lost (' + e.type + ') · your friends stay connected · retrying…'; refreshUI();
+          setTimeout(() => { if (p2p.peer === peer && !peer.destroyed && peer.disconnected) try { peer.reconnect(); } catch (er) {} }, 5000); }
+        else p2pStop('Could not reach the connection server (' + e.type + '). Check internet / firewall and try again.'); }
       else { p2p.status = 'Error: ' + e.type + ' · still hosting'; refreshUI(); } });
   }
   const codeFrom = t => { t = String(t || ''); const m = t.match(/[?&]join=([A-Za-z0-9]{5})/) || t.trim().match(/^([A-Za-z0-9]{5})$/); return m ? m[1].toUpperCase() : null; };
@@ -4592,7 +4599,7 @@
         : 'Connection error (' + e.type + ') · check internet / firewall and try again'); });
   }
   function commit(action) {
-    game.seq += 1;
+    game.seq += 1; game.by = mode === 'online' ? (mySeat || 'host') : 'local';
     if (ctlOn() && ownerOfTeam(game.turn) === testCtl && action && action.type !== 'end') {   // test mode control: nothing runs out (moves, attacks, recruits, building)
       for (const u of units) if (ownerOfTeam(u.team) === testCtl && u.dying === null) { u.moved = false; u.attacked = false; u.recruitN = 0; u.skillUsed = false; }
       for (const c of game.cities || []) if (c.owner === testCtl) c.acted = false; }
@@ -4637,11 +4644,19 @@
     selUnit = null; sel = null; armed = null;
     return { treb: trebuchetVolley(game.turn), rain: rainVolley(game.turn) };
   }
-  function onRemoteState(st) {
-    if (!validState(st)) return;
+  const resyncAt = new WeakMap();
+  function resyncFriend(c, why) {                     // the host turned down a friend's update: put that friend back in step with the host's game, at once
+    if (!c || !c.open) return; const now = Date.now(); if (now - (resyncAt.get(c) || 0) < 1500) return; resyncAt.set(c, now);
+    nlog('resync friend', { seat: c.seat, why }); try { c.send({ g: exportState(null), force: 1 }); } catch (e) {}
+  }
+  function onRemoteState(st, from) {
+    if (!validState(st)) { if (from) resyncFriend(from, 'bad state'); return; }
+    if (from && p2p.role === 'host' && st.by === from.seat && st.seq <= (from.acc || 0)) return;   // a late copy of an update already taken
+    if (from && p2p.role === 'host' && (st.seq < game.seq || (st.seq === game.seq && st.by && st.by !== game.by)) && st.by === from.seat) { resyncFriend(from, `his ${st.seq} vs host ${game.seq}`); return; }   // he moved on from an old game
     if (p2p.needSync) { p2p.needSync = false; if (p2p.role === 'join' && !mySeat) mySeat = null; if (busy()) { lastRemote = null; } floats = []; selUnit = null; sel = null; applyState(st); toast('Joined the host\'s game'); return; }
     if (st.seq < game.seq || (st.seq === game.seq && p2p.role !== 'join')) return;   // on a tie the host's game wins
-    if (busy()) { lastRemote = st; return; }                 // finish current animation first
+    if (from) from.acc = Math.max(from.acc || 0, st.seq);
+    if (busy()) { lastRemote = st; lastRemoteFrom = from || null; return; }   // finish current animation first
     const a = st.last;
     if (a && a.seq === st.seq && st.seq === game.seq + 1 && ACTIONS.includes(a.type) && !document.hidden && !(st.view === 'battle' && st.bt && !(st.bt.sides.includes(viewer()) || (st.bt.waiting || []).includes(viewer())))) {   // a hidden tab doesn't animate: just jump to the result
       game.seq = st.seq;                                     // claim it so we don't replay twice
@@ -6034,7 +6049,7 @@
   setInterval(() => {
     if (lastRemote && busy() && (document.hidden || performance.now() - lastFrameAt > 500)) { stuckSince = stuckSince || Date.now(); if (Date.now() - stuckSince > 1500) { for (const u of units) { u.path = null; u.atk = null; } units = units.filter(u => u.dying === null); projectiles = []; afterIdle = null; } } else stuckSince = 0;
     if ((document.hidden || performance.now() - lastFrameAt > 500) && busy()) { try { for (let i = 0; i < 12; i++) { updateUnits(0.05); turnUnits(0.05); } } catch (e) { console.error(e); } }   // a background tab gets no animation frames: keep the moves (and the AI that waits for them) going
-    if (lastRemote && !busy()) { const st = lastRemote; lastRemote = null; onRemoteState(st); } try { aiTick(); } catch (e) { console.error(e); }
+    if (lastRemote && !busy()) { const st = lastRemote, fr = lastRemoteFrom; lastRemote = null; lastRemoteFrom = null; onRemoteState(st, fr); } try { aiTick(); } catch (e) { console.error(e); }
     if (IS_PHONE && Date.now() > phoneSaid + 3000 && !((game.opts || {}).phones || {})[(mode === 'online' ? mySeat : null) || 'local'] && (mode !== 'online' || p2p.role === 'host' || (p2p.conn && mySeat))) { phoneSaid = Date.now(); requestOp({ op: 'device', phone: true }); }   // tell the game a phone is playing
     refreshUI(); }, 250);
   setTimeout(() => {
