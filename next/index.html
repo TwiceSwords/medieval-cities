@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.06-preview</div>
+  <div class="t">Medieval Cities 3D · v3.07-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1130,9 +1130,9 @@
       ...(game.water && game.water.length ? { water: game.water } : {}), units: units.filter(u => u.dying === null && u.hp > 0).map(u => ({ id: u.id, type: u.type, team: u.team, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, sta: u.sta, staMax: u.staMax, mana: u.mana, manaMax: u.manaMax,
         face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, ...(u.recruitN ? { recruitN: u.recruitN } : {}),
         ...(u.stun ? { stun: u.stun } : {}), ...(u.stunActive ? { stunActive: true } : {}), ...(u.mark ? { mark: u.mark } : {}),
-        ...(u.cards ? { cards: u.cards } : {}), ...(u.tauntR ? { tauntR: u.tauntR } : {}), ...(u.guard ? { guard: u.guard } : {}),
+        ...(u.cards ? { cards: u.cards } : {}), ...(u.tauntR ? { tauntR: u.tauntR } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}),
         ...(u.dots && u.dots.length ? { dots: u.dots } : {}), ...(u.skillUsed ? { skillUsed: true } : {}),
-        ...(u.raining ? { raining: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}), ...(u.watch ? { watch: u.watch } : {}), ...(u.rain && u.rain.length ? { rain: u.rain } : {}),
+        ...(u.raining ? { raining: true } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}), ...(u.watch ? { watch: u.watch } : {}), ...(u.rain && u.rain.length ? { rain: u.rain } : {}),
         ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.released ? { released: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
@@ -1504,7 +1504,7 @@
     { const fid = order[i0], f0 = faction(fid);                           // gold mines pay armies that held them all turn
       if (f0 && !f0.undead) { const n = mineArmies(fid).length;   // any army standing on a gold mine
         if (n) { game.points = { ...game.points, [fid]: (game.points[fid] || 0) + n * GOLD_PER_MINE }; if (fid === viewer()) toast(`⛏ Gold mine${n > 1 ? 's' : ''}: +${n * GOLD_PER_MINE} gold`); } } }
-    for (const u of units) { u.moved = false; u.attacked = false; u.recruitN = 0; }
+    for (const u of units) { u.moved = false; u.attacked = false; u.recruitN = 0; u.fresh = false; }
     selUnit = null; sel = null; selCity = null; armed = null; placingArmy = null; aiState = null;
     startOfFactionTurn(game.turn);
   }
@@ -1640,7 +1640,7 @@
     syncTeams(); ensureLayers(); centerOnUnits(); commit({ type: 'battle' }); checkPlacementDone();
     toast(`Battle! ${sides.map(f => faction(f).name).join(' vs ')} · place your units, then press Ready`);
   }
-  const exportCampaignUnits = () => units.filter(u => u.dying === null).map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1, face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, ...(u.recruitN ? { recruitN: u.recruitN } : {}), troops: u.troops, ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}) }));
+  const exportCampaignUnits = () => units.filter(u => u.dying === null).map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1, face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, ...(u.recruitN ? { recruitN: u.recruitN } : {}), troops: u.troops, ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}) }));
   function spawnTroops(j, zone, enter) {               // put an army's (or city's) troops into its zone: melee in front, ranged behind
     const b = bt(), src = j.kind === 'army' ? (game.campaign.armies.find(u => u.id === j.id) || units.find(u => u.id === j.id)) : game.cities.find(c => c.id === j.id);
     if (!src || !zone) return;
@@ -2548,10 +2548,10 @@
         const onIt = units.find(u => u.troops && u.team === f.id && u.dying === null && u.col === c.col && u.row === c.row);
         if (onIt) { if (onIt.troops.length <= 4 && !onIt.scoutRole && onIt.troops.length < biggestField) onIt.guard = c.id; continue; }
         const types = recruitable(c), t = types.length && guardPick(c, [], types); if (!t) continue; const cost = unitCost(t, f.id);
-        if (pts() < cost + reserve + 5) continue;
-        const g = runtimeUnit({ id: `army-${f.id}-g${Date.now().toString(36)}${c.id}`, type: 'army', team: f.id, col: c.col, row: c.row, hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [troop(t)], guard: c.id, recruitN: 1 });
-        units.push(g); spend(cost); f.uGold = (f.uGold || 0) + cost; }
-      for (const c of myCities) { const g = guardOf(c); if (!g || g.col !== c.col || g.row !== c.row) continue;     // top the guards up slowly, never before the field army
+        if (pts() < cost + reserve + 5 || f.raisedAt === game.round) continue;
+        const g = runtimeUnit({ id: `army-${f.id}-g${Date.now().toString(36)}${c.id}`, type: 'army', team: f.id, col: c.col, row: c.row, hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [troop(t)], guard: c.id, recruitN: 1, fresh: true });
+        units.push(g); f.raisedAt = game.round; spend(cost); f.uGold = (f.uGold || 0) + cost; }
+      for (const c of myCities) { const g = guardOf(c); if (!g || g.fresh || g.col !== c.col || g.row !== c.row) continue;     // top the guards up slowly, never before the field army
         for (let k = 0; k < 2 && g.troops.length < guardSize(c) && (g.recruitN || 0) < MAX_RECRUIT_TURN; k++) { const types = recruitable(c), t = types.length && guardPick(c, g.troops, types); if (!t) break;
           const cost = unitCost(t, f.id); if (pts() < cost + reserve + 10) break; g.troops = [...g.troops, troop(t)]; spend(cost); f.uGold = (f.uGold || 0) + cost; g.recruitN = (g.recruitN || 0) + 1; } }   // at least as much gold goes to units as to buildings (start allowance: a trade post and a first barracks)
       const owned = myCities.flatMap(c => c.buildings), count = b => owned.filter(x => x === b).length;
@@ -2588,14 +2588,14 @@
           const smallest = Math.min(99, ...myArmies().map(x => x.troops.length));
           const buildFirst = (f.uGold || 0) < (f.bGold || 0) ? 0 : myCities.some(x => !x.buildings.includes('tradepost') || !unitB(x)) ? 20 : 0;   // units behind buildings: no holding back   // keep money for the economy unless an army is nearly empty
           let a = null, t = null; const newId = `army-${f.id}-${Date.now().toString(36)}${tries}`;
-          for (const x of near.filter(x => x.troops.length < MAX_TROOPS && (x.recruitN || 0) < MAX_RECRUIT_TURN).sort((x, y) => y.troops.length - x.troops.length)) { const tt = aiPickTroop(x.id, x.troops, types, pts(), f); if (tt) { a = x; t = tt; break; } }   // an all-one-type army only takes its own type
+          for (const x of near.filter(x => x.troops.length < MAX_TROOPS && (x.recruitN || 0) < MAX_RECRUIT_TURN && !x.fresh).sort((x, y) => y.troops.length - x.troops.length)) { const tt = aiPickTroop(x.id, x.troops, types, pts(), f); if (tt) { a = x; t = tt; break; } }   // an all-one-type army only takes its own type
           const anyHome = myArmies().some(x => myCities.some(cc => hexDist([x.col, x.row], [cc.col, cc.row]) <= 1));
-          if (!a) { if (myArmies().filter(x => !x.guard).length >= maxArmies) break; t = aiPickTroop(newId, [], types, pts(), f); }   // nobody at home to fill: a new army here becomes the one that grows
+          if (!a) { if (myArmies().filter(x => !x.guard).length >= maxArmies || f.raisedAt === game.round) break; t = aiPickTroop(newId, [], types, pts(), f); }   // nobody at home to fill: a new army here becomes the one that grows
           if (!t) break;
           const biggestNow = Math.max(0, ...myArmies().map(x => x.troops.length));
           const cost = unitCost(t, f.id); if (pts() < cost + (biggestNow < 3 ? 0 : reserve + buildFirst)) break;   // keep the money saved for a new city unless every army is tiny
           if (!a) { const spot = nbIn(c.col, c.row, CCOLS, CROWS).find(n => !impassable(n) && !unitAt(n) && !cityAt(n));
-            if (spot) { a = runtimeUnit({ id: newId, type: 'army', team: f.id, col: spot[0], row: spot[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [] }); units.push(a); near.push(a); } }
+            if (spot) { a = runtimeUnit({ id: newId, type: 'army', team: f.id, col: spot[0], row: spot[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [], fresh: true }); units.push(a); f.raisedAt = game.round; } }   // one new army a turn; it takes no more recruits this turn
           if (!a) break;
           const tr = troop(t);
           if (HEROES.includes(t) && HERO_CARDS[t] && pts() >= cost + CARD_PRICE + reserve) { tr.cards = emptyCards(); tr.cards.passive = HERO_CARDS[t].passive[(Math.random() * HERO_CARDS[t].passive.length) | 0]; spend(CARD_PRICE); }   // a hero comes with a passive when affordable
@@ -4540,8 +4540,9 @@
         html += `<div class="row">${!road && !cityAt(here) ? btn('data-ca="road"', `Build road here · ${ROAD_COST} gold`, my && p >= ROAD_COST) : ''}${road ? btn('data-ca="unroad"', 'Destroy road here', my) : ''}</div>`;
         const homes = game.cities.filter(c => c.owner === me && hexDist(here, [c.col, c.row]) <= 1);
         for (const c of homes) { const types = recruitable(c);
-          html += `<div class="sub">Recruit from ${c.name}</div>` + (types.length ? `<div class="grid">${types.map(t => btn(`data-recruit="${c.id}:${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t, me)}`, my && p >= unitCost(t, me) && a.troops.length < MAX_TROOPS && (a.recruitN || 0) < MAX_RECRUIT_TURN)).join('')}</div>` : '<div class="k">No unit buildings in this city yet.</div>'); }
-        if (homes.length && !a.recruitN && !a.moved) html += `<div class="k">Recruiting keeps this army in place this turn · up to ${MAX_RECRUIT_TURN} a turn</div>`;
+          html += `<div class="sub">Recruit from ${c.name}</div>` + (types.length ? `<div class="grid">${types.map(t => btn(`data-recruit="${c.id}:${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t, me)}`, my && p >= unitCost(t, me) && a.troops.length < MAX_TROOPS && (a.recruitN || 0) < MAX_RECRUIT_TURN && !freshLock(a))).join('')}</div>` : '<div class="k">No unit buildings in this city yet.</div>'); }
+        if (homes.length && freshLock(a)) html += `<div class="k">Freshly raised · it can recruit from your next turn</div>`;
+        else if (homes.length && !a.recruitN && !a.moved) html += `<div class="k">Recruiting keeps this army in place this turn · up to ${MAX_RECRUIT_TURN} a turn</div>`;
       }
     }
     if (city) {
@@ -4558,7 +4559,7 @@
           if (city.buildings.length < CITY_SLOTS) html += `<div class="sub">Build (1 per turn)</div><div class="grid">${Object.entries(BUILDINGS).filter(([k, bd]) => !(bd.wallOnly && !city.wall)).filter(([k]) => k === 'tower' ? city.buildings.filter(x => x === 'tower').length < 2 : !city.buildings.includes(k)).map(([k, b]) => btn(`data-build="${k}"`, `${b.name} · ${b.cost}`, my && !city.acted && p >= b.cost, b.text)).join('')}</div>`;
           const types = recruitable(city);
           html += `<div class="sub">New army</div>` + (placingArmy && placingArmy.city === city.id ? `<div class="k">${UNIT_TYPES[placingArmy.type].name}: click a highlighted tile next to the city.</div>${btn('data-ca="cancelnew"', 'Cancel', true)}`
-            : types.length ? `<div class="grid">${types.map(t => btn(`data-newarmy="${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t, me)}`, my && p >= unitCost(t, me))).join('')}</div><div class="k">Pick its first unit, then the tile. It can move next turn.</div>` : '<div class="k">Build a unit building first.</div>');
+            : types.length ? `<div class="grid">${types.map(t => btn(`data-newarmy="${t}"`, `${UNIT_TYPES[t].name} · ${unitCost(t, me)}`, my && p >= unitCost(t, me) && !raisedNow(me))).join('')}</div><div class="k">${raisedNow(me) ? 'You already raised a new army this turn (one per turn).' : 'Pick its first unit, then the tile. It can move next turn. A new army can\'t recruit more until your next turn.'}</div>` : '<div class="k">Build a unit building first.</div>');
         }
       }
     }
@@ -4575,21 +4576,24 @@
     if (b.dataset.ca === 'road' && a && pts(me) >= ROAD_COST) { game.roads = [...(game.roads || []), key(a.col, a.row)]; spend(ROAD_COST); commit({ type: 'road' }); }
     else if (b.dataset.ca === 'unroad' && a) { game.roads = (game.roads || []).filter(k => k !== key(a.col, a.row)); commit({ type: 'road' }); toast('Road destroyed'); }
     else if (b.dataset.ca === 'cancelnew') { placingArmy = null; refreshUI(); }
-    else if (b.dataset.recruit && a) { const [cid, t] = b.dataset.recruit.split(':'); const cost = unitCost(t, me); if (pts(me) < cost || a.troops.length >= MAX_TROOPS || (a.recruitN || 0) >= MAX_RECRUIT_TURN) return;
+    else if (b.dataset.recruit && a) { const [cid, t] = b.dataset.recruit.split(':'); const cost = unitCost(t, me); if (pts(me) < cost || a.troops.length >= MAX_TROOPS || (a.recruitN || 0) >= MAX_RECRUIT_TURN || freshLock(a)) return;
       a.troops = [...a.troops, troop(t)]; spend(cost); a.recruitN = (a.recruitN || 0) + 1; a.moved = true; commit({ type: 'recruit' }); toast(`${UNIT_TYPES[t].name} joins the army`); }
     else if (b.dataset.build && city && city.owner === me && !city.acted) { const k = b.dataset.build, bd = BUILDINGS[k]; if (pts(me) < bd.cost || city.buildings.length >= CITY_SLOTS) return;
       city.buildings = [...city.buildings, k]; city.acted = true; spend(bd.cost); commit({ type: 'build' }); toast(`${bd.name} built in ${city.name}`); }
     else if (b.dataset.unbuild !== undefined && city && city.owner === me && !city.acted) { if (pts(me) < DESTROY_COST) return;
       const i = Number(b.dataset.unbuild); toast(`${BUILDINGS[city.buildings[i]].name} torn down`); city.buildings = city.buildings.filter((_, j) => j !== i); city.acted = true; spend(DESTROY_COST); commit({ type: 'build' }); }
-    else if (b.dataset.newarmy && city) { placingArmy = { city: city.id, type: b.dataset.newarmy }; refreshUI(); }
+    else if (b.dataset.newarmy && city) { if (raisedNow(me)) { toast('Only one new army per turn'); return; } placingArmy = { city: city.id, type: b.dataset.newarmy }; refreshUI(); }
   });
+  const raisedNow = fid => { const f = faction(fid); return !!(f && f.raisedAt === game.round) && !(ctlOn() && fid === testCtl); };   // one new army per realm per turn
+  const freshLock = a => !!(a && a.fresh) && !(ctlOn() && a.team === testCtl);                                                       // a new army can't recruit in its first turn
   const armySpawnTiles = city => nbIn(city.col, city.row, CCOLS, CROWS).filter(n => !impassable(n) && !unitAt(n) && !cityAt(n));
   function placeNewArmy(h) {                                          // left-click on a highlighted tile
     const pa = placingArmy, city = pa && game.cities.find(c => c.id === pa.city), me = viewer();
     if (!city || !h || !armySpawnTiles(city).some(n => n[0] === h[0] && n[1] === h[1])) { toast('Pick a highlighted tile next to the city'); return; }
     const cost = unitCost(pa.type, me); if (pts(me) < cost) { toast('Not enough gold'); placingArmy = null; refreshUI(); return; }
-    const a = runtimeUnit({ id: `army-${me}-${Date.now().toString(36)}`, type: 'army', team: me, col: h[0], row: h[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, recruitN: 1, troops: [troop(pa.type)] });
-    units.push(a); game.points = { ...game.points, [me]: pts(me) - cost }; placingArmy = null; selUnit = a; sel = h; selCity = null;
+    if (raisedNow(me)) { toast('Only one new army per turn'); placingArmy = null; refreshUI(); return; }
+    const a = runtimeUnit({ id: `army-${me}-${Date.now().toString(36)}`, type: 'army', team: me, col: h[0], row: h[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, recruitN: 1, fresh: true, troops: [troop(pa.type)] });
+    units.push(a); faction(me).raisedAt = game.round; game.points = { ...game.points, [me]: pts(me) - cost }; placingArmy = null; selUnit = a; sel = h; selCity = null;
     commit({ type: 'recruit' }); toast('New army raised · it can move next turn');
   }
   function showModal(html, side) { modalEl.innerHTML = html; modalEl.style.display = 'flex'; modalEl.classList.toggle('side', !!side); }
