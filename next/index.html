@@ -112,7 +112,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.21-preview</div>
+  <div class="t">Medieval Cities 3D · v3.22-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1203,7 +1203,7 @@
     off.x = innerWidth / 2 - cx * z; off.y = innerHeight / 2 - cy * z;
   }
   // ===================== CAMPAIGN WORLD (Medieval Cities) =====================
-  let CCOLS = 16, CROWS = 52; const WIDE_COLS = 28, NARROW = 16;   // the campaign map: tall; widens from 16 by the wall to its full width in the far south (size picked in the lobby)
+  let CCOLS = 16, CROWS = 52; const WIDE_COLS = 28, NARROW = 16, NORTH_W = 14;   // the campaign map: full width from the far south right up to the wall; beyond the wall a narrow strip (size picked in the lobby)
   const MAP_SIZES = { small: { cols: 22, rows: 40, spots: 8 }, medium: { cols: 28, rows: 52, spots: 10 }, large: { cols: 36, rows: 64, spots: 14 } };
   const mapSizeOf = () => MAP_SIZES[(game.opts && game.opts.mapSize) || 'medium'] || MAP_SIZES.medium;
   const spotsFor = n => Math.max(mapSizeOf().spots, n + 3);
@@ -1235,7 +1235,7 @@
         const A = a[yi * w + xi], B = a[yi * w + xi + 1], C = a[(yi + 1) * w + xi], D = a[(yi + 1) * w + xi + 1]; return A + (B - A) * u + (C - A) * v + (A - B - C + D) * u * v; }; };
     const e1 = vn(6), e2 = vn(2.5), mo = vn(5), lat = vn(8), ridge = vn(4.5);
     const T = new Array(CCOLS * CROWS), HT = new Array(CCOLS * CROWS).fill(1);
-    const widthAt = r => CCOLS <= NARROW ? CCOLS : r <= WALL_ROW + 2 ? NARROW : Math.round(NARROW + (CCOLS - NARROW) * (r - WALL_ROW - 2) / (CROWS - 1 - WALL_ROW - 2));
+    const widthAt = r => r <= WALL_ROW ? Math.min(CCOLS, NORTH_W) : CCOLS;   // beyond the wall (and the wall itself): narrow; right under it: the whole width
     for (let r = 0; r < CROWS; r++) for (let c = 0; c < CCOLS; c++) {
       { const m0 = Math.floor((CCOLS - widthAt(r)) / 2); if (c < m0 || c >= m0 + widthAt(r)) { T[r * CCOLS + c] = 'v'; HT[r * CCOLS + c] = 0; continue; } }
       const x = c + 0.5 * (r & 1), y = r * 0.866;
@@ -1495,6 +1495,21 @@
       const order = new Array(factions.length);
       H.forEach((fi, k) => { order[fi] = hs[k]; }); A.forEach((fi, k) => { order[fi] = as[k]; });
       spots.splice(0, spots.length, ...order, ...left);
+    }
+    else if (factions.some((f, i) => f.tm && factions.some((g, j) => j !== i && g.tm === f.tm))) {   // teams: teammates start close together, the teams (and lone realms) spread far apart
+      const groups = {}; factions.forEach((f, i) => { const k = f.tm ? 'team' + f.tm : 'solo' + i; (groups[k] = groups[k] || []).push(i); });
+      const gl = Object.values(groups).sort((x, y) => y.length - x.length);
+      let best = null;
+      for (let tryN = 0; tryN < 40; tryN++) {
+        const anchors = [spots[(R() * spots.length) | 0]];
+        while (anchors.length < gl.length) { let pick = null, pd = -1; for (const h of spots) { if (anchors.includes(h)) continue; const d = Math.min(...anchors.map(a => hexDist(a, h))); if (d > pd) { pd = d; pick = h; } } anchors.push(pick); }
+        const left = spots.slice(), order = new Array(factions.length); let spread = 0;
+        gl.forEach((g, gi) => { const a = anchors[gi]; left.sort((x, y) => hexDist(x, a) - hexDist(y, a)); const mine = left.splice(0, g.length); g.forEach((fi, k) => { order[fi] = mine[k]; });
+          for (let p = 0; p < mine.length; p++) for (let q = p + 1; q < mine.length; q++) spread += hexDist(mine[p], mine[q]); });
+        let apart = Infinity; for (let p = 0; p < gl.length; p++) for (let q = p + 1; q < gl.length; q++) for (const x of gl[p]) for (const y of gl[q]) apart = Math.min(apart, hexDist(order[x], order[y]));
+        const score = spread - apart * 2.5; if (!best || score < best.score) best = { score, order, left };
+      }
+      spots.splice(0, spots.length, ...best.order, ...best.left);
     }
     const cities = spots.map((h, i) => ({ id: 'city' + i, col: h[0], row: h[1], name: names[i], owner: i < factions.length ? factions[i].id : null, buildings: [], acted: false }));
     cities.push({ id: 'citywall', col: w.wallSpot[0], row: w.wallSpot[1], name: 'Frostgate', owner: null, buildings: [], acted: false, wall: true });
