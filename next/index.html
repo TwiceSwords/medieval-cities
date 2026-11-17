@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.15-preview</div>
+  <div class="t">Medieval Cities 3D · v3.16-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1891,7 +1891,7 @@
     if (!r.need.includes(who)) return; r.acks = { ...(r.acks || {}), [who]: true };
     if (r.need.every(f => r.acks[f])) { game.arReport = null; resolvePendingAI(); } commit({ type: 'campaign' }); }  // nobody human involved
   // the players in a battle may agree (each one presses it) to auto resolve it instead of fighting it out
-  const undeadFight = b => !!(b && (b.joined || []).some(j => j.fid === 'undead'));   // no auto resolve against the dead: it is always fought out
+  const undeadFight = b => !!(b && (b.joined || []).some(j => j.fid === 'undead') && !arHumans(b).length);   // the AIs against the dead: always fought out (players may still auto resolve)
   const arHumans = b => [...new Set(b.joined.map(j => j.fid))].filter(f => faction(f) && !faction(f).ai && !faction(f).undead);
   function autoResVote(fid, seat) {
     const b = bt(); if (!b || game.view !== 'battle' || undeadFight(b)) return;
