@@ -112,7 +112,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.31-preview</div>
+  <div class="t">Medieval Cities 3D · v3.30-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -5672,9 +5672,6 @@
   document.getElementById('bload').addEventListener('click', () => document.getElementById('fload').click());
   document.getElementById('fload').addEventListener('change', e => { const f = e.target.files[0]; if (f) loadFile(f); e.target.value = ''; });
   function resetGame() {
-    if (!(mode === 'online' && p2p.role === 'host')) {   // a clean start, whatever state this browser got into: leave any online game, forget this browser's save, reload the page
-      try { p2pStop(''); } catch (e) {} try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
-      toast('Starting fresh…'); setTimeout(() => { location.href = location.pathname; }, 250); return; }
     const st = freshState(game.seq + 1); st.last = { type: 'reset', seq: st.seq };
     floats = []; projectiles = []; applyState(st); publish(st.last); toast('New game started');
   }
