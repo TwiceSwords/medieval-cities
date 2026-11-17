@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.10-preview</div>
+  <div class="t">Medieval Cities 3D · v3.11-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2026,7 +2026,7 @@
       for (let i = 1; i < 6; i++) { const f = i / 6; ctx.moveTo(a.x + dx * f + px, a.y + dy * f + py); ctx.lineTo(a.x + dx * f - px, a.y + dy * f - py); } ctx.stroke(); }
   }
   // ===================== THE UNDEAD =====================
-  const WALL_ROW = 12, UNDEAD_CAP = 1e6, HORDE_WARD = 200, WAVE_EVERY = 40, FINAL_WAVE = 240, WAVE_SIZE = T => Math.round(Math.min(T, FINAL_WAVE) / WAVE_EVERY) * 20, UNDEAD_COL = [150, 162, 178];
+  const WALL_ROW = 12, UNDEAD_CAP = 1e6, HORDE_WARD = 200, WAVE_EVERY = 40, FINAL_WAVE = 200, WAVE_SIZE = T => Math.round(Math.min(T, FINAL_WAVE) / WAVE_EVERY) * 20, UNDEAD_COL = [150, 162, 178];
   const isUndeadFid = fid => fid === 'undead';
   const undeadArmies = () => units.filter(u => u.troops && u.team === 'undead' && u.dying === null);
   const halfTroop = t => { const mx = Math.max(1, Math.ceil(typeMax(t) / 2)); return { type: t, hp: mx, maxHp: mx, mana: typeStat(t, 'manaMax'), manaMax: typeStat(t, 'manaMax') }; };
@@ -2069,15 +2069,17 @@
     if (!h) h = others.shift() || newUndeadArmy([], {});
     for (const a of others) h.troops = [...h.troops, ...a.troops]; units = units.filter(u => !others.includes(u));
     h.troops = [...h.troops.filter(t => !t.ward), ...mobs];   // the 200 guards stay home; the wave's skeletons march with the host
+    const living = game.factions.filter(f => f.alive && !isUndeadFid(f.id)), team = living.length > 1 && new Set(living.map(f => sideOf(f.id))).size === 1;
+    if (team) h.troops = [...hordeElites(), ...h.troops];   // the last ones standing are one team: twice the mammoths, Kings and Queens
     h.released = true; h.horde = true;
     for (const a of undeadArmies()) a.released = true;
-    toast(`🧟 The last wave: the host of the dead marches south · ${h.troops.length} strong`);
+    toast(`🧟 The last wave: the host of the dead marches south · ${h.troops.length} strong${team ? ' · against one team: twice the mammoths, Kings and Queens' : ''}`);
   }
   function undeadTurnStart() {                        // called when the undead faction's campaign turn begins
     const ud = game.undead; if (!ud) return;
     ensureHorde(); flushPool();
     const living = game.factions.filter(f => f.alive && !isUndeadFid(f.id));
-    const oneSide = living.length && new Set(living.map(f => sideOf(f.id))).size === 1;   // only one realm (or one team) left: the last wave comes in 5 turns, not at round 240
+    const oneSide = living.length && new Set(living.map(f => sideOf(f.id))).size === 1;   // only one realm (or one team) left: the last wave comes in 5 turns, not at round 200
     if (oneSide && !ud.final && (!ud.countdownEnd || ud.countdownEnd > game.round + 5)) { ud.countdownEnd = game.round + 5; toast(`🧟 Only ${living.length === 1 ? 'one realm stands' : 'one team stands'} · the last wave of the dead comes in 5 turns`); }
     if (ud.countdownEnd && game.round >= ud.countdownEnd && !ud.final) undeadWave(FINAL_WAVE);
     else if (game.round % WAVE_EVERY === 0 && game.round <= FINAL_WAVE) undeadWave(game.round);
