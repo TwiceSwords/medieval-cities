@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.11-preview</div>
+  <div class="t">Medieval Cities 3D · v3.12-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1973,6 +1973,7 @@
   }
   function hitPiece(h, dmg) {
     const s2 = sg(), p = wallAt(h); if (!p || p.kind === 'stair') return;
+    if (dmg === Infinity) dmg = Math.max(1, p.kind === 'gate' ? s2.gateHp : p.hp);   // a mammoth: one blow brings it down
     if (p.kind === 'gate') { s2.gateHp -= dmg; floatAt(h, `-${dmg}`, '#ff5a46'); if (s2.gateHp <= 0) destroyPiece(h); }
     else { p.hp -= dmg; floatAt(h, `-${dmg}`, '#ff5a46'); if (p.hp <= 0) destroyPiece(h); }
   }
@@ -1982,7 +1983,7 @@
     if (a.type === 'hitwall') { const h = [a.col, a.row], ty = T(u);
       moveUnit(u, (a.path || []).map(x => [x[0], x[1]]), () => { faceTile(u, h); u.attacked = true; u.moved = true;
         if (ty.ranged && hexDist([u.col, u.row], h) > 1) fire(ty.ranged === 'arc' ? 'arrow' : ty.ranged === 'mark' ? 'boulder' : 'bolt', shotFrom(u), tileAt(h), () => hitPiece(h, u.dmg));
-        else hitPiece(h, u.type === 'warrior' ? baseDmg(u) : u.dmg); });
+        else hitPiece(h, u.type === 'mammoth' ? Infinity : u.type === 'warrior' ? baseDmg(u) : u.dmg); });
       return true; }
     if (a.type === 'ladder') { faceTile(u, [a.col, a.row]); const s2 = sg(); if (!ladderAt([u.col, u.row])) s2.ladders.push({ g: [u.col, u.row], w: [a.col, a.row] });
       u.attacked = true; u.moved = true; floatOn(u, 'LADDER UP', '#e8c890'); afterIdle && setTimeout(() => {}, 0); return true; }
@@ -3286,6 +3287,7 @@
     if (!t || t.dying !== null || t.hp <= 0) return { blocked: true, dealt: 0 };
     if (!physical && T(t).structure) return { blocked: true, dealt: 0 };           // towers: spells don't touch them (arrows, blades and boulders do)
     if (t.climb) amt *= 2;                                // on a ladder: double damage
+    if (src && src.type === 'mammoth' && T(t).structure) { const d = t.hp; hitUnit(t, d); return { blocked: false, dealt: d }; }   // a mammoth flattens a tower in one blow
     if (src && (src.turner || T(src).turner) && hostile(t.team, src.team) && !T(t).structure && !T(t).big && t.team !== 'undead') {   // the King/Queen and their thralls turn the living
       t.team = src.team; t.turner = true; t.mesh = meshFor(t.type, t.team); t.flash = 1; floatOn(t, 'TURNED!', '#9fd8ff', 0, 18); return { blocked: false, dealt: 0 }; }
     if (t.type === 'horsearcher' && src && !melee && ['archer', 'crossbow', 'ranger', 'mage'].includes(src.type)) amt *= 2;   // foot archers, crossbowmen, rangers and mages: double damage against horse archers
