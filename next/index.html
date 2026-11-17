@@ -112,7 +112,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.31-preview</div>
+  <div class="t">Medieval Cities 3D · v3.32-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1413,7 +1413,7 @@
     heroes:    { name: "Heroes' hall", cost: 20, text: 'Recruit any hero (base stats, no cards)', units: HEROES },
   };
   for (const t of [...FOOT, ...ARCH, ...MOUNT, ...SIEGE]) BUILDINGS[t] = { name: `${UNIT_TYPES[t].name} ${MOUNT.includes(t) ? 'stables' : ARCH.includes(t) ? 'range' : SIEGE.includes(t) ? 'workshop' : 'barracks'}`, text: `Recruit ${UNIT_TYPES[t].name}s here (${unitCost(t)} gold each)`, units: [t], cost: 10 };
-  const CITY_SLOTS = 6, FOUND_COST = 20, ROAD_COST = 5, DESTROY_COST = 5, MAX_TROOPS = 20, MAX_DEFENDERS = 10, MAX_RECRUIT_TURN = 5;   // an army takes at most 5 recruits a campaign turn, and can't move in a turn it recruited
+  const CITY_SLOTS = 6, FOUND_COST = 10, ROAD_COST = 5, DESTROY_COST = 5, MAX_TROOPS = 20, MAX_DEFENDERS = 10, MAX_RECRUIT_TURN = 5;   // an army takes at most 5 recruits a campaign turn, and can't move in a turn it recruited
   const recruitable = city => [...new Set((city.buildings || []).flatMap(b => (BUILDINGS[b] && BUILDINGS[b].units) || []))];
   const cityValue = city => FOUND_COST + (city.buildings || []).reduce((s, b) => s + (BUILDINGS[b] ? BUILDINGS[b].cost : 0), 0);
   function garrisonOf(city) {                       // every city: 1 swordsman; a Garrison adds 1 more + 1 of each recruitable (non-hero) type
