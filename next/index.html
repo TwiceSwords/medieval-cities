@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.14-preview</div>
+  <div class="t">Medieval Cities 3D · v3.15-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1621,7 +1621,7 @@
     for (const a of b.asks) if (a.ans) b.joined.push({ kind: a.kind, id: a.id, fid: a.fid, dist: a.dist });
     const sides = [...new Set(b.joined.filter(j => j.dist <= 1).map(j => j.fid))];
     const humans = [...new Set(b.joined.map(j => j.fid))].filter(fid => !faction(fid).ai);
-    if (!humans.length && !(game.opts && game.opts.god)) { autoResolveBattle(); return; }
+    if (!humans.length && !(game.opts && game.opts.god) && !b.joined.some(j => j.fid === 'undead')) { autoResolveBattle(); return; }
     // directions on the campaign map decide where each side stands on the battle board
     const srcTile = j => { const o = j.kind === 'army' ? units.find(u => u.id === j.id) : game.cities.find(c => c.id === j.id); return [o.col, o.row]; };
     const mid = b.center, dirOf = fid => { const ts = b.joined.filter(j => j.fid === fid && j.dist <= 1).map(srcTile); let x = 0, y = 0;
@@ -1803,6 +1803,13 @@
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
       if ((draw || !hostile(j.fid, w)) && (j.dist <= 1 || j.spawned)) { a.troops = [...survivorsOf((bySrc[j.id] || []).filter(u => u.team === j.fid)), ...((b.unspawned || {})[j.id] || []), ...a.troops.slice(j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS)]; if (!a.troops.length) a.dead = true; }   // won only by its summoned dead: the army itself is gone
       else if (hostile(j.fid, w) && (j.dist <= 1 || j.spawned)) a.dead = true; }
+    { const summ = alive.filter(u => u.summoned && u.team === 'undead');   // what the dark magic raised stays with the dead for good
+      if (summ.length) { const kept = survivorsOf(summ);
+        let host = b.joined.filter(j => j.kind === 'army' && j.fid === 'undead').map(j => units.find(u => u.id === j.id)).find(a => a && !a.dead && a.troops && a.troops.length);
+        if (host) host.troops = [...host.troops, ...kept];
+        else { const free = t => !impassable(t) && !units.some(u => u.troops && !u.dead && u.col === t[0] && u.row === t[1]) && !(cityAt(t) && cityAt(t).owner && cityAt(t).owner !== 'undead');
+          const t = [b.center, ...nbIn(b.center[0], b.center[1], CCOLS, CROWS)].find(free) || b.center;
+          units.push(runtimeUnit({ id: `army-undead-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, type: 'army', team: 'undead', col: t[0], row: t[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, released: true, troops: kept })); } } }
     for (const u of units) if (u.inBattle === b.id) u.inBattle = null;
     const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity);
     if (sc && w && hostile(sc.owner, w)) { const att = units.find(u => u.team === w && !u.dead && b.joined.some(j => j.id === u.id)); if (att && !unitAt([sc.col, sc.row])) { att.col = sc.col; att.row = sc.row; }
@@ -1884,9 +1891,10 @@
     if (!r.need.includes(who)) return; r.acks = { ...(r.acks || {}), [who]: true };
     if (r.need.every(f => r.acks[f])) { game.arReport = null; resolvePendingAI(); } commit({ type: 'campaign' }); }  // nobody human involved
   // the players in a battle may agree (each one presses it) to auto resolve it instead of fighting it out
+  const undeadFight = b => !!(b && (b.joined || []).some(j => j.fid === 'undead'));   // no auto resolve against the dead: it is always fought out
   const arHumans = b => [...new Set(b.joined.map(j => j.fid))].filter(f => faction(f) && !faction(f).ai && !faction(f).undead);
   function autoResVote(fid, seat) {
-    const b = bt(); if (!b || game.view !== 'battle') return;
+    const b = bt(); if (!b || game.view !== 'battle' || undeadFight(b)) return;
     if (!arHumans(b).length) { if (isHost() && !seat && b.phase !== 'over') autoResolveNow(); return; }   // god mode / nobody human in it: the host decides (any time)
     if (b.phase !== 'place') return;
     if ((seat && seat !== fid) || !arHumans(b).includes(fid)) return;
@@ -4785,7 +4793,7 @@
   function renderArPrompt() {
     const b = bt(), me = viewer();
     if (modalEl.dataset.ar && !(b && game.view === 'battle' && b.phase === 'place' && b.id === modalEl.dataset.ar)) { modalEl.dataset.ar = ''; hideModal(); return false; }
-    if (!b || game.view !== 'battle' || b.phase !== 'place' || !me || !arHumans(b).includes(me) || (b.arVote || {})[me] || arSeen.has(b.id + me)) return !!modalEl.dataset.ar;
+    if (!b || game.view !== 'battle' || b.phase !== 'place' || !me || undeadFight(b) || !arHumans(b).includes(me) || (b.arVote || {})[me] || arSeen.has(b.id + me)) return !!modalEl.dataset.ar;
     if (modalEl.dataset.ar === b.id) return true;
     const armies = game.campaign ? game.campaign.armies : units, { keys, val, sides } = arValuesOf(b, armies, false); if (!keys.length) return false;
     const mySide = sideOf(me), tot = keys.reduce((x, k) => x + val[k], 0) || 1, nm = k => { const fid = (b.joined.find(j => sideOf(j.fid) === k) || {}).fid; return fid ? teamName(fid) : k; };
@@ -4963,13 +4971,13 @@
     const b = bt(), me = viewer(); let html = '';
     if (b.phase === 'place' || b.phase === 'reinforce') {
       const mine = placingSides().includes(me);
-      const hs = b.phase === 'place' ? arHumans(b) : [], iVote = hs.includes(me), voted = hs.filter(f => (b.arVote || {})[f]);
-      const godRow = !hs.length && b.phase === 'place' && isHost() ? `<div class="row" style="margin-top:6px">${btn('data-bt="autores"', '⚡ Auto resolve', true)}</div>` : '';
+      const hs = b.phase === 'place' && !undeadFight(b) ? arHumans(b) : [], iVote = hs.includes(me), voted = hs.filter(f => (b.arVote || {})[f]);
+      const godRow = !hs.length && b.phase === 'place' && isHost() && !undeadFight(b) ? `<div class="row" style="margin-top:6px">${btn('data-bt="autores"', '⚡ Auto resolve', true)}</div>` : '';
       const arRow = godRow ? godRow : iVote ? `<div class="row" style="margin-top:6px">${btn('data-bt="autores"', (b.arVote || {})[me] ? '⚡ Auto resolve · waiting for the others' : '⚡ Auto resolve', !(b.arVote || {})[me])}</div><div class="k">${hs.length > 1 ? `Every player in this battle has to press it (${voted.length}/${hs.length}).` : 'Settle it at once by unit values and counters, without fighting it out.'}</div>` : '';
       html = mine ? `<div class="t">⚔ Place your army</div><div class="k">Click one of your units, then right-click a free tile inside your coloured zone. Nobody else can see your units until everyone is ready.</div><div class="row">${btn('data-bt="ready"', '✔ Ready', true)}</div>${arRow}`
         : `<div class="t">⚔ Waiting</div><div class="k">${placingSides().map(f => faction(f).name).join(', ') || '…'} ${placingSides().length === 1 ? 'is' : 'are'} still placing ${b.phase === 'reinforce' ? 'their arriving army' : 'their units'}.</div>${arRow}`;
     } else {
-      const inc = b.joined.filter(j => j.dist === 2 && !j.spawned), next = REINF_ROUND * Math.ceil(game.round / REINF_ROUND), godAr = !arHumans(b).length && isHost();
+      const inc = b.joined.filter(j => j.dist === 2 && !j.spawned), next = REINF_ROUND * Math.ceil(game.round / REINF_ROUND), godAr = !arHumans(b).length && isHost() && !undeadFight(b);
       html = `<div class="t">⚔ Battle · round ${game.round}${battleLimit() ? ` / ${battleLimit()}` : ''}</div><div class="k">${inc.length ? ` ${[...new Set(inc.map(j => faction(j.fid).name))].join(', ')} arrive${inc.length === 1 ? 's' : ''} at round ${REINF_ROUND}.` : ''}</div>${godAr ? `<div class="row">${btn('data-bt="autores"', '⚡ Auto resolve', true)}</div><div class="k">${tr('Settles it from the armies as they started this battle.')}</div>` : ''}`;
     }
     if (game.opts && game.opts.autoFight && me && Object.keys({ ...b.zones, ...b.pockets }).includes(me) && !(faction(me) || {}).ai)
