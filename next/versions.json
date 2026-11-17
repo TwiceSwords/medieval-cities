@@ -1,7 +1,11 @@
 [
  {
   "file": "index.html",
-  "label": "Latest (v3.24)"
+  "label": "Latest (v3.25)"
+ },
+ {
+  "file": "v3.24.html",
+  "label": "v3.24"
  },
  {
   "file": "v3.23.html",

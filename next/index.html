@@ -112,7 +112,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.24-preview</div>
+  <div class="t">Medieval Cities 3D · v3.25-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1240,7 +1240,7 @@
         const A = a[yi * w + xi], B = a[yi * w + xi + 1], C = a[(yi + 1) * w + xi], D = a[(yi + 1) * w + xi + 1]; return A + (B - A) * u + (C - A) * v + (A - B - C + D) * u * v; }; };
     const e1 = vn(6), e2 = vn(2.5), mo = vn(5), lat = vn(8), ridge = vn(4.5);
     const T = new Array(CCOLS * CROWS), HT = new Array(CCOLS * CROWS).fill(1);
-    const widthAt = r => r <= WALL_ROW ? Math.min(CCOLS, NORTH_W) : CCOLS;   // beyond the wall (and the wall itself): narrow; right under it: the whole width
+    const widthAt = r => r <= WALL_ROW ? Math.min(NORTH_W, Math.round(CCOLS * 0.6)) : CCOLS;   // beyond the wall stays narrow on every map, even the slim ones   // beyond the wall (and the wall itself): narrow; right under it: the whole width
     for (let r = 0; r < CROWS; r++) for (let c = 0; c < CCOLS; c++) {
       { const m0 = Math.floor((CCOLS - widthAt(r)) / 2); if (c < m0 || c >= m0 + widthAt(r)) { T[r * CCOLS + c] = 'v'; HT[r * CCOLS + c] = 0; continue; } }
       const x = c + 0.5 * (r & 1), y = r * 0.866;
