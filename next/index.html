@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.16-preview</div>
+  <div class="t">Medieval Cities 3D · v3.17-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1621,7 +1621,7 @@
     for (const a of b.asks) if (a.ans) b.joined.push({ kind: a.kind, id: a.id, fid: a.fid, dist: a.dist });
     const sides = [...new Set(b.joined.filter(j => j.dist <= 1).map(j => j.fid))];
     const humans = [...new Set(b.joined.map(j => j.fid))].filter(fid => !faction(fid).ai);
-    if (!humans.length && !(game.opts && game.opts.god) && !b.joined.some(j => j.fid === 'undead')) { autoResolveBattle(); return; }
+    if (!humans.length && !(game.opts && game.opts.god)) { autoResolveBattle(); return; }   // AIs only: settled at once, no battle board (god mode: fought out, to watch)
     // directions on the campaign map decide where each side stands on the battle board
     const srcTile = j => { const o = j.kind === 'army' ? units.find(u => u.id === j.id) : game.cities.find(c => c.id === j.id); return [o.col, o.row]; };
     const mid = b.center, dirOf = fid => { const ts = b.joined.filter(j => j.fid === fid && j.dist <= 1).map(srcTile); let x = 0, y = 0;
@@ -1891,7 +1891,7 @@
     if (!r.need.includes(who)) return; r.acks = { ...(r.acks || {}), [who]: true };
     if (r.need.every(f => r.acks[f])) { game.arReport = null; resolvePendingAI(); } commit({ type: 'campaign' }); }  // nobody human involved
   // the players in a battle may agree (each one presses it) to auto resolve it instead of fighting it out
-  const undeadFight = b => !!(b && (b.joined || []).some(j => j.fid === 'undead') && !arHumans(b).length);   // the AIs against the dead: always fought out (players may still auto resolve)
+  const undeadFight = b => !!(b && (b.joined || []).some(j => j.fid === 'undead'));   // nobody presses auto resolve against the dead (AI-only battles still settle at once, unless god mode)
   const arHumans = b => [...new Set(b.joined.map(j => j.fid))].filter(f => faction(f) && !faction(f).ai && !faction(f).undead);
   function autoResVote(fid, seat) {
     const b = bt(); if (!b || game.view !== 'battle' || undeadFight(b)) return;
