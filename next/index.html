@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.03-preview</div>
+  <div class="t">Medieval Cities 3D · v3.04-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Esc: deselect</div>
@@ -1757,20 +1757,71 @@
     if (hadInterlude) campaignEndTurn();                // the battle owner already played its campaign turn
     commit({ type: 'campaign' }); resolvePendingAI();
   }
-  function autoResolveBattle() {                      // nobody human involved: strength with some luck decides
-    const b = bt(), list = {};
-    for (const j of b.joined) { const src = j.kind === 'army' ? units.find(u => u.id === j.id) : game.cities.find(c => c.id === j.id); if (!src) continue;
-      const tr = j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : garrisonOf(src).map(troop); list[sideOf(j.fid)] = (list[sideOf(j.fid)] || 0) + troopStrength(tr) * (j.kind === 'city' ? 1.15 * (src.wall && src.buildings.includes('nightswatch') && b.joined.some(x => x.fid === 'undead') ? 2 : 1) : 1); }
-    let w = null, best = -1; for (const [f, s] of Object.entries(list)) { const v = s * (0.75 + Math.random() * 0.5); if (v > best) { best = v; w = f; } }
-    const wSide = w; w = (b.joined.find(j => sideOf(j.fid) === wSide) || {}).fid || w; list[w] = list[wSide];
-    const total = Object.values(list).reduce((a, x) => a + x, 0), ratio = Math.min(0.9, (total - list[w]) / Math.max(1, list[w]) * 0.7);
+  // ---------- AUTO RESOLVE: unit values, counters, a little luck ----------
+  const AR_BASE = { swordsman: 120, spearman: 100, halberdier: 100, swordmaster: 100, archer: 100, crossbow: 100, horseman: 180, lancer: 180, horsearcher: 180, trebuchet: 200, ballista: 200 };
+  const AR_RANGED_B = { spearman: 10, halberdier: 50, swordmaster: 50, horsearcher: 50 };
+  const AR_BONUS = { spearman: { horseman: 90, lancer: 150 }, halberdier: { horseman: 150, lancer: 180 }, archer: AR_RANGED_B, crossbow: AR_RANGED_B,
+    horseman: { archer: 75, crossbow: 75, horsearcher: 135, trebuchet: 150, ballista: 150 }, lancer: { swordsman: 60, archer: 100, crossbow: 100, horsearcher: 180, trebuchet: 200, ballista: 200 },
+    horsearcher: { swordsman: 85, spearman: 75, halberdier: 100, swordmaster: 100, trebuchet: 200, ballista: 200 }, ballista: { swordsman: 90, spearman: 75, halberdier: 100, swordmaster: 100, archer: 75, crossbow: 75 } };
+  const arBase = t => AR_BASE[t] ?? Math.round(120 * troopStrength([troop(t)]) / Math.max(1, troopStrength([troop('swordsman')])));   // heroes, undead, towers: by their strength next to a swordsman (120)
+  function arCounters(mine, foes) {                   // pass 1: full bonus, one enemy unit per counter unit; pass 2: half bonus for one more; no 3rd
+    const pairs = []; mine.forEach((u, a) => foes.forEach((e, b) => { const v = (AR_BONUS[u.type] || {})[e.type] || 0; if (v) pairs.push({ a, b, v }); }));
+    pairs.sort((x, y) => y.v - x.v); const bonus = mine.map(() => 0), claims = mine.map(() => 0), hit = new Set();
+    for (const p of pairs) if (!claims[p.a] && !hit.has(p.b)) { claims[p.a] = 1; hit.add(p.b); bonus[p.a] += p.v; }
+    for (const p of pairs) if (claims[p.a] === 1 && !hit.has(p.b)) { claims[p.a] = 2; hit.add(p.b); bonus[p.a] += p.v / 2; }
+    return { bonus, hit };                            // hit: which enemy units were countered
+  }
+  function arResolve(b) {                             // settles a battle from the campaign map (units = campaign armies)
+    const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity), walled = !!(sc && ((sc.buildings || []).includes('walls') || (sc.buildings || []).includes('tower')));
+    const sides = {}, add = (side, e) => (sides[side] = sides[side] || []).push(e);
+    for (const j of b.joined) { const src = j.kind === 'army' ? units.find(u => u.id === j.id) : game.cities.find(c => c.id === j.id); if (!src) continue; const f = faction(j.fid), human = !!(f && !f.ai && !f.undead);
+      const list = j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : [...garrisonOf(src).map(troop), ...((src.buildings || []).filter(x => x === 'tower').map(() => troop('tower')))];
+      list.forEach((t, i) => add(sideOf(j.fid), { j, i, t, type: t.type, fid: j.fid, human, army: j.kind === 'army', def: !!(sc && !hostile(j.fid, sc.owner)) })); }
+    const keys = Object.keys(sides); if (!keys.length) { game.bt = null; commit({ type: 'ai' }); return; }
+    const val = {};
+    for (const k of keys) { const mine = sides[k], foes = keys.filter(o => o !== k).flatMap(o => sides[o]);
+      const { bonus } = arCounters(mine, foes);
+      let v = 0; mine.forEach((e, i) => { let x = arBase(e.type) + bonus[i];
+        if (e.type === 'trebuchet' && walled && !e.def) x = Math.min(500, x + 300);              // a trebuchet against walls / towers
+        if (e.human) x *= 1.15;                                                                    // players' units count 15% more
+        if (e.def && sc && (sc.buildings || []).includes('walls')) x *= 1.15;                      // defending behind walls
+        if (!e.army && sc && sc.wall && (sc.buildings || []).includes('nightswatch') && keys.some(o => o !== k && sides[o].some(q => q.fid === 'undead'))) x *= 2;
+        e.val = x; v += x; });
+      val[k] = v * (0.92 + Math.random() * 0.16); }                                              // a little luck, never the main thing
+    const order = keys.slice().sort((x, y) => val[y] - val[x]), wSide = order[0], margin = val[wSide] - (val[order[1]] || 0);
+    const w = (b.joined.find(j => sideOf(j.fid) === wSide) || {}).fid || wSide;
+    // who survives on the winning side: picked at random (the uncountered ones more likely) while the point margin lasts; at least one
+    const pool = sides[wSide].filter(e => e.army), foesOfW = keys.filter(o => o !== wSide).flatMap(o => sides[o]), countered = arCounters(foesOfW, pool).hit;
+    const alive = new Set(); let budget = Math.max(1, margin);
+    const left = pool.map((e, i) => ({ e, wt: countered.has(i) ? 0.4 : 1 }));
+    while (budget > 0 && left.length) { const tot = left.reduce((x, o) => x + o.wt, 0); let r = Math.random() * tot, k = 0; for (; k < left.length - 1; k++) { r -= left[k].wt; if (r <= 0) break; }
+      const o = left.splice(k, 1)[0]; alive.add(o.e); budget -= arBase(o.e.type); }
+    const rebelt = b.center && b.center[1] < WALL_ROW ? 2 : 1;
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
-      if (!hostile(j.fid, w)) { const keep = a.troops.slice().sort((x, y) => troopStrength([y]) - troopStrength([x])); const k2 = Math.max(1, Math.round(keep.length * (1 - ratio))); if (j.fid !== 'undead') recordDeaths(keep.slice(k2).map(t => t.type), b.center && b.center[1] < WALL_ROW ? 2 : 1); a.troops = keep.slice(0, k2).map(t => ({ ...t, hp: t.maxHp || t.hp, mana: t.manaMax ?? t.mana })); }
-      else { if (j.fid !== 'undead') recordDeaths(a.troops.map(t => t.type), b.center && b.center[1] < WALL_ROW ? 2 : 1); a.dead = true; } }
-    const sc = b.siegeCity && game.cities.find(c => c.id === b.siegeCity);
+      if (sideOf(j.fid) === wSide) { const mineE = pool.filter(e => e.j === j), keep = mineE.filter(e => alive.has(e)).map(e => ({ ...e.t, hp: e.t.maxHp || e.t.hp, mana: e.t.manaMax ?? e.t.mana }));
+        if (j.fid !== 'undead') recordDeaths(mineE.filter(e => !alive.has(e)).map(e => e.type), rebelt);
+        a.troops = [...keep, ...a.troops.slice(j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS)]; if (!a.troops.length) a.dead = true; }
+      else { if (j.fid !== 'undead') recordDeaths(a.troops.map(t => t.type), rebelt); a.dead = true; } }
+    for (const u of units) if (u.inBattle === b.id) u.inBattle = null;
+    const nm = k => { const fid = (b.joined.find(j => sideOf(j.fid) === k) || {}).fid; return fid ? teamName(fid) : k; };
+    toast(`⚡ Auto resolve · ${order.map(k => `${nm(k)} ${Math.round(val[k])}`).join(' vs ')} · ${nm(wSide)} wins, ${alive.size} unit${alive.size === 1 ? '' : 's'} left`);
     if (sc && w && hostile(sc.owner, w)) { const att = units.find(u => u.team === w && !u.dead && b.joined.some(j => j.id === u.id)); if (att) { att.col = sc.col; att.row = sc.row; } game.pending = { type: 'capture', city: sc.id, by: w, army: att ? att.id : null }; }
     units = units.filter(u => !u.dead && !(u.troops && !u.troops.length)); game.bt = null;
     checkDefeats(); commit({ type: 'ai' }); resolvePendingAI();
+  }
+  function autoResolveBattle() { arResolve(bt()); }  // nobody human involved
+  // the players in a battle may agree (each one presses it) to auto resolve it instead of fighting it out
+  const arHumans = b => [...new Set(b.joined.map(j => j.fid))].filter(f => faction(f) && !faction(f).ai && !faction(f).undead);
+  function autoResVote(fid, seat) {
+    const b = bt(); if (!b || game.view !== 'battle' || b.phase !== 'place' || (seat && seat !== fid) || !arHumans(b).includes(fid)) return;
+    b.arVote = { ...(b.arVote || {}), [fid]: true }; commit({ type: 'battle-ask' });
+    if (arHumans(b).every(f => b.arVote[f])) setTimeout(() => autoResolveNow(), 300);
+  }
+  function autoResolveNow() {                         // from the placement screen: back to the campaign map, then settle it
+    const b = bt(); if (!b || game.view !== 'battle' || !game.campaign) return;
+    units = game.campaign.armies.map(runtimeUnit); game.round = game.campaign.round; game.turn = b.P;
+    game.campaign = null; game.view = 'campaign'; game.battle = false; selUnit = null; sel = null; selCity = null; floats = []; projectiles = [];
+    syncTeams(); ensureLayers(); centerOnUnits(); arResolve(b);
   }
   // ---------- ops: friends send these to the host, the host applies and shares ----------
   function requestOp(op) {
@@ -1781,6 +1832,7 @@
     if (op.op === 'place') placeUnitOp(op.id, [op.col, op.row], seat);
     if (op.op === 'ready') readyOp(op.fid, seat);
     if (op.op === 'auto') autoOp(op.fid, seat);
+    if (op.op === 'autores') autoResVote(op.fid, seat);
     if (op.op === 'answer') answerAsk(op.i, op.yes, seat);
     if (op.op === 'join') joinRunningBattle(op.id, seat);
   }
@@ -4674,8 +4726,10 @@
     const b = bt(), me = viewer(); let html = '';
     if (b.phase === 'place' || b.phase === 'reinforce') {
       const mine = placingSides().includes(me);
-      html = mine ? `<div class="t">⚔ Place your army</div><div class="k">Click one of your units, then right-click a free tile inside your coloured zone. Nobody else can see your units until everyone is ready.</div><div class="row">${btn('data-bt="ready"', '✔ Ready', true)}</div>`
-        : `<div class="t">⚔ Waiting</div><div class="k">${placingSides().map(f => faction(f).name).join(', ') || '…'} ${placingSides().length === 1 ? 'is' : 'are'} still placing ${b.phase === 'reinforce' ? 'their arriving army' : 'their units'}.</div>`;
+      const hs = b.phase === 'place' ? arHumans(b) : [], iVote = hs.includes(me), voted = hs.filter(f => (b.arVote || {})[f]);
+      const arRow = iVote ? `<div class="row" style="margin-top:6px">${btn('data-bt="autores"', (b.arVote || {})[me] ? '⚡ Auto resolve · waiting for the others' : '⚡ Auto resolve', !(b.arVote || {})[me])}</div><div class="k">${hs.length > 1 ? `Every player in this battle has to press it (${voted.length}/${hs.length}).` : 'Settle it at once by unit values and counters, without fighting it out.'}</div>` : '';
+      html = mine ? `<div class="t">⚔ Place your army</div><div class="k">Click one of your units, then right-click a free tile inside your coloured zone. Nobody else can see your units until everyone is ready.</div><div class="row">${btn('data-bt="ready"', '✔ Ready', true)}</div>${arRow}`
+        : `<div class="t">⚔ Waiting</div><div class="k">${placingSides().map(f => faction(f).name).join(', ') || '…'} ${placingSides().length === 1 ? 'is' : 'are'} still placing ${b.phase === 'reinforce' ? 'their arriving army' : 'their units'}.</div>${arRow}`;
     } else {
       const inc = b.joined.filter(j => j.dist === 2 && !j.spawned), next = REINF_ROUND * Math.ceil(game.round / REINF_ROUND);
       html = `<div class="t">⚔ Battle · round ${game.round}${battleLimit() ? ` / ${battleLimit()}` : ''}</div><div class="k">${inc.length ? ` ${[...new Set(inc.map(j => faction(j.fid).name))].join(', ')} arrive${inc.length === 1 ? 's' : ''} at round ${REINF_ROUND}.` : ''}</div>`;
@@ -4685,7 +4739,7 @@
     if (campEl.dataset.h !== html) { campEl.dataset.h = html; campEl.innerHTML = html; }
     campEl.style.display = 'block';
   }
-  campEl.addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.dataset.bt === 'ready') requestOp({ op: 'ready', fid: viewer() }); if (b && b.dataset.bt === 'auto') requestOp({ op: 'auto', fid: viewer() }); });
+  campEl.addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.dataset.bt === 'ready') requestOp({ op: 'ready', fid: viewer() }); if (b && b.dataset.bt === 'auto') requestOp({ op: 'auto', fid: viewer() }); if (b && b.dataset.bt === 'autores') requestOp({ op: 'autores', fid: viewer() }); });
   function battleSidesHtml() {
     const b = bt(), list = shadowSt && spectating() ? shadowSt.units : units.map(u => ({ team: u.team, enter: u.enter, placing: u.placing }));
     return [...b.sides, ...b.waiting].map(fid => { const f = faction(fid), n = list.filter(u => u.team === fid && !(u.enter > (shadowSt && spectating() ? shadowSt.round : game.round))).length;
