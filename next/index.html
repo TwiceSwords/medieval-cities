@@ -112,7 +112,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.28-preview</div>
+  <div class="t">Medieval Cities 3D · v3.29-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1774,7 +1774,7 @@
     u.col = h[0]; u.row = h[1]; commit({ type: 'place' });
   }
   function autoOp(fid, seat) {                      // "Auto-fight" toggle: the AI plays this player's side until they press it again
-    const b = bt(); if (!b || !fid || (seat && seat !== fid) || !(game.opts && game.opts.autoFight)) return;
+    const b = bt(); if (!b || !fid || (seat && seat !== fid) || !(autoFightOn())) return;
     if (autoFor(fid)) { b.auto = b.auto.filter(f => f !== fid); if (b.phase !== 'fight') b.ready[fid] = false; commit({ type: 'battle-auto' }); toast(`🎮 ${faction(fid).name} takes back control`); return; }
     b.auto = [...new Set([...(b.auto || []), fid])]; b.ready[fid] = true; commit({ type: 'battle-auto' }); toast(`⚡ ${faction(fid).name} fights this battle by itself`); checkPlacementDone();
   }
@@ -2121,7 +2121,9 @@
   const undeadArmies = () => units.filter(u => u.troops && u.team === 'undead' && u.dying === null);
   let phoneSaid = 0;
   const IS_PHONE = (() => { try { return matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches; } catch (e) { return false; } })();   // a finger, not a mouse
-  const compactOn = () => !!(game.opts && (game.opts.compactUndead || Object.keys(game.opts.phones || {}).length));   // Compact horde: on by choice, or whenever someone plays on a phone
+  const autoFightOn = () => !(game.opts && game.opts.autoFight === false);   // the Auto-fight button is on unless the host switches it off
+  const compactOn = () => true;   // for now always Compact: a fifth as many skeletons, each 24/6 (the Full/Compact setting is hidden)
+  const compactOnOld = () => !!(game.opts && (game.opts.compactUndead || Object.keys(game.opts.phones || {}).length));   // Compact horde: on by choice, or whenever someone plays on a phone
   const strongSkel = extra => ({ ...troop('skeleton'), hp: 24, maxHp: 24, dmgBought: 4, strong: true, ...(extra || {}) });   // 24 HP / 6 damage: stands for 5 plain ones
   const skels = (n, extra) => compactOn() ? Array.from({ length: n > 0 ? Math.max(1, Math.round(n * 0.2)) : 0 }, () => strongSkel(extra)) : Array.from({ length: n }, () => ({ ...troop('skeleton'), ...(extra || {}) }));
   function compactArmies() {                           // Compact horde switched on mid-game: every 5 plain skeletons become 1 strong one
@@ -4759,13 +4761,12 @@
       <div class="lsub">🗺 Map: ${[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']].map(([k, l]) => host ? `<button data-msize="${k}" class="${((game.opts && game.opts.mapSize) || 'medium') === k ? 'on' : ''}">${l}</button>` : (((game.opts && game.opts.mapSize) || 'medium') === k ? `<b>${l}</b>` : '')).join(' ')}</div>
       <div class="lsub">⚡ ${tr('AI battle speed')}: ${[1, 2, 4, 8].map(k => host ? `<button data-aispd="${k}" class="${((game.opts && game.opts.aiSpeed) || 1) === k ? 'on' : ''}">${k}×</button>` : (((game.opts && game.opts.aiSpeed) || 1) === k ? `<b>${k}×</b>` : '')).join(' ')} · ${tr('battle turns played by the AI (AI realms, or your side on auto-fight) run this much faster')}</div>
       <div class="lsub">⌛ ${tr('Battle turn limit')}: ${host ? `<input id="lbturns" type="number" min="0" max="999" value="${battleLimit()}" style="width:64px">` : `<b>${battleLimit() || tr('none')}</b>`} · ${tr('when it runs out, every side goes back to the campaign map with its survivors (0 = no limit)')}</div>
-      <div class="lsub">💀 ${tr('Horde size')}: ${[[false, 'Full'], [true, 'Compact']].map(([k, l]) => host ? `<button data-compact="${k ? 1 : 0}" class="${!!(game.opts && game.opts.compactUndead) === k ? 'on' : ''}">${tr(l)}</button>` : (!!(game.opts && game.opts.compactUndead) === k ? `<b>${tr(l)}</b>` : '')).join(' ')} · ${tr('Compact: a fifth as many skeletons, each 4× the health and 3× the damage (24/6). Lighter on slower PCs and phones.')}${Object.keys((game.opts && game.opts.phones) || {}).length ? ` <b>📱 ${tr('On: someone is playing on a phone.')}</b>` : ''}</div>
       <div class="lsub">🧟 Undead: ${[['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['extreme', 'Extreme']].map(([k, l]) => host ? `<button data-udiff="${k}" class="${((game.opts && game.opts.undeadDiff) || 'easy') === k ? 'on' : ''}">${l}</button>` : (((game.opts && game.opts.undeadDiff) || 'easy') === k ? `<b>${l}</b>` : '')).join(' ')} · ${tr({ easy: 'normal waves', medium: '1.5× skeletons each wave', hard: '2× skeletons each wave', extreme: '2× skeletons each wave, and every living unit that dies rises twice as often' }[(game.opts && game.opts.undeadDiff) || 'easy'])}</div>
       <div class="lsub">${n} faction${n === 1 ? '' : 's'} · ${spotsFor(n)} city spots + 2 rich ones beyond the ice wall · each faction starts with 1 city and 1 army of 1 swordsman.</div>
       <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 3 passive gold a turn instead of 1</div>
       <div class="lsub">${host ? `<button id="lgod" class="${game.opts && game.opts.god ? 'on' : ''}">👁 God mode: ${game.opts && game.opts.god ? 'On' : 'Off'}</button>` : `👁 God mode: ${game.opts && game.opts.god ? 'On' : 'Off'}`} · every realm (yours too) is played by the AI; you watch everything with no fog, battles are fought out on the board and the camera follows the action</div>
       <div class="lsub">${host ? `<button id="lcoop" class="${game.opts && game.opts.coop ? 'on' : ''}">🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}</button>` : `🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}`} · all players are one team against all AI realms; each team shares its sight</div>
-      <div class="lsub">${host ? `<button id="lauto" class="${game.opts && game.opts.autoFight ? 'on' : ''}">⚡ Auto-fight button: ${game.opts && game.opts.autoFight ? 'On' : 'Off'}</button>` : `⚡ Auto-fight button: ${game.opts && game.opts.autoFight ? 'On' : 'Off'}`} · players get a button in battles that lets the AI fight it out for their side</div>
+      <div class="lsub">${host ? `<button id="lauto" class="${autoFightOn() ? 'on' : ''}">⚡ Auto-fight button: ${autoFightOn() ? 'On' : 'Off'}</button>` : `⚡ Auto-fight button: ${autoFightOn() ? 'On' : 'Off'}`} · players get a button in battles that lets the AI fight it out for their side</div>
       ${game.opts && game.opts.coop ? `<div class="lsub">Teams start: ${[['ends', '↕ North vs South'], ['side', '↔ Side by side, both by the wall']].map(([k, l]) => host ? `<button data-coopl="${k}" class="${((game.opts.coopLayout || 'ends') === k) ? 'on' : ''}">${l}</button>` : ((game.opts.coopLayout || 'ends') === k ? `<b>${l}</b>` : '')).join(' ')}</div>` : ''}
       ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
         return `<div class="lsub">${host ? `<button id="${id}" class="${on ? 'on' : ''}">${lab}: ${on ? 'On' : 'Off'}</button>` : `${lab}: ${on ? 'On' : 'Off'}`} · ${txt} · the AI plays by the same fog</div>`; }).join('')}
@@ -4780,7 +4781,7 @@
     if (b.dataset && b.dataset.lang) { setLang(b.dataset.lang); return; }
     if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
     if ((b.id === 'lfogc' || b.id === 'lfogb') && isHost()) { const k = b.id === 'lfogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: !!(game.opts && game.opts[k] === false) }; commit({ type: 'setup' }); return; }
-    if (b.id === 'lauto' && isHost()) { game.opts = { ...(game.opts || {}), autoFight: !(game.opts && game.opts.autoFight) }; commit({ type: 'setup' }); return; }
+    if (b.id === 'lauto' && isHost()) { game.opts = { ...(game.opts || {}), autoFight: !autoFightOn() }; commit({ type: 'setup' }); return; }
     if (b.id === 'lgod' && isHost()) { game.opts = { ...(game.opts || {}), god: !(game.opts && game.opts.god) }; commit({ type: 'setup' }); return; }
     if (b.dataset && b.dataset.mshape && isHost()) { game.opts = { ...(game.opts || {}), mapShape: b.dataset.mshape }; commit({ type: 'setup' }); return; }
     if (b.dataset && b.dataset.msize && isHost()) { game.opts = { ...(game.opts || {}), mapSize: b.dataset.msize }; commit({ type: 'setup' }); return; }
@@ -5176,7 +5177,7 @@
       const inc = b.joined.filter(j => j.dist === 2 && !j.spawned), next = REINF_ROUND * Math.ceil(game.round / REINF_ROUND), godAr = !arHumans(b).length && isHost() && !undeadFight(b);
       html = `<div class="t">⚔ Battle · round ${game.round}${battleLimit() ? ` / ${battleLimit()}` : ''}</div><div class="k">${inc.length ? ` ${[...new Set(inc.map(j => faction(j.fid).name))].join(', ')} arrive${inc.length === 1 ? 's' : ''} at round ${REINF_ROUND}.` : ''}</div>${godAr ? `<div class="row">${btn('data-bt="autores"', '⚡ Auto resolve', true)}</div><div class="k">${tr('Settles it from the armies as they started this battle.')}</div>` : ''}`;
     }
-    if (game.opts && game.opts.autoFight && me && Object.keys({ ...b.zones, ...b.pockets }).includes(me) && !(faction(me) || {}).ai)
+    if (autoFightOn() && me && Object.keys({ ...b.zones, ...b.pockets }).includes(me) && !(faction(me) || {}).ai)
       html += `<div class="k" style="color:${autoFor(me) ? '#ffd27a' : '#9fd8a0'};font-weight:600">${autoFor(me) ? '⚡ Auto-fight ON · the AI is fighting for you' : '🎮 You are in control'}</div><div class="row">${btn('data-bt="auto"', autoFor(me) ? '🎮 Take control back' : '⚡ Auto-fight this battle', true)}</div>`;
     if (campEl.dataset.h !== html) { campEl.dataset.h = html; campEl.innerHTML = html; }
     campEl.style.display = 'block';
