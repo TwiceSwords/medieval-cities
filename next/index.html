@@ -112,7 +112,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.29-preview</div>
+  <div class="t">Medieval Cities 3D · v3.30-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -4440,7 +4440,7 @@
     else u[cur] = Math.min(u[max], clampRes(v));
   }
   function healHeroes() { if (!dmActive() || busy()) return; for (const u of units) if (u.team === 'blue') u.hp = u.maxHp; commit({ type: 'edit' }); toast('All heroes healed'); }
-  let room = null, mode = 'local', mySeat = null, peerList = [], lastRemote = null, lastRemoteFrom = null;
+  let room = null, mode = 'local', mySeat = null, peerList = [], lastRemote = null, lastRemoteFrom = null, playPending = null;
   const netEl = document.getElementById('net');
   function publish(last) {
     if (room) room.presence({ seat: mode === 'online' ? mySeat : null, g: exportState(last) }).catch(() => {});
@@ -4550,7 +4550,9 @@
       if (d.pong && typeof d.hs === 'number') {      // step-check: still behind the host after two pings, or a different turn at the same point? ask for the host's game
         const behind = !busy() && !lastRemote && (d.hs > game.seq || (d.hs === game.seq && (d.ht !== game.turn || d.hr !== game.round)));
         c.behind = behind ? (c.behind || 0) + 1 : 0;
-        if (c.behind >= 2) { c.behind = 0; nlog('out of step, asking the host', { mine: game.seq, host: d.hs, turn: [game.turn, d.ht] }); try { c.send({ resync: `${game.seq}<${d.hs}` }); } catch (e) {} } }
+        if (c.behind >= 2) { c.behind = 0; nlog('out of step, asking the host', { mine: game.seq, host: d.hs, turn: [game.turn, d.ht] }); try { c.send({ resync: `${game.seq}<${d.hs}` }); } catch (e) {} }
+        c.ahead = !busy() && d.hs < game.seq && game.by === mySeat ? (c.ahead || 0) + 1 : 0;   // my last update hasn't reached the host after 3 pings: send it again
+        if (c.ahead >= 3) { c.ahead = 0; nlog('host is behind me, sending again', { mine: game.seq, host: d.hs }); publish(null); } }
       if (d.g && d.force && validState(d.g)) { const lost = game.seq > d.g.seq || (game.seq === d.g.seq && game.by !== d.g.by) || game.turn !== d.g.turn; nlog('host resynced me', { mine: game.seq, host: d.g.seq, lost });
         lastRemote = null; floats = []; selUnit = null; sel = null; group = []; armed = null; applyState(d.g); refreshUI();
         if (lost) toast('⚠ Your game was out of step with the host · it is back in step now · if your last move is gone, please do it again'); return; }
@@ -4689,12 +4691,12 @@
     if (from && p2p.role === 'host' && (st.seq < game.seq || (st.seq === game.seq && st.by && st.by !== game.by)) && st.by === from.seat) { resyncFriend(from, `his ${st.seq} vs host ${game.seq}`); return; }   // he moved on from an old game
     if (p2p.needSync) { p2p.needSync = false; if (p2p.role === 'join' && !mySeat) mySeat = null; if (busy()) { lastRemote = null; } floats = []; selUnit = null; sel = null; applyState(st); toast('Joined the host\'s game'); return; }
     if (st.seq < game.seq || (st.seq === game.seq && p2p.role !== 'join')) return;   // on a tie the host's game wins
-    if (from) from.acc = Math.max(from.acc || 0, st.seq);
     if (busy()) { lastRemote = st; lastRemoteFrom = from || null; return; }   // finish current animation first
+    if (from) from.acc = Math.max(from.acc || 0, st.seq);   // taken (only now, not while it waited)
     const a = st.last;
     if (a && a.seq === st.seq && st.seq === game.seq + 1 && ACTIONS.includes(a.type) && !document.hidden && !(st.view === 'battle' && st.bt && !(st.bt.sides.includes(viewer()) || (st.bt.waiting || []).includes(viewer())))) {   // a hidden tab doesn't animate: just jump to the result
-      game.seq = st.seq;                                     // claim it so we don't replay twice
-      play(a, () => { applyState(st); publish(st.last); });  // then keep a copy in my presence too
+      game.seq = st.seq; playPending = st;                   // claim it so we don't replay twice (and keep it: if the animation hangs, the watchdog applies it anyway)
+      play(a, () => { if (playPending === st) playPending = null; applyState(st); publish(st.last); });  // then keep a copy in my presence too
     } else {
       if (a && a.type === 'reset') { floats = []; projectiles = []; }
       applyState(st); publish(st.last);
@@ -6080,7 +6082,13 @@
   { const jc = codeFrom(location.search); if (jc) { try { history.replaceState(null, '', location.pathname); } catch (e) {} setTimeout(() => { toast(`Joining game ${jc}…`); p2pJoin(jc); }, 900); } }
   let stuckSince = 0;
   setInterval(() => {
-    if (lastRemote && busy() && (document.hidden || performance.now() - lastFrameAt > 500)) { stuckSince = stuckSince || Date.now(); if (Date.now() - stuckSince > 1500) { for (const u of units) { u.path = null; u.atk = null; } units = units.filter(u => u.dying === null); projectiles = []; afterIdle = null; } } else stuckSince = 0;
+    if ((lastRemote || playPending) && busy()) {     // an animation holding up the other player's update: background tabs after 1.5 s, a visible one after 8 s (an animation that hung)
+      stuckSince = stuckSince || Date.now(); const bg = document.hidden || performance.now() - lastFrameAt > 500;
+      if (Date.now() - stuckSince > (bg ? 1500 : 8000)) {
+        if (!bg) try { nlog('stuck animation cleared', { walking: units.filter(u => u.path).map(u => u.type).slice(0, 6), hitting: units.filter(u => u.atk).map(u => u.type).slice(0, 6), dying: units.filter(u => u.dying !== null).length, shots: projectiles.length, after: !!afterIdle, hold: holding(), seq: game.seq, theirs: lastRemote && lastRemote.seq }); } catch (e) {}
+        for (const u of units) { u.path = null; u.atk = null; } units = units.filter(u => u.dying === null); projectiles = []; afterIdle = null; holdUntil = 0; stuckSince = 0;
+        if (playPending) { const st = playPending; playPending = null; applyState(st); publish(st.last); } } }
+    else stuckSince = 0;
     if ((document.hidden || performance.now() - lastFrameAt > 500) && busy()) { try { for (let i = 0; i < 12; i++) { updateUnits(0.05); turnUnits(0.05); } } catch (e) { console.error(e); } }   // a background tab gets no animation frames: keep the moves (and the AI that waits for them) going
     if (lastRemote && !busy()) { const st = lastRemote, fr = lastRemoteFrom; lastRemote = null; lastRemoteFrom = null; onRemoteState(st, fr); } try { aiTick(); } catch (e) { console.error(e); }
     if (IS_PHONE && Date.now() > phoneSaid + 3000 && !((game.opts || {}).phones || {})[(mode === 'online' ? mySeat : null) || 'local'] && (mode !== 'online' || p2p.role === 'host' || (p2p.conn && mySeat))) { phoneSaid = Date.now(); requestOp({ op: 'device', phone: true }); }   // tell the game a phone is playing
