@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.12-preview</div>
+  <div class="t">Medieval Cities 3D · v3.13-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -884,6 +884,13 @@
       const rg = new T3.RingGeometry(U * 0.5 / K, U * 0.6 / K, 40); rg.rotateX(-Math.PI / 2);
       o.ring = new T3.Mesh(rg, new T3.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false })); o.ring.position.y = 0.15; group.add(o.ring); o.mats.push(o.ring.material);
     }
+    if (tag && tag.u && ['uking', 'uqueen'].includes(tag.u.type)) {   // the Undead King / Queen: a cold blue-grey aura
+      const ag = new T3.CylinderGeometry(U * 0.5 / K, U * 0.78 / K, U * 1.9 / K, 32, 1, true); ag.translate(0, U * 0.95 / K, 0);
+      o.aura = new T3.Mesh(ag, new T3.MeshBasicMaterial({ color: 0xa8d8ff, transparent: true, opacity: 0.16, depthWrite: false, side: T3.DoubleSide, blending: T3.AdditiveBlending })); group.add(o.aura);
+      const dg = new T3.CircleGeometry(U * 1.0 / K, 40); dg.rotateX(-Math.PI / 2);
+      o.auraDisc = new T3.Mesh(dg, new T3.MeshBasicMaterial({ color: 0xc8e4f4, transparent: true, opacity: 0.3, depthWrite: false, blending: T3.AdditiveBlending })); o.auraDisc.position.y = 0.2; group.add(o.auraDisc);
+      o.auraLight = new T3.PointLight(0x9cc8ff, 1.6, 240 / K, 1.4); o.auraLight.position.set(0, U * 1.0 / K, 0); group.add(o.auraLight);
+    }
     group.scale.setScalar(K); R3.scene.add(group); R3.pool.set(key, o); return o;
   }
   // called instead of painting when the 3D renderer is on (same arguments as drawMesh)
@@ -897,6 +904,9 @@
     if (o.ring && tag.u) { const tc = TEAM[tag.u.team] || [200, 200, 200]; srgb([tc[0] + 40, tc[1] + 40, tc[2] + 40], o.ring.material.color); }
     const fl = flash * 0.65;
     for (const m of o.mats) if (m.emissive) m.emissive.setRGB(fl * 0.9, fl * 0.2, fl * 0.15);
+    if (o.aura) { const pu = 0.5 + 0.5 * Math.sin(t0() * 2.2 + o.group.position.x * 0.02);   // a slow cold pulse
+      o.aura.material.opacity = (0.1 + 0.1 * pu) * alpha; o.aura.rotation.y = t0() * 0.5; o.auraDisc.material.opacity = (0.2 + 0.18 * pu) * alpha; o.auraLight.intensity = (1.1 + 1.1 * pu) * alpha;
+      if (!fl) for (const m of o.mats) if (m.emissive) m.emissive.setRGB(0.05 + 0.04 * pu, 0.1 + 0.06 * pu, 0.17 + 0.08 * pu); }
     for (const m of o.mats) if (m.isMeshLambertMaterial && !o.model) { const d = tag.dim ? 0.55 : 1; m.color.setRGB(d, d, d); }
     if (tag.gold) { const pu = 0.5 + 0.5 * Math.sin(t0() * 2.4 + o.group.position.x * 0.01);
       for (const m of o.mats) if (m.emissive) m.emissive.setRGB(0.32 + 0.18 * pu, 0.2 + 0.12 * pu, 0.02);
@@ -1133,7 +1143,7 @@
         ...(u.cards ? { cards: u.cards } : {}), ...(u.tauntR ? { tauntR: u.tauntR } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}),
         ...(u.dots && u.dots.length ? { dots: u.dots } : {}), ...(u.skillUsed ? { skillUsed: true } : {}),
         ...(u.raining ? { raining: true } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}), ...(u.watch ? { watch: u.watch } : {}), ...(u.rain && u.rain.length ? { rain: u.rain } : {}),
-        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
+        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.risen ? { risen: true } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
     CROWS = rowsOf(st); CCOLS = colsOf(st); BCOLS = (st.bt && st.bt.cols) || BASE_B; BROWS = (st.bt && st.bt.rows) || BASE_B;
@@ -1759,8 +1769,8 @@
     const alive = units.filter(u => u.dying === null && u.hp > 0);
     const bySrc = {}; for (const u of alive) { const src = String(u.id).replace(/\.\d+$/, ''); (bySrc[src] = bySrc[src] || []).push(u); }
     const aliveIds = new Set(alive.map(u => u.id)), rost = b.roster || [];
-    recordDeaths(rost.filter(r => r.team !== 'undead' && !aliveIds.has(r.id)).map(r => r.type), b.center && b.center[1] < WALL_ROW ? 2 : 1);   // Frostgate (on the wall row) doesn't count as beyond
-    if (game.undead) game.undead.pool.push(...alive.filter(u => u.team === 'undead' && rost.some(r => r.id === u.id && r.team !== 'undead')).map(u => u.type));   // the turned march with the dead
+    recordDeaths(rost.filter(r => r.team !== 'undead' && !aliveIds.has(r.id) && !(b.rose || []).includes(r.id)).map(r => r.type), b.center && b.center[1] < WALL_ROW ? 2 : 1);   // the ones that rose in the battle aren't counted twice   // Frostgate (on the wall row) doesn't count as beyond
+    if (game.undead) game.undead.pool.push(...alive.filter(u => u.team === 'undead' && (u.risen || rost.some(r => r.id === u.id && r.team !== 'undead'))).map(u => u.type));   // the turned and the risen go north, to the host
     units = game.campaign.armies.map(runtimeUnit);
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
       if ((draw || !hostile(j.fid, w)) && (j.dist <= 1 || j.spawned)) a.troops = [...survivorsOf((bySrc[j.id] || []).filter(u => u.team === j.fid)), ...((b.unspawned || {})[j.id] || []), ...a.troops.slice(j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS)];
@@ -1966,7 +1976,7 @@
     const s2 = sg(), k = key(...h), p = s2.pieces[k]; if (!p) return;
     if (p.kind === 'gate') { for (const kk of Object.keys(s2.pieces)) if (s2.pieces[kk].kind === 'gate') delete s2.pieces[kk]; floatAt(h, 'GATE BROKEN!', '#ffcf6a'); }
     else { delete s2.pieces[k]; floatAt(h, 'WALL DOWN!', '#ffcf6a');
-      for (const u of units) if (u.col === h[0] && u.row === h[1] && !u.climb && u.dying === null) { u.hp = 0; u.dying = 0; } }   // whoever stood on it falls with it
+      for (const u of units) if (u.col === h[0] && u.row === h[1] && !u.climb && u.dying === null) { u.hp = 0; u.dying = 0; riseOnDeath(u); } }   // whoever stood on it falls with it
     for (const l of s2.ladders.filter(l => !s2.pieces[key(...l.w)])) for (const u of units) if (u.climb && u.col === l.g[0] && u.row === l.g[1]) u.climb = 0;
     s2.ladders = s2.ladders.filter(l => s2.pieces[key(...l.w)]);
     const m = tileAt(h); effects.push({ x: m.x, y: m.y, t: 0, color: '170,160,140', r: 70 });
@@ -1992,7 +2002,7 @@
       else { u.climb = 0; u.col = l.w[0]; u.row = l.w[1]; if (u === selUnit) sel = [u.col, u.row]; floatOn(u, 'ON THE WALL!', '#ffd27a'); }
       return true; }
     if (a.type === 'gate') { const s2 = sg(); s2.gateOpen = !!a.open; s2.gateChanged = `${game.round}:${game.turn}`; u.attacked = true; u.moved = true;
-      if (!a.open) for (const o of units) if (wallAt([o.col, o.row]) && wallAt([o.col, o.row]).kind === 'gate' && o.dying === null) { o.hp = 0; o.dying = 0; floatOn(o, 'CRUSHED', '#ff5a46'); }
+      if (!a.open) for (const o of units) if (wallAt([o.col, o.row]) && wallAt([o.col, o.row]).kind === 'gate' && o.dying === null) { o.hp = 0; o.dying = 0; floatOn(o, 'CRUSHED', '#ff5a46'); riseOnDeath(o); }
       floatOn(u, a.open ? 'GATE OPENED' : 'GATE CLOSED', '#ffd27a'); return true; }
     return false;
   }
@@ -2967,7 +2977,22 @@
     if (!t || t.dying !== null || t.hp <= 0) return;
     t.hp = Math.max(0, t.hp - amt); t.flash = 1;
     const p = upos(t); addFloat(p.x + 18, p.y - headY(t) - 40, `-${amt}`, '#ff5a46', 22);
-    if (t.hp === 0) t.dying = 0;
+    if (t.hp === 0) { t.dying = 0; riseOnDeath(t); }
+  }
+  function riseOnDeath(t) {                           // a living unit that falls in a battle against the undead rises as one of them, on the spot
+    const b = bt(); if (!b || game.view !== 'battle' || !(b.sides || []).includes('undead')) return;
+    if (!t || t.team === 'undead' || !UNIT_TYPES[t.type] || T(t).structure || T(t).big || SIEGE.includes(t.type) || (b.rose || []).includes(t.id)) return;
+    const here = [t.col, t.row], other = h => units.some(o => o !== t && o.dying === null && o.hp > 0 && (o.col === h[0] && o.row === h[1] || (T(o).big && hexDist(h, [o.col, o.row]) <= 1)));
+    let spot = other(here) ? null : here;
+    if (!spot) {                                       // taken: a random free tile nearby, towards the undead
+      const ud = units.filter(o => o.team === 'undead' && o.dying === null && o.hp > 0), dU = h => ud.reduce((m, o) => Math.min(m, hexDist(h, [o.col, o.row])), 99), d0 = dU(here), c = [];
+      for (let dc = -5; dc <= 5; dc++) for (let dr = -5; dr <= 5; dr++) { const h = [t.col + dc, t.row + dr]; if (!onBoard(h) || hexDist(h, here) > 4 || blockedTile(h) || unitAt(h)) continue; if (!ud.length || dU(h) < d0) c.push(h); }
+      if (!c.length) for (let dc = -5; dc <= 5; dc++) for (let dr = -5; dr <= 5; dr++) { const h = [t.col + dc, t.row + dr]; if (onBoard(h) && hexDist(h, here) <= 4 && !blockedTile(h) && !unitAt(h)) c.push(h); }
+      c.sort((x, y) => hexDist(x, here) - hexDist(y, here)); const pick = c.slice(0, 6); spot = pick.length ? pick[Math.floor(roll() * pick.length)] : null; }
+    if (!spot) return;
+    const r = runtimeUnit({ ...halfTroop(t.type), ...(T(t).hero ? { cards: { passive: null, skills: [null, null, null] } } : {}), id: `risen.${t.id}`, team: 'undead', col: spot[0], row: spot[1], face: t.face || 0, moved: true, attacked: true, risen: true });
+    units.push(r); r.flash = 1; floatOn(r, 'RISES!', '#9fd8ff', 0, 18);
+    b.rose = [...(b.rose || []), t.id];
   }
   // stun: a unit stunned during its own side's turn loses the rest of that turn; otherwise it skips its next turn
   function stunUnit(u) {
@@ -3745,9 +3770,17 @@
       }
       { const tk = u.team + ':' + (TEAM[u.team] || TEAM.blue).join(); if (u.meshTeam !== tk) { u.meshTeam = tk; if (u.type === 'warrior') u.meshKey = null; else u.mesh = meshFor(u.type, u.team); } }   // a unit made before its faction colour was known (load, sync) would stay blue: rebuild it in the right colour
       if (u.type === 'warrior') { const w = weaponOf(u); if (u.meshKey !== w) { u.mesh = meshFor('warrior', u.team, w); u.meshKey = w; } }
+      const icy = u.type === 'uking' || u.type === 'uqueen';
+      if (icy && !R3.on) { const pu = 0.5 + 0.5 * Math.sin(t * 2.2 + u.col);   // 2D: the cold aura under the King / Queen
+        const g = ctx.createRadialGradient(bx, by - 12, 2, bx, by - 12, U * 1.05); g.addColorStop(0, `rgba(200,230,255,${0.32 + 0.18 * pu})`); g.addColorStop(0.55, `rgba(140,180,215,${0.18 + 0.1 * pu})`); g.addColorStop(1, 'rgba(120,150,180,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(bx, by - 12, U * 1.05, U * 1.15, 0, 0, 7); ctx.fill(); }
       R3.tag = { key: 'unit:' + u.id, u, gy: groundY(u), ringA: spent ? 0.25 : 0.75 };
       drawMesh(ctx, u.mesh, bx, by - walk * 0.6 + Math.max(0, (u.dying || 0) - 0.5) * 8, u.face, t + u.phase, u.flash, dz ? 1 : 0,
         T(u).structure ? null : { walk: u.path && u.path.length && !u.push && !u.climb ? (t + u.phase) * (u.fast ? 16 : 10) : null, atk: u.atk ? Math.min(1, u.atk.t) : 0, die: u.dying !== null ? Math.min(1, u.dying * 1.8) : 0, quad: !!(T(u).mounted || T(u).big) });
+      if (icy && u.dying === null) for (let k = 0; k < 5; k++) {   // frost motes drifting up around the King / Queen
+        const ph = (t * 0.35 + k / 5 + (u.phase || 0)) % 1, a = k * 1.256 + t * 0.6, sx = bx + Math.cos(a) * U * 0.42, sy = by - 6 - ph * headY(u) * 1.1;
+        ctx.save(); ctx.globalAlpha *= (1 - ph) * 0.9; ctx.fillStyle = '#dff2ff'; ctx.shadowColor = 'rgba(150,200,255,0.9)'; ctx.shadowBlur = 6;
+        ctx.beginPath(); ctx.moveTo(sx, sy - 3.2); ctx.lineTo(sx + 2.2, sy); ctx.lineTo(sx, sy + 3.2); ctx.lineTo(sx - 2.2, sy); ctx.closePath(); ctx.fill(); ctx.restore(); }
       if (dz) {                                          // stars circling the head
         const hy = by - headY(u) * 0.9 - 10;
         for (let k = 0; k < 3; k++) {
