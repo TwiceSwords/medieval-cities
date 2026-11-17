@@ -95,7 +95,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.17-preview</div>
+  <div class="t">Medieval Cities 3D · v3.18-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1143,7 +1143,7 @@
         ...(u.cards ? { cards: u.cards } : {}), ...(u.tauntR ? { tauntR: u.tauntR } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}),
         ...(u.dots && u.dots.length ? { dots: u.dots } : {}), ...(u.skillUsed ? { skillUsed: true } : {}),
         ...(u.raining ? { raining: true } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}), ...(u.watch ? { watch: u.watch } : {}), ...(u.rain && u.rain.length ? { rain: u.rain } : {}),
-        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.risen ? { risen: true } : {}), ...(u.summoned ? { summoned: true } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
+        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.risen ? { risen: true } : {}), ...(u.summoned ? { summoned: true } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.raidCity ? { raidCity: u.raidCity } : {}), ...(u.raidDone ? { raidDone: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.raidCity ? { raidCity: u.raidCity } : {}), ...(u.raidDone ? { raidDone: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
     CROWS = rowsOf(st); CCOLS = colsOf(st); BCOLS = (st.bt && st.bt.cols) || BASE_B; BROWS = (st.bt && st.bt.rows) || BASE_B;
@@ -1152,7 +1152,7 @@
     units = st.units.map(s => { const o = old.get(s.id);
       if (!o || o.type !== (UNIT_TYPES[s.type] ? s.type : 'swordsman') || o.team !== s.team) return runtimeUnit(s);
       if (typeof s.face === 'number') o.want = s.face;          // keep facing in sync with the shared game
-      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, climb: s.climb || 0, turner: !!s.turner, released: !!s.released, horde: !!s.horde, fresh: !!s.fresh, replaced: s.replaced || null, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
+      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, climb: s.climb || 0, turner: !!s.turner, released: !!s.released, horde: !!s.horde, raidCity: s.raidCity || null, raidDone: !!s.raidDone, fresh: !!s.fresh, replaced: s.replaced || null, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
       return o; });
     const prevView = game.view;
     game = { seq: st.seq, turn: st.turn, round: st.round, dm: !!st.dm, battle: !!st.battle, types: (st.types && typeof st.types === 'object') ? st.types : {},
@@ -1680,12 +1680,13 @@
     const all = []; for (let r = 1; r < BROWS - 1; r++) for (let c = 1; c < BCOLS - 1; c++) all.push([c, r]);
     for (let tries = 0; n > 0 && tries < 4000; tries++) { const h = all[Math.floor(Math.random() * all.length)]; if (ok(h)) { b.spots.push(h); n--; } }
     if (beyond) {                                      // beyond the Wall: mammoths join the fight, and the host up north grows for good
+      const raid = b.joined.some(j => j.fid === 'undead' && (units.find(u => u.id === j.id) || {}).raidCity) || (game.campaign && game.campaign.armies.some(a => a.raidCity && b.joined.some(j => j.id === a.id)));
       const m = 1 + udStep(), uz = b.zones.undead, room = c => [c, ...nbIn(c[0], c[1], BCOLS, BROWS)].length === 7 && [c, ...nbIn(c[0], c[1], BCOLS, BROWS)].every(q => !blockedTile(q) && !unitAt(q) && !wallAt(q));
       const cand = all.filter(room).sort((x, y) => (uz ? hexDist(x, uz.a) - hexDist(y, uz.a) : 0));
-      for (let i = 0; i < m; i++) { const h = cand.find(room); if (!h) break;
+      for (let i = 0; i < (raid ? 0 : m); i++) { const h = cand.find(room); if (!h) break;
         units.push(runtimeUnit({ ...troop('mammoth'), id: `sum:${b.id}.m${i}`, team: 'undead', col: h[0], row: h[1], face: 0, moved: false, attacked: false, summoned: true, placing: true })); }
       if (game.undead && !b.beyondFed) { b.beyondFed = true; game.undead.extraMammoths = (game.undead.extraMammoths || 0) + m; }
-      toast(`🧟 Beyond the Wall: ${m} mammoth${m > 1 ? 's' : ''} join the dead, and the host up north grows by ${m}`);
+      toast(raid ? `🧟 Beyond the Wall: the host up north grows by ${m} mammoth${m > 1 ? 's' : ''}` : `🧟 Beyond the Wall: ${m} mammoth${m > 1 ? 's' : ''} join the dead, and the host up north grows by ${m}`);
     }
   }
   function darkSpotTick() {                            // the undead's battle turn begins: each spot raises a skeleton, or hurts whoever stands on it
@@ -1695,7 +1696,7 @@
       const sk = runtimeUnit({ ...troop('skeleton'), id: `sum:${b.id}.${game.round}.${i}`, team: 'undead', col: h[0], row: h[1], face: 0, moved: true, attacked: true, summoned: true });
       units.push(sk); sk.flash = 1; floatOn(sk, 'RISES!', '#b98cff', 0, 16); });
   }
-  const exportCampaignUnits = () => units.filter(u => u.dying === null).map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1, face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, ...(u.recruitN ? { recruitN: u.recruitN } : {}), troops: u.troops, ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}) }));
+  const exportCampaignUnits = () => units.filter(u => u.dying === null).map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1, face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, ...(u.recruitN ? { recruitN: u.recruitN } : {}), troops: u.troops, ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.raidCity ? { raidCity: u.raidCity } : {}), ...(u.raidDone ? { raidDone: true } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}) }));
   function spawnTroops(j, zone, enter) {               // put an army's (or city's) troops into its zone: melee in front, ranged behind
     const b = bt(), src = j.kind === 'army' ? (game.campaign.armies.find(u => u.id === j.id) || units.find(u => u.id === j.id)) : game.cities.find(c => c.id === j.id);
     if (!src || !zone) return;
@@ -2108,11 +2109,39 @@
     if (game.undead) game.undead.pool.push(...out);
   }
   function flushPool() { if (!game.undead || !game.undead.pool.length) return; const p = game.undead.pool; game.undead.pool = []; addUndeadTroops(p.map(halfTroop), false); }
+  const northHeld = () => game.cities.filter(c => c.owner && c.owner !== 'undead' && !isUndeadFid(c.owner) && c.row < WALL_ROW);   // living cities beyond the Wall (not Frostgate)
+  function raiseRaiders(main, mult) {                 // an invasion turn: each living city beyond the Wall gets its own army of the dead, right at its gates
+    const ud = game.undead, list = northHeld(); if (!list.length) return;
+    for (const c of list) {
+      const t = nbIn(c.col, c.row, CCOLS, CROWS).filter(q => !impassable(q) && !unitAt(q) && !cityAt(q)).sort((x, y) => x[1] - y[1])[0]; if (!t) continue;
+      const troops = [...Array.from({ length: 1 + udStep() }, () => troop('mammoth')), ...Array.from({ length: Math.round(20 * mult) }, () => troop('skeleton'))];
+      units.push(runtimeUnit({ id: `army-undead-r${c.id}-${game.round}`, type: 'army', team: 'undead', col: t[0], row: t[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: false, released: true, raidCity: c.id, troops })); }
+    ud.raid = { round: game.round, main: main ? main.id : null, phase: 'raids' };
+    toast(`🧟 The dead rise at the gates of ${list.map(c => c.name).join(', ')}`);
+  }
+  function raidStep() {                               // the raids go first, one city at a time; then the main army strikes a city that held
+    const ud = game.undead, rp = ud && ud.raid; if (!rp || rp.round !== game.round || rp.phase === 'done') return false;
+    const raiders = undeadArmies().filter(a => a.raidCity);
+    if (raiders.some(a => a.inBattle) || game.bt) return true;
+    const next = raiders.find(a => !a.raidDone);
+    if (next) { next.raidDone = true; aiState.done.add(next.id); const c = game.cities.find(x => x.id === next.raidCity);
+      if (c && c.owner && c.owner !== 'undead') { aiBusyUntil = Date.now() + 400; commit({ type: 'ai' }); engage(next, c); } return true; }
+    const main = units.find(u => u.id === rp.main && u.troops && !u.dead);
+    if (main) { for (const a of raiders) main.troops = [...main.troops, ...a.troops]; units = units.filter(u => !raiders.includes(u)); }   // whatever is left of the raids joins the main army
+    else for (const a of raiders) { a.raidCity = null; a.raidDone = false; }
+    rp.phase = 'done';
+    const held = northHeld().filter(c => nbIn(c.col, c.row, CCOLS, CROWS).some(q => !impassable(q) && !unitAt(q) && !cityAt(q)));
+    if (main && held.length) { const c = held[Math.floor(Math.random() * held.length)];
+      const t = nbIn(c.col, c.row, CCOLS, CROWS).filter(q => !impassable(q) && !unitAt(q) && !cityAt(q)).sort((x, y) => x[1] - y[1])[0];
+      main.col = t[0]; main.row = t[1]; main.moved = true; aiState.done.add(main.id); aiBusyUntil = Date.now() + 400;
+      toast(`🧟 The main army of the dead falls on ${c.name}`); commit({ type: 'ai' }); engage(main, c); return true; }
+    commit({ type: 'ai' }); return true;
+  }
   function undeadWave(T) {                           // every 50 turns: a new army of skeletons (20 more each wave) marches south; the last wave: the host up north comes, as one army
     const ud = game.undead; if (ud.waves.includes(T)) return; ud.waves.push(T);
     const ud2 = (game.opts && game.opts.undeadDiff) || 'easy', mult = ud2 === 'medium' ? 1.5 : ud2 === 'hard' || ud2 === 'extreme' ? 2 : 1;   // undead difficulty: more skeletons each wave
     const mobs = Array.from({ length: Math.round(WAVE_SIZE(T) * mult) }, () => troop('skeleton'));
-    if (T < FINAL_WAVE) { addUndeadTroops(mobs, true); toast(`🧟 The undead march south · ${mobs.length} skeletons`); return; }
+    if (T < FINAL_WAVE) { const main = newUndeadArmy(mobs.slice(), { released: true }); toast(`🧟 The undead march south · ${mobs.length} skeletons`); raiseRaiders(main, mult); return; }
     ensureHorde(); ud.final = true; flushPool();
     let h = hordeArmy(); const others = undeadArmies().filter(a => a !== h && !a.released && !a.inBattle);
     if (!h) h = others.shift() || newUndeadArmy([], {});
@@ -2123,6 +2152,7 @@
     h.released = true; h.horde = true;
     for (const a of undeadArmies()) a.released = true;
     toast(`🧟 The last wave: the host of the dead marches south · ${h.troops.length} strong${team ? ' · against one team: twice the mammoths, Kings and Queens' : ''}`);
+    raiseRaiders(h, mult);
   }
   function undeadTurnStart() {                        // called when the undead faction's campaign turn begins
     const ud = game.undead; if (!ud) return;
@@ -2137,6 +2167,7 @@
     for (const u of undeadArmies()) if (!u.released && (u.row >= WALL_ROW - 1 || (game.undead && game.undead.final))) u.released = true;   // repair armies that lost their marching orders in older saves
     for (const c of game.cities) if (c.owner === 'undead') { c.owner = null; c.buildings = []; toast(`🧟 The dead burned ${c.name} to the ground`); }
     if (!aiState || aiState.kind !== 'undead' || aiState.round !== game.round) { aiState = { kind: 'undead', round: game.round, done: new Set() }; undeadTurnStart(); commit({ type: 'ai' }); aiBusyUntil = Date.now() + 300; return; }
+    if (raidStep()) return;
     const a = undeadArmies().find(x => x.released && !x.moved && !x.inBattle && !aiState.done.has(x.id));
     if (!a) { aiBusyUntil = Date.now() + 200; commit({ type: 'end' }); return; }
     aiState.done.add(a.id);
