@@ -112,7 +112,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.26-preview</div>
+  <div class="t">Medieval Cities 3D · v3.27-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1951,7 +1951,7 @@
   // ---------- ops: friends send these to the host, the host applies and shares ----------
   function requestOp(op) {
     if (mode !== 'online' || p2p.role === 'host') { applyOp(op, mode === 'online' ? mySeat : null); return; }
-    try { p2p.conn.send({ op }); } catch (e) {}
+    sendTo(p2p.conn, { op });
   }
   function applyOp(op, seat) {
     if (op.op === 'place') placeUnitOp(op.id, [op.col, op.row], seat);
@@ -4443,10 +4443,26 @@
     if (room) room.presence({ seat: mode === 'online' ? mySeat : null, g: exportState(last) }).catch(() => {});
     const msg = { seat: mySeat, g: exportState(last) };
     if (p2p.role) { try { const n = JSON.stringify(msg).length; netBytes += n; netMsgs++; if (n > netBig) netBig = n; } catch (e) {} }
-    if (p2p.role === 'host') { for (const c of p2p.conns) if (c.open) try { c.send(msg); } catch (e) {} }
-    else if (p2p.conn && p2p.conn.open) try { p2p.conn.send(msg); } catch (e) {}
+    if (p2p.role === 'host') { for (const c of p2p.conns) if (c.open) sendTo(c, msg); }
+    else if (p2p.conn && p2p.conn.open) sendTo(p2p.conn, msg);
   }
 
+  // ---------- big messages go in small pieces: some browser pairs can't carry one large message (and used to drop it without a word) ----------
+  const CHUNK = 12000; let chunkSeq = 0; const chunkBuf = new WeakMap();
+  function sendTo(c, msg) {
+    let s = ''; try { s = JSON.stringify(msg); } catch (e) { return; }
+    try { if (s.length <= CHUNK) { c.send(msg); return; }
+      const id = (++chunkSeq).toString(36) + Date.now().toString(36), n = Math.ceil(s.length / CHUNK);
+      for (let i = 0; i < n; i++) c.send({ ck: id, i, n, p: s.slice(i * CHUNK, (i + 1) * CHUNK) });
+    } catch (e) { try { nlog('send failed', { kb: Math.round(s.length / 1024), err: String(e && e.message || e).slice(0, 120) }); } catch (er) {} }
+  }
+  function unchunk(c, d) {                            // put a split message back together (pieces arrive in order)
+    if (!d || d.ck === undefined) return d;
+    let b = chunkBuf.get(c); if (!b || b.id !== d.ck) { b = { id: d.ck, parts: new Array(d.n), got: 0 }; chunkBuf.set(c, b); }
+    if (b.parts[d.i] === undefined) { b.parts[d.i] = d.p; b.got++; }
+    if (b.got < d.n) return null; chunkBuf.delete(c);
+    try { return JSON.parse(b.parts.join('')); } catch (e) { nlog('bad split message', { n: d.n }); return null; }
+  }
   // ---------- Direct connection (PeerJS / WebRTC): host gets a code, friend joins with it ----------
   const p2p = { peer: null, conn: null, conns: [], code: null, role: null, status: '', ready: false, needSync: false };
   // ---------- connection log: kept in this browser, the friend's copy is sent to the host on rejoin; "Connection log" saves both as a file ----------
@@ -4512,10 +4528,10 @@
   function p2pSetup(c) {                              // a friend's side of the connection
     p2p.needSync = true;
     c.on('open', () => { p2p.conn = c; c.heard = Date.now(); p2p.status = ''; nlog(p2p.lost ? 'rejoined host' : 'link to host open'); watchIce(c, 'host');
-      if (p2p.lost) setTimeout(() => { try { c.send({ netlog: netLog.slice(-300) }); } catch (e) {} }, 1500); mode = 'online'; selUnit = null; sel = null;
+      if (p2p.lost) setTimeout(() => sendTo(c, { netlog: netLog.slice(-300) }), 1500); mode = 'online'; selUnit = null; sel = null;
       if (p2p.lost) { clearTimeout(p2p.lost.timer); p2p.lost = null; showLost(); toast('Reconnected to the host'); }
       refreshUI(); try { c.send({ hello: 1, want: p2p.wantSeat || null }); } catch (e) {} });
-    c.on('data', d => { if (!d || typeof d !== 'object') return; c.heard = Date.now();
+    c.on('data', d => { if (!d || typeof d !== 'object') return; c.heard = Date.now(); d = unchunk(c, d); if (!d) return;
       if (d.full) { p2p.lost = null; showLost(); p2pStop('That game has no free player seat'); return; }
       if (d.assign) { mySeat = d.assign; p2p.wantSeat = d.assign; refreshUI(); }
       if (d.g && d.force && validState(d.g)) { const lost = game.seq > d.g.seq || (game.seq === d.g.seq && game.by !== d.g.by) || game.turn !== d.g.turn; nlog('host resynced me', { mine: game.seq, host: d.g.seq, lost });
@@ -4547,7 +4563,7 @@
       commit({ type: 'setup' }); toast(`${f.name} joined`);
     };
     c.on('open', () => { c.heard = Date.now(); nlog('friend link open'); watchIce(c, 'friend'); });
-    c.on('data', d => { if (!d || typeof d !== 'object') return; c.heard = Date.now();
+    c.on('data', d => { if (!d || typeof d !== 'object') return; c.heard = Date.now(); d = unchunk(c, d); if (!d) return;
       if (d.netlog) { netFriendLogs[(faction(c.seat) || {}).name || c.seat || 'friend'] = d.netlog; nlog('got friend log', d.netlog.length + ' lines'); return; }
       if (d.ping) { c.pinged = true; try { c.send({ pong: 1 }); } catch (e) {} return; }
       if (d.hello) { if (!c.seat) seatUp(d.want); publish(null); }
@@ -4647,7 +4663,7 @@
   const resyncAt = new WeakMap();
   function resyncFriend(c, why) {                     // the host turned down a friend's update: put that friend back in step with the host's game, at once
     if (!c || !c.open) return; const now = Date.now(); if (now - (resyncAt.get(c) || 0) < 1500) return; resyncAt.set(c, now);
-    nlog('resync friend', { seat: c.seat, why }); try { c.send({ g: exportState(null), force: 1 }); } catch (e) {}
+    nlog('resync friend', { seat: c.seat, why }); sendTo(c, { g: exportState(null), force: 1 });
   }
   function onRemoteState(st, from) {
     if (!validState(st)) { if (from) resyncFriend(from, 'bad state'); return; }
