@@ -117,7 +117,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.45-preview</div>
+  <div class="t">Medieval Cities 3D · v3.46-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1713,7 +1713,8 @@
     for (const j of b.joined.filter(j => j.dist === 2)) { if (pockets[j.fid]) continue; const a = screenDir(mid, srcTile(j)); let best = null;
       P8.forEach((an, i) => { if (!usedP.has(i) && (!best || angDiff(an.a, a) < best.d)) best = { i, d: angDiff(an.a, a) }; }); usedP.add(best.i); pockets[j.fid] = { a: P8[best.i].h, r: POCKET_R }; }
     if (zones.undead) {                                  // a huge undead host: a bigger zone for it, and the board grows on its side
-      const need = b.joined.filter(j => j.fid === 'undead' && j.dist <= 1).reduce((n, j) => { const a = units.find(u => u.id === j.id); return n + (a ? a.troops.reduce((m, t) => m + ((UNIT_TYPES[t.type] || {}).big ? 9 : 1), 0) : 0); }, 0);
+      const need = b.joined.filter(j => j.fid === 'undead' && j.dist <= 1).reduce((n, j) => { const a = units.find(u => u.id === j.id); if (!a) return n; let tr = a.troops; if (tr.length > UD_BCAP) { const srt = tr.slice().sort((x, y) => udPow(y) - udPow(x)); tr = [...srt.slice(0, UD_BCAP / 2), ...srt.slice(srt.length - UD_BCAP / 2)]; }   // only the 120 that start on the board need room
+        return n + tr.reduce((m, t) => m + ((UNIT_TYPES[t.type] || {}).big ? 9 : 1), 0); }, 0);
       const tilesFor = r => 3 * r * r + 3 * r + 1, r0 = zones.undead.r, want = Math.ceil(need * 1.25) + 4;
       if (tilesFor(r0) < want) {
         let Rz = r0; while (tilesFor(Rz) < want) Rz++;
@@ -1771,23 +1772,37 @@
     b.spots.forEach((h, i) => { const o = liveUnitAt(h);
       if (o) { floatOn(o, 'DARK MAGIC', '#b98cff', 0, 14); hitUnit(o, 1); return; }
       if (compactOn()) { b.spotAcc = [...(b.spotAcc || [])]; b.spotAcc[i] = (b.spotAcc[i] || 0) + 0.2; if (b.spotAcc[i] < 0.999) return; b.spotAcc[i] -= 1; }   // Compact horde: a strong one every 5th turn
-      const sk = runtimeUnit({ ...(compactOn() ? strongSkel() : troop('skeleton')), id: `sum:${b.id}.${game.round}.${i}`, team: 'undead', col: h[0], row: h[1], face: 0, moved: true, attacked: true, summoned: true });
+      const sk = runtimeUnit({ ...(compactOn() ? strongSkel() : troop('skeleton')), id: `sum:${b.id}.${game.round}.${i}`, team: 'undead', col: h[0], row: h[1], face: 0, moved: true, attacked: true, summoned: true, spot: true });
       units.push(sk); sk.flash = 1; floatOn(sk, 'RISES!', '#b98cff', 0, 16); });
   }
   const exportCampaignUnits = () => units.filter(u => u.dying === null).map(u => ({ id: u.id, type: 'army', team: u.team, col: u.col, row: u.row, hp: 1, maxHp: 1, face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, ...(u.recruitN ? { recruitN: u.recruitN } : {}), troops: u.troops, ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.raidCity ? { raidCity: u.raidCity } : {}), ...(u.autoRoad ? { autoRoad: u.autoRoad } : {}), ...(u.mineHolder ? { mineHolder: true } : {}), ...(u.raidDone ? { raidDone: true } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}) }));
-  function spawnTroops(j, zone, enter) {               // put an army's (or city's) troops into its zone: melee in front, ranged behind
+  // UNDEAD in battle: at most 120 of an army's troops on the board at once (60 strongest + 60 weakest); the rest wait and come in 20 at a time
+  // (10 strongest + 10 weakest) whenever the army is down to 100. Skeletons raised by dark magic spots don't count.
+  const UD_BCAP = 120, UD_REFILL_AT = 100, UD_BATCH = 20, udPow = t => troopStrength([t]);
+  const udResLeft = () => { const b = bt(); return !!b && Object.values(b.udRes || {}).some(l => l && l.length); };
+  function udRefill() { const b = bt(); if (!b || !b.udRes || game.view !== 'battle') return;
+    for (const j of b.joined) { const res = b.udRes[j.id]; if (j.fid !== 'undead' || !res || !res.length) continue;
+      let n = units.filter(u => u.team === 'undead' && u.dying === null && u.hp > 0 && !u.spot).length, came = 0;
+      for (let g = 0; n <= UD_REFILL_AT && res.length && g < 12; g++) { const k = Math.min(UD_BATCH / 2, Math.ceil(res.length / 2)), front = res.splice(0, k), back = res.splice(Math.max(0, res.length - (UD_BATCH - k)), UD_BATCH - k);
+        const before = units.length; spawnTroops(j, b.zones.undead || (b.pockets || {}).undead, 0, [...front, ...back]); const added = units.length - before; n += added; came += added; if (!added) break; }
+      if (came) toast(`🧟 ${came} more of the dead enter the battle (${res.length} still waiting)`); } }
+  function spawnTroops(j, zone, enter, forced) {       // put an army's (or city's) troops into its zone: melee in front, ranged behind (forced: these troops, an undead reserve coming in)
     const b = bt(), src = j.kind === 'army' ? (game.campaign.armies.find(u => u.id === j.id) || units.find(u => u.id === j.id)) : game.cities.find(c => c.id === j.id);
     if (!src || !zone) return;
-    const list = j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : garrisonOf(src).map(t => ({ ...troop(t), garrison: true }));
+    let list = forced || (j.kind === 'army' ? src.troops.slice(0, j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS) : garrisonOf(src).map(t => ({ ...troop(t), garrison: true })));
+    if (!forced && j.kind === 'army' && j.fid === 'undead' && list.length > UD_BCAP) { const srt = list.slice().sort((x, y) => udPow(y) - udPow(x));
+      list = [...srt.slice(0, UD_BCAP / 2), ...srt.slice(srt.length - UD_BCAP / 2)]; b.udRes = { ...(b.udRes || {}), [j.id]: srt.slice(UD_BCAP / 2, srt.length - UD_BCAP / 2) }; }
+    const rk = forced ? 100000 + (b.udSeq = (b.udSeq || 0) + 1) * 100 : 0;   // the dead coming in later get their own numbers (the id must end in a number: that is how survivors find their army)
     const mid = BMID(), free = zoneTiles(zone).filter(h => b.grid[h[1] * BCOLS + h[0]] !== 'r' && !unitAt(h) && !(b.siege && (b.siege.pieces[key(...h)] || {}).kind === 'gate')).sort((x, y) => hexDist(x, mid) - hexDist(y, mid));
     const order = list.map((t, i) => ({ t, i, back: !!(UNIT_TYPES[t.type] || {}).ranged })).sort((x, y) => x.back - y.back);
-    const prefix = j.kind === 'army' ? j.id : 'g:' + j.id, unsp = [];
+    const prefix = (j.kind === 'army' ? j.id : 'g:' + j.id), unsp = [];
     order.forEach(({ t, i }) => { let h;
       if ((UNIT_TYPES[t.type] || {}).big) { const k = free.findIndex(c => nbIn(c[0], c[1], BCOLS, BROWS).length === 6 && nbIn(c[0], c[1], BCOLS, BROWS).every(n => free.some(f => f[0] === n[0] && f[1] === n[1])));
         if (k < 0) { unsp.push(t); return; } h = free[k]; const fp = [h, ...nbIn(h[0], h[1], BCOLS, BROWS)]; for (const q of fp) { const j2 = free.findIndex(f => f[0] === q[0] && f[1] === q[1]); if (j2 >= 0) free.splice(j2, 1); } }
       else { const onW = q => b.siege && ['wall', 'stair'].includes((b.siege.pieces[key(...q)] || {}).kind); const k = wallBarred(t.type) ? free.findIndex(q => !onW(q)) : 0; h = k >= 0 ? free.splice(k, 1)[0] : null; } if (!h) { unsp.push(t); return; }   // horses / siege engines start off the walls
-      (b.roster = b.roster || []).push({ id: `${prefix}.${i}`, type: t.type, team: j.fid });
-      units.push(runtimeUnit({ ...t, id: `${prefix}.${i}`, team: j.fid, col: h[0], row: h[1], face: faceAng(h, mid), moved: false, attacked: false, ...(enter > 1 ? { enter } : {}) })); });
+      (b.roster = b.roster || []).push({ id: `${prefix}.${rk + i}`, type: t.type, team: j.fid });
+      units.push(runtimeUnit({ ...t, id: `${prefix}.${rk + i}`, team: j.fid, col: h[0], row: h[1], face: faceAng(h, mid), moved: false, attacked: false, ...(enter > 1 ? { enter } : {}) })); });
+    if (unsp.length && forced) { b.udRes[j.id] = [...(b.udRes[j.id] || []), ...unsp].sort((x, y) => udPow(y) - udPow(x)); return; }   // no room yet: back to the waiting dead
     if (unsp.length && j.kind === 'army') { b.unspawned = { ...(b.unspawned || {}) }; b.unspawned[j.id] = [...(b.unspawned[j.id] || []), ...unsp]; }   // no room on the board: they sit this battle out
   }
   function faceAng(a, b) { const p = center(a[0], a[1]), q = center(b[0], b[1]); return Math.atan2(q.x - p.x, (q.y - p.y) / SQ); }
@@ -1821,7 +1836,7 @@
   function battleEndTurn() {
     const b = bt(), ending = game.turn;
     for (const u of units) { u.moved = false; u.attacked = false; if (u.team === ending) { u.stunActive = false; u.slowNow = null; } }
-    b.sides = b.sides.filter(f => f === ending || units.some(u => u.team === f && u.dying === null));
+    b.sides = b.sides.filter(f => f === ending || units.some(u => u.team === f && u.dying === null) || (f === 'undead' && udResLeft()));   // the waiting dead keep the undead in the fight
     const i = b.sides.indexOf(ending); let wrapped = i + 1 >= b.sides.length;
     if (wrapped) {
       game.round += 1;
@@ -1880,7 +1895,7 @@
     if (game.undead) game.undead.pool.push(...alive.filter(u => u.team === 'undead' && (u.risen || rost.some(r => r.id === u.id && r.team !== 'undead'))).map(u => u.type));   // the turned and the risen go north, to the host
     units = game.campaign.armies.map(runtimeUnit);
     for (const j of b.joined) if (j.kind === 'army') { const a = units.find(u => u.id === j.id); if (!a) continue;
-      if ((draw || !hostile(j.fid, w)) && (j.dist <= 1 || j.spawned)) { a.troops = [...survivorsOf((bySrc[j.id] || []).filter(u => u.team === j.fid)), ...((b.unspawned || {})[j.id] || []), ...a.troops.slice(j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS)]; if (!a.troops.length) a.dead = true; }   // won only by its summoned dead: the army itself is gone
+      if ((draw || !hostile(j.fid, w)) && (j.dist <= 1 || j.spawned)) { a.troops = [...survivorsOf((bySrc[j.id] || []).filter(u => u.team === j.fid)), ...((b.unspawned || {})[j.id] || []), ...((b.udRes || {})[j.id] || []), ...a.troops.slice(j.fid === 'undead' ? UNDEAD_CAP : MAX_TROOPS)]; if (!a.troops.length) a.dead = true; }   // won only by its summoned dead: the army itself is gone
       else if (hostile(j.fid, w) && (j.dist <= 1 || j.spawned)) a.dead = true; }
     { const summ = alive.filter(u => u.summoned && u.team === 'undead');   // what the dark magic raised stays with the dead for good
       if (summ.length) { const kept = survivorsOf(summ);
@@ -3097,7 +3112,7 @@
   const busy = () => holding() || !!afterIdle || projectiles.length > 0 || units.some(u => u.path || u.atk || u.dying !== null);
   const faceToward = (u, o) => { const a = center(u.col, u.row), b = center(o.col, o.row); u.want = Math.atan2(b.x - a.x, (b.y - a.y) / SQ); };
   const winner = () => { if (game.view !== 'battle') return null;   // the players decide who wins the campaign
-    if (game.dm && !game.battle) return null; const t = new Set(units.filter(u => u.dying === null).map(u => u.team)); const s2 = new Set([...t].map(sideOf)); return s2.size === 1 ? [...t][0] : null; };
+    if (game.dm && !game.battle) return null; const t = new Set(units.filter(u => u.dying === null).map(u => u.team)); if (udResLeft()) t.add('undead'); const s2 = new Set([...t].map(sideOf)); return s2.size === 1 ? [...t][0] : null; };
 
   // hex neighbours & pathfinding (odd-q offset <-> axial)
   const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
@@ -3579,7 +3594,7 @@
   }
   // start-of-turn upkeep for every unit of the side whose turn begins: DoT first, then mana, then expiring tokens
   function turnStartUpkeep(team) {
-    if (team === 'undead') try { darkSpotTick(); } catch (e) { console.error(e); }
+    if (team === 'undead') { try { udRefill(); } catch (e) { console.error(e); } try { darkSpotTick(); } catch (e) { console.error(e); } }
     for (const h of units) if (h.team === team && h.manaMax > MANA_CAP) { h.manaMax = MANA_CAP; h.mana = Math.min(h.mana || 0, MANA_CAP); }   // heroes over the mana cap (it was 10 before v1.70) come down to it
     for (const u of units) if (u.team === team && u.dying === null && u.hp > 0 && u.dots && u.dots.length) {
       for (const d of u.dots) { const amt = steadfast(u, Math.max(0, d.dmg - (d.red || 0))); hitUnit(u, amt); d.turns -= 1; }
