@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.52-preview</div>
+  <div class="t">Medieval Cities 3D · v3.53-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1244,10 +1244,10 @@
   // ===================== CAMPAIGN WORLD (Medieval Cities) =====================
   let CCOLS = 16, CROWS = 52; const WIDE_COLS = 28, NARROW = 16, NORTH_W = 14;   // the campaign map: full width from the far south right up to the wall; beyond the wall a narrow strip (size picked in the lobby)
   const MAP_SIZES = { small: { cols: 22, rows: 40, spots: 8 }, medium: { cols: 28, rows: 52, spots: 10 }, large: { cols: 36, rows: 64, spots: 14 } };   // city spots per size (the shape below sets columns and rows)
-  const MAP_SHAPES = {                                 // about the same land for each size; only the outline changes (the 12 rows beyond the wall stay the same)
-    square: { small: { cols: 28, rows: 34 }, medium: { cols: 36, rows: 42 }, large: { cols: 44, rows: 52 } },
-    long: { small: { cols: 16, rows: 48 }, medium: { cols: 20, rows: 61 }, large: { cols: 24, rows: 76 } },   // the opposite of Wide: narrow all the way down
-    wide: { small: { cols: 40, rows: 27 }, medium: { cols: 50, rows: 32 }, large: { cols: 60, rows: 38 } } };
+  const MAP_SHAPES = {                                 // the shape is for the land BELOW the wall, as it looks on screen (a hex column is ~1.7x wider than a row is tall):
+    square: { small: { cols: 19, rows: 44 }, medium: { cols: 25, rows: 55 }, large: { cols: 32, rows: 67 } },   //   square 1:1, wide 2:1, long 1:2 — same land below the wall for each size;
+    long: { small: { cols: 13, rows: 59 }, medium: { cols: 18, rows: 72 }, large: { cols: 23, rows: 89 } },     //   the 12 rows beyond the wall (rows include them) stay the same narrow strip
+    wide: { small: { cols: 27, rows: 35 }, medium: { cols: 36, rows: 42 }, large: { cols: 46, rows: 50 } } };
   const mapSizeOf = () => { const k = (game.opts && game.opts.mapSize) || 'medium', base = MAP_SIZES[k] || MAP_SIZES.medium, sh = MAP_SHAPES[(game.opts && game.opts.mapShape) || 'square'] || MAP_SHAPES.square;
     return { ...base, ...(sh[k] || sh.medium) }; };
   const spotsFor = n => Math.max(mapSizeOf().spots, n + 3);
