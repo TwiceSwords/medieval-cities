@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.54-preview</div>
+  <div class="t">Medieval Cities 3D · v3.55-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1952,8 +1952,12 @@
       val[k] = v * (luck ? 0.92 + Math.random() * 0.16 : 1); }                                   // a little luck, never the main thing
     return { sides, keys, val, sc };
   }
-  const UD_FEAR = 40;                                   // AI realms beaten by the undead at or beyond the Wall stay away from that land for this many turns
-  const udFeared = f => !!(f && f.ai && f.udFear !== undefined && game.round - f.udFear < UD_FEAR);
+  // FEAR: an AI realm beaten by the undead at or beyond the Wall stays away from that land for the rest of the game (the dead only grow, and every
+  // failed attempt feeds them mammoths) — unless it can now pay for everything a city up there needs to hold: walls, 2 towers, a garrison and a full guard army
+  const northGuardN = () => Math.min(20, 8 + 2 * udStep());                       // the guard army a city beyond the Wall needs (more on harder undead)
+  const northCost = () => FOUND_COST + 40 + northGuardN() * 10;                     // founding + walls + 2 towers + garrison + that guard army
+  const northReady = f => (game.points[f.id] || 0) >= northCost() && units.some(u => u.troops && u.team === f.id && u.dying === null && !u.guard && u.troops.length >= northGuardN());
+  const udFeared = f => !!(f && f.ai && f.udFear !== undefined && !northReady(f));
   function udFearNote(b, w) { if (!b || !w || sideOf(w) !== sideOf('undead') || !b.center || b.center[1] > WALL_ROW + 1) return;
     for (const j of b.joined || []) { const f = faction(j.fid); if (f && f.ai && !f.undead && sideOf(j.fid) !== sideOf('undead')) f.udFear = game.round; } }
   function arResolve(b) {                             // settles a battle from the campaign map (units = campaign armies)
@@ -2881,10 +2885,10 @@
       const cityImp = c => 1 + ((c.buildings || []).includes('tradepost') ? 1 : 0) + Math.min(2, connectedCities(c).length * 0.5) + (game.mines || []).filter(m => hexDist(m, [c.col, c.row]) <= 4).length * 0.5 + (nearEnemy(c) ? 2 : 0) + ((c.buildings || []).includes('walls') ? 1 : 0) + (c.north ? 1 : 0);
       const means = f.diff !== 'easy' && myCities.length >= 2 && biggestField >= (f.posture === 'risky' ? 14 : 8) && incNow >= 4;
       const maxGuards = !means ? 0 : f.posture === 'risky' ? Math.floor(myCities.length / 3) : Math.ceil(myCities.length / 2);
-      const wantGuard = new Set(myCities.map(c => ({ c, v: cityImp(c) })).filter(x => x.v >= 3).sort((x, y) => y.v - x.v).slice(0, maxGuards).map(x => x.c.id));
+      const wantGuard = new Set([...myCities.map(c => ({ c, v: cityImp(c) })).filter(x => x.v >= 3).sort((x, y) => y.v - x.v).slice(0, maxGuards).map(x => x.c.id), ...(f.diff !== 'easy' ? myCities.filter(c => c.row < WALL_ROW || c.wall).map(c => c.id) : [])]);   // a city beyond the Wall always keeps its guard
       for (const u of units) if (u.troops && u.team === f.id && u.guard && (!wantGuard.has(u.guard) || !myCities.some(c => c.id === u.guard))) u.guard = null;   // not needed (or can't afford it) any more: back to the field
       const guardOf = c => units.find(u => u.troops && u.team === f.id && u.dying === null && u.guard === c.id);
-      const guardSize = c => Math.min(8, (f.diff === 'hard' ? 4 : 3) + (cityImp(c) >= 5 && incNow >= 8 ? 2 : 0) + ((c.buildings || []).includes('walls') ? 1 : 0));
+      const guardSize = c => (c.row < WALL_ROW || c.wall) ? northGuardN() : Math.min(8, (f.diff === 'hard' ? 4 : 3) + (cityImp(c) >= 5 && incNow >= 8 ? 2 : 0) + ((c.buildings || []).includes('walls') ? 1 : 0));
       const guardPick = (c, troops, types) => { const plain = types.filter(t => !HEROES.includes(t)), rnd = a2 => a2[(Math.random() * a2.length) | 0], n = ts => troops.filter(x => ts.includes(x.type)).length;
         const SH = ['archer', 'crossbow'], TK = ['spearman', 'swordsman', 'halberdier', 'swordmaster'], walls = (c.buildings || []).includes('walls'), sh = plain.filter(t => SH.includes(t)), tk = plain.filter(t => TK.includes(t));
         if (sh.length && n(SH) < (walls ? 2 : 1)) return rnd(sh);                                   // a couple of shooters for the walls
@@ -2937,6 +2941,10 @@
       for (const c of myCities) {
         if (c.acted || c.buildings.length >= CITY_SLOTS) continue;
         let want = null;
+        if (c.row < WALL_ROW || c.wall) {                    // a city beyond the Wall (or Frostgate): everything it needs to hold comes first, whatever the gold rules say
+          const need = ['walls', 'tower', 'tower', 'garrison', ...(c.wall ? ['nightswatch', 'holyground'] : [])], have = [...c.buildings];
+          const w = need.find(x => { const i = have.indexOf(x); if (i < 0) return true; have.splice(i, 1); return false; });
+          if (w && BUILDINGS[w] && !(c.wall && w === 'walls')) { if (pts() >= BUILDINGS[w].cost) { c.buildings = [...c.buildings, w]; c.acted = true; spend(BUILDINGS[w].cost); f.bGold = (f.bGold || 0) + BUILDINGS[w].cost; owned.push(w); } continue; } }
         if (noField && c.buildings.includes('tradepost')) { const w = pool.find(t => fieldT(t) && !c.buildings.includes(t) && BUILDINGS[t]); if (w && pts() >= BUILDINGS[w].cost) { c.buildings = [...c.buildings, w]; c.acted = true; spend(BUILDINGS[w].cost); f.bGold = (f.bGold || 0) + BUILDINGS[w].cost; owned.push(w); } continue; }
         if (!c.buildings.includes('tradepost') && !(threat(c) && !unitB(c))) want = 'tradepost';   // trade first: it pays for everything else
         else if (!unitB(c)) want = nextUnit(c);                                        // then something to recruit
