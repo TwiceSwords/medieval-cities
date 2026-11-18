@@ -113,7 +113,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.36-preview</div>
+  <div class="t">Medieval Cities 3D · v3.37-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2299,6 +2299,7 @@
     if (game.arReport) return;                        // everyone reads the auto-resolve results first
     if (paused()) return;                             // god mode paused: nobody moves
     if (!iRunAI() || busy() || game.pending && !faction(game.pending.by)?.ai || Date.now() < aiBusyUntil) return;
+    if (game.view === 'campaign' && !game.cwinner && !(game.bt && !game.bt.saved) && faction(game.turn) && !faction(game.turn).alive) { aiBusyUntil = Date.now() + 200; commit({ type: 'end' }); return; }   // a realm wiped out during its own turn: pass the turn on (it used to stay stuck there)
     if (game.view === 'campaign' && !game.cwinner && !(game.bt && !game.bt.saved)) { const f = faction(game.turn); if (f && f.ai && f.alive) (f.undead ? aiUndeadStep(f) : aiCampaignStep(f)); }
     else if (game.view === 'battle' && game.bt && game.bt.phase === 'fight' && !winner()) { const f = faction(game.turn); if (f && (f.ai || autoFor(f.id))) aiBattleStep(); }
   }
@@ -2788,6 +2789,9 @@
       const cityD = m => Math.min(99, ...myCities.map(c => hexDist(m, [c.col, c.row])));
       const nearMines = (game.mines || []).filter(m => knowsTile(f.id, m) && !impassable(m) && cityD(m) <= 8 && !units.some(o => o.troops && o.dying === null && o.team !== f.id && o.col === m[0] && o.row === m[1])).sort((x, y) => cityD(x) - cityD(y));
       for (const u of myArmies()) if (u.mineHolder && !nearMines.some(m => m.join() === u.mineGoal) && !mineAt([u.col, u.row])) { u.mineHolder = false; u.mineGoal = null; }   // its mine was lost or taken: free again
+      f.cornered = myCities.length < 2 && !freeSpots.length && game.round >= 8;   // CORNERED: one city and no free land known (the 2nd city lost to an enemy): no more 1-unit armies sent to die, everything into one army that takes a city or a mine back
+      const unsafe = m => units.some(o => o.troops && hostile(o.team, f.id) && o.dying === null && hexDist([o.col, o.row], m) <= 4) || game.cities.some(o => o.owner && hostile(o.owner, f.id) && hexDist([o.col, o.row], m) <= 3);
+      if (f.cornered) { f.mineTry = f.mineTry || {}; for (let i = nearMines.length - 1; i >= 0; i--) { const mk = nearMines[i].join(); if (unsafe(nearMines[i]) || (f.mineTry[mk] > game.round - 12 && !units.some(o => o.troops && o.team === f.id && o.dying === null && o.mineGoal === mk))) nearMines.splice(i, 1); } }   // and a mine whose holder was just lost isn't tried again for 12 turns   // only mines nobody hostile is near get a 1-unit holder
       const wantMines = Math.min(nearMines.length, f.diff === 'easy' ? 1 : myCities.length >= 2 ? Math.min(4, myCities.length + 1) : 1);
       const covered = new Set(myArmies().filter(u => u.mineHolder).map(u => u.mineGoal));
       const cheapest = c => recruitable(c).filter(t => !HEROES.includes(t) && !SIEGE.includes(t) && !MOUNT.includes(t)).sort((x, y) => unitCost(x, f.id) - unitCost(y, f.id))[0];
@@ -2796,13 +2800,14 @@
         const t = cheapest(c), cost = unitCost(t, f.id), sp = nbIn(c.col, c.row, CCOLS, CROWS).filter(n => !impassable(n) && !unitAt(n) && !cityAt(n)).sort((x, y) => hexDist(x, m) - hexDist(y, m))[0];
         if (!sp || pts() < cost) break;
         units.push(runtimeUnit({ id: `army-${f.id}-m${Date.now().toString(36)}`, type: 'army', team: f.id, col: sp[0], row: sp[1], hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [troop(t)], fresh: true, mineHolder: true, mineGoal: m.join() }));
-        f.raisedAt = game.round; spend(cost); f.uGold = (f.uGold || 0) + cost; covered.add(m.join()); }
+        f.raisedAt = game.round; spend(cost); f.uGold = (f.uGold || 0) + cost; covered.add(m.join()); f.mineTry = { ...(f.mineTry || {}), [m.join()]: game.round }; }
       const holdersMissing = nearMines.slice(0, wantMines).filter(m => !covered.has(m.join())).length;
       const opening = myCities.length < 2 || holdersMissing > 0;   // the 2nd city and the close mines first; the army grows with what is left
-      const openKeep = opening ? holdersMissing * 10 : 0;
+      const openKeep = opening && !f.cornered ? holdersMissing * 10 : 0;
       // ---- nothing left to grab (map mostly scouted, no free city spot, no free gold mine near): roads to every city, full armies, more armies ----
       { const exS = (game.explored && game.explored[f.id]) || ''; let landN = 0, seenN = 0;
         for (let r = WALL_ROW; r < CROWS; r++) for (let c0 = 0; c0 < CCOLS; c0++) { if (impassable([c0, r])) continue; landN++; if (!fogOn() || exS[r * CCOLS + c0] === '1') seenN++; }
+        f.seenPct = landN ? seenN / landN : 1;
         const freeMineLeft = (game.mines || []).some(m => knowsTile(f.id, m) && !impassable(m) && cityD(m) <= 12 && !units.some(o => o.troops && o.dying === null && o.col === m[0] && o.row === m[1]) && !myArmies().some(o => o.mineGoal === m.join()));
         f.sat = !opening && myCities.length >= 2 && !settleTarget && !freeMineLeft && seenN >= landN * 0.6; }
       const owned = myCities.flatMap(c => c.buildings), count = b => owned.filter(x => x === b).length;
@@ -2812,9 +2817,11 @@
       const threat = c => units.some(u => u.troops && hostile(u.team, f.id) && u.dying === null && hexDist([u.col, u.row], [c.col, c.row]) <= 6 && sees(f.id, [u.col, u.row]));
       const cw = f.diff === 'easy' ? {} : { ...aiCounterWants(f), ...(f.needTreb ? { trebuchet: 4 } : {}) }, haveT = t => myCities.some(x => x.buildings.includes(t));
       const nextUnit = c => pool.filter(t => !c.buildings.includes(t)).sort((x, y) => ((cw[y] || 0) > 1.5 && !haveT(y)) - ((cw[x] || 0) > 1.5 && !haveT(x)) || count(x) - count(y) || pool.indexOf(x) - pool.indexOf(y))[0];   // a counter it lacks comes first
+      const fieldT = t => !HEROES.includes(t) && !SIEGE.includes(t), noField = !myCities.some(c => recruitable(c).some(fieldT));   // no city can recruit a field unit (only trade posts, or only siege): that comes first, whatever the gold rules say
       for (const c of myCities) {
         if (c.acted || c.buildings.length >= CITY_SLOTS) continue;
         let want = null;
+        if (noField && c.buildings.includes('tradepost')) { const w = pool.find(t => fieldT(t) && !c.buildings.includes(t) && BUILDINGS[t]); if (w && pts() >= BUILDINGS[w].cost) { c.buildings = [...c.buildings, w]; c.acted = true; spend(BUILDINGS[w].cost); f.bGold = (f.bGold || 0) + BUILDINGS[w].cost; owned.push(w); } continue; }
         if (!c.buildings.includes('tradepost') && !(threat(c) && !unitB(c))) want = 'tradepost';   // trade first: it pays for everything else
         else if (!unitB(c)) want = nextUnit(c);                                        // then something to recruit
         else if (threat(c) && !c.buildings.includes('walls')) want = 'walls';
@@ -2840,10 +2847,11 @@
           const smallest = Math.min(99, ...myArmies().map(x => x.troops.length));
           const buildFirst = (f.uGold || 0) < (f.bGold || 0) ? 0 : myCities.some(x => !x.buildings.includes('tradepost') || !unitB(x)) ? 20 : 0;   // units behind buildings: no holding back   // keep money for the economy unless an army is nearly empty
           let a = null, t = null; const newId = `army-${f.id}-${Date.now().toString(36)}${tries}`;
-          for (const x of near.filter(x => x.troops.length < MAX_TROOPS && (x.recruitN || 0) < MAX_RECRUIT_TURN && !x.fresh && !(x.moved && !x.recruitN)).sort((x, y) => y.troops.length - x.troops.length)) { const tt = aiPickTroop(x.id, x.troops, types, pts(), f); if (tt) { a = x; t = tt; break; } }   // an all-one-type army only takes its own type
+          for (const x of near.filter(x => x.troops.length < MAX_TROOPS && (x.recruitN || 0) < MAX_RECRUIT_TURN && !x.fresh && !(x.moved && !x.recruitN)).sort((x, y) => y.troops.length - x.troops.length)) { const tt = aiPickTroop(x.id, x.troops, types, pts(), f) || ((f.cornered || pts() >= 60) ? types.filter(t => !HEROES.includes(t))[0] : null); if (tt) { a = x; t = tt; break; } }   // an all-one-type army only takes its own type
           const anyHome = myArmies().some(x => myCities.some(cc => hexDist([x.col, x.row], [cc.col, cc.row]) <= 1));
           const rich = pts() >= 60 && myArmies().filter(x => !x.guard && !x.mineHolder).length < 8;   // gold piling up with no army at home to spend it on: raise one anyway
           if (!a) { if ((myArmies().filter(x => !x.guard && !x.mineHolder).length >= maxArmies && !rich) || f.raisedAt === game.round) break;
+            if (f.cornered && myArmies().some(x => !x.guard && !x.mineHolder && !x.scoutRole)) break;   // cornered: one army, everything goes into it
             if (f.sat && !rich && myArmies().some(x => !x.guard && !x.mineHolder && !x.scoutRole && x.troops.length < MAX_TROOPS - 2)) break; t = aiPickTroop(newId, [], types, pts(), f); }   // nobody at home to fill: a new army here becomes the one that grows
           if (!t) break;
           const biggestNow = Math.max(0, ...myArmies().map(x => x.troops.length));
@@ -2882,8 +2890,10 @@
     const mine2 = myArmies().filter(x => !x.guard && !x.mineHolder);
     if (bigEnough) a.scoutRole = false;                                               // a scout that grew big enough to fight drops the job
     if (!bigEnough && !a.scoutRole && mine2.length >= 2 && !mine2.some(o => o !== a && o.scoutRole && o.dying === null) && mine2.slice().sort((x, y) => x.troops.length - y.troops.length)[0] === a) a.scoutRole = true;
+    const cornerScout = f.cornered && (f.seenPct || 0) < 0.5;                        // cornered: keep scouting for free land only while most of the map is unknown
+    if (f.cornered && !cornerScout && a.scoutRole) { a.scoutRole = false; a.scoutGoal = null; }
     const scoutArmy = !!a.scoutRole;
-    const openScout = myCities.length < 2 && !freeSpots.length && !a.mineHolder && mine2.slice().sort((x, y) => x.troops.length - y.troops.length)[0] === a;   // the opening: no free city spot known yet, so go and find one   // the scout job sticks: one scout per faction, kept until it grows (it used to flip every turn as army sizes changed)
+    const openScout = (!f.cornered || cornerScout) && myCities.length < 2 && !freeSpots.length && !a.mineHolder && mine2.slice().sort((x, y) => x.troops.length - y.troops.length)[0] === a;   // the opening: no free city spot known yet, so go and find one   // the scout job sticks: one scout per faction, kept until it grows (it used to flip every turn as army sizes changed)
     const raid = game.round < 25 && a.troops.length >= 3;
     const hardAI = f.diff === 'hard';
     const forceH = t => myArmies().filter(o => o === a || (hexDist([o.col, o.row], t) <= 8 && o.troops.length >= 3 && !o.scoutRole && !o.guard)).reduce((x, o) => x + troopStrength(o.troops), 0);   // HARD: friends that can come together
@@ -2918,7 +2928,7 @@
       const safe = home && hexDist([home.col, home.row], here) > 0 ? home : null;
       if (threatNear.length && safe && !cityAt(here) && !(rally && forceH(rally.tile) >= threatNear[0].s)) { goal = [safe.col, safe.row]; mode2 = 'home'; }   // much stronger enemy close by: fall back to the city (a lesser loss than dying in the field)
       else if (rally && !a.scoutRole && a.troops.length >= 3 && dist(rally.tile) <= 14 && !defender) { goal = rally.tile; mode2 = 'attack'; }
-      else if (a.scoutRole && a.troops.length <= 2) {                // the scout probes: bump into an enemy army it hasn't sized up yet, to learn what it fields
+      else if (a.scoutRole && a.troops.length <= 2 && !f.cornered) {                // the scout probes: bump into an enemy army it hasn't sized up yet, to learn what it fields
         a.probed = a.probed || {}; const pr = enemies.filter(e => e.army && e.army.team !== 'undead' && dist(e.tile) <= 6 && !(a.probed[e.army.id] > game.round - 12)).sort((x, y) => dist(x.tile) - dist(y.tile))[0];
         if (pr) { a.probed[pr.army.id] = game.round; goal = pr.tile; mode2 = 'attack'; } }
     }
@@ -2927,6 +2937,16 @@
     else if (defender) {
       if (a.col === danger.c.col && a.row === danger.c.row) { aiBusyUntil = Date.now() + (50) / aiPace(); return; }
       goal = [danger.c.col, danger.c.row]; mode2 = 'defend'; }
+    else if (f.cornered && !a.scoutRole && !a.mineHolder && !a.guard && home) {   // CORNERED: gather into one army at home, then take a city (or an enemy-held gold mine) back
+      const field = myArmies().filter(o => !o.guard && !o.mineHolder && !o.scoutRole), total = field.reduce((x, o) => x + troopStrength(o.troops), 0);
+      const cands = [...enemies.filter(e => e.city && e.city.owner !== 'undead' && dist(e.tile) <= 24).map(e => ({ tile: e.tile, need: e.s * 1.5, extra: 0 })),
+        ...enemies.filter(e => e.army && e.army.team !== 'undead' && mineAt(e.tile) && dist(e.tile) <= 16).map(e => ({ tile: e.tile, need: e.s * 1.3, extra: 4 }))]
+        .map(x => ({ ...x, score: x.need + dist(x.tile) * 0.5 + x.extra })).sort((x, y) => x.score - y.score);
+      const tgt = cands.find(x => total >= x.need);
+      if (tgt) { if (dist(tgt.tile) <= 3 && force(tgt.tile) < tgt.need) { aiBusyUntil = Date.now() + (50) / aiPace(); return; }   // close: wait for the others to catch up
+        goal = tgt.tile; mode2 = 'attack'; }
+      else if (dist([home.col, home.row]) > 1) { goal = [home.col, home.row]; mode2 = 'home'; }   // not strong enough yet: home, grow
+      else { aiBusyUntil = Date.now() + (50) / aiPace(); return; } }
     else if (spot && settler && !(prey && dist(prey.tile) <= (prey.army ? 2 : 5))) {   // an enemy city it can take close by comes before settling
       if (dist([spot.col, spot.row]) === 1) {                        // next to the free land: found it once the points are there
         if (pts() >= FOUND_COST) { spot.owner = f.id; spot.buildings = []; spot.acted = true; spend(FOUND_COST); commit({ type: 'ai' }); }
