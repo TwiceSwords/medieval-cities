@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.57-preview</div>
+  <div class="t">Medieval Cities 3D · v3.58-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1769,6 +1769,21 @@
       toast(raid ? `🧟 Beyond the Wall: the host up north grows by ${m} mammoth${m > 1 ? 's' : ''}` : `🧟 Beyond the Wall: ${m} mammoth${m > 1 ? 's' : ''} join the dead, and the host up north grows by ${m}`);
     }
   }
+  // THE CLOSING DARK (battles with the undead): no turn limit; every 10 battle turns one more ring of tiles from the board's edges goes dark.
+  // Whoever stands there (units, towers, walls) takes damage each turn: 1 on the newest ring, +1 for every ring older. The dead don't mind it.
+  const ZONE_EVERY = 10;
+  const udBattle = (b = bt()) => !!b && ((b.joined || []).some(j => j.fid === 'undead') || (b.sides || []).includes('undead'));
+  const ringOf = h => Math.min(h[0], h[1], COLS - 1 - h[0], ROWS - 1 - h[1]);
+  const darkDmg = h => { const b = bt(); if (!b || !b.zone || game.view !== 'battle') return 0; const r = ringOf(h); return r < b.zone ? b.zone - r : 0; };
+  function darkZoneTick(team) {                        // at the start of a side's battle turn: its units in the dark get hurt
+    const b = bt(); if (!b || !b.zone || game.view !== 'battle' || isUndeadFid(team)) return;
+    for (const u of units.slice()) if (u.team === team && u.dying === null && u.hp > 0) { const d = darkDmg([u.col, u.row]); if (d > 0) { floatOn(u, `THE DARK -${d}`, '#9a7cff', 0, 14); hitUnit(u, d); } }
+  }
+  function darkZoneRound() {                           // once a battle round: the dark grows every 10 turns, and gnaws at the walls standing in it
+    const b = bt(); if (!b || !udBattle(b)) return;
+    if (game.round > 1 && (game.round - 1) % ZONE_EVERY === 0) { b.zone = (b.zone || 0) + 1; const full = b.zone >= Math.ceil(Math.min(COLS, ROWS) / 2); toast(full ? `🌑 The dark covers everything · it grows stronger every ${ZONE_EVERY} turns` : `🌑 The dark closes in · ${b.zone} ring${b.zone > 1 ? 's' : ''} from the edges · the dead don't mind it`); }   // once it covers the whole board it keeps getting stronger
+    const s2 = sg(); if (s2 && b.zone) for (const k of Object.keys(s2.pieces || {})) { const h = k.split(',').map(Number), d = darkDmg(h); if (d > 0) hitPiece(h, d); }
+  }
   function darkSpotTick() {                            // the undead's battle turn begins: each spot raises a skeleton, or hurts whoever stands on it
     const b = bt(); if (!b || !(b.spots || []).length || game.view !== 'battle') return;
     b.spots.forEach((h, i) => { const o = liveUnitAt(h);
@@ -1842,7 +1857,8 @@
     const i = b.sides.indexOf(ending); let wrapped = i + 1 >= b.sides.length;
     if (wrapped) {
       game.round += 1;
-      const lim = battleLimit();
+      try { darkZoneRound(); } catch (e) { console.error(e); }
+      const lim = udBattle(b) ? 0 : battleLimit();   // against the dead there is no turn limit: the closing dark ends it
       if (lim && game.round > lim && !b.timeUp) { b.timeUp = true; b.phase = 'over'; toast(`⌛ ${lim} battle turns are over · everyone goes back to the campaign map with their survivors`);
         if (mode !== 'online' || p2p.role === 'host') setTimeout(() => returnToCampaign(true), 2500); return { treb: [], rain: [] }; }
       const arriving = j => !j.spawned && ((!j.late && j.dist === 2 && game.round === REINF_ROUND) || (j.late && j.arrive === game.round));
@@ -2300,16 +2316,18 @@
   }
   function aiUndeadStep(f) {
     for (const u of undeadArmies()) if (!u.released && (u.row >= WALL_ROW - 1 || (game.undead && game.undead.final))) u.released = true;   // repair armies that lost their marching orders in older saves
-    for (const c of game.cities) if (c.owner === 'undead') { c.owner = null; c.buildings = []; toast(`🧟 The dead burned ${c.name} to the ground`); }
+    for (const c of game.cities) if (c.owner === 'undead') freezeCity(c);
     if (!aiState || aiState.kind !== 'undead' || aiState.round !== game.round) { aiState = { kind: 'undead', round: game.round, done: new Set() }; undeadTurnStart(); commit({ type: 'ai' }); aiBusyUntil = Date.now() + (300) / aiPace(); return; }
     if (raidStep()) return;
     const a = undeadArmies().find(x => x.released && !x.moved && !x.inBattle && !aiState.done.has(x.id));
     if (!a) { aiBusyUntil = Date.now() + (200) / aiPace(); commit({ type: 'end' }); return; }
     aiState.done.add(a.id);
-    const here = [a.col, a.row], uSee = fogOn() ? visionOf('undead') : null, foes = [...units.filter(u => u.troops && u.team !== 'undead' && u.dying === null && !u.inBattle && (!uSee || uSee.has(u.row * CCOLS + u.col))).map(u => ({ tile: [u.col, u.row], u })),
-      ...game.cities.filter(c => c.owner && c.owner !== 'undead').map(c => ({ tile: [c.col, c.row], c }))].sort((x, y) => hexDist(here, x.tile) - hexDist(here, y.tile));
+    const here = [a.col, a.row], uSee = fogOn() ? visionOf('undead') : null, byD = (x, y) => hexDist(here, x.tile) - hexDist(here, y.tile);
+    const cities = game.cities.filter(c => c.owner && c.owner !== 'undead').map(c => ({ tile: [c.col, c.row], c })).sort(byD);   // the dead hunt cities only: a realm falls with its cities, armies can't lead them around
     let goal = null, path = null;
-    for (const t of foes.slice(0, 6)) { path = campPath(here, t.tile, a); if (path && path.length) { goal = t; break; } }
+    for (const t of cities.slice(0, 8)) { path = campPath(here, t.tile, a); if (path && path.length) { goal = t; break; } }
+    if (!goal) { const armies = units.filter(u => u.troops && u.team !== 'undead' && u.dying === null && !u.inBattle && (!uSee || uSee.has(u.row * CCOLS + u.col))).map(u => ({ tile: [u.col, u.row], u })).sort(byD);   // every road to a city blocked: break through whoever blocks it
+      for (const t of armies.slice(0, 6)) { path = campPath(here, t.tile, a); if (path && path.length) { goal = t; break; } } }
     if (!goal) { const wc = game.cities.find(c => c.wall); if (wc && wc.owner && wc.owner !== 'undead') { path = campPath(here, [wc.col, wc.row], a); if (path) goal = { tile: [wc.col, wc.row], c: wc }; } }
     if (!goal) {                                       // nothing to hunt: wander south
       const b = reach(a), opts = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t)).sort((x, y) => (y[1] + Math.random() * 3) - (x[1] + Math.random() * 3));
@@ -2356,10 +2374,13 @@
     const p = game.pending; if (!p) return; const f = faction(p.by);
     if (f && f.ai && iRunAI()) { captureCity(!f.undead); }
   }
+  function freezeCity(c) {                            // a city the dead take is frozen solid: nobody can ever found or take it again
+    c.owner = null; c.buildings = []; c.frozen = true; toast(`🧟 ${c.name} is frozen solid by the dead · it can never be a city again`); }
+  const freeLand = c => !!c && !c.owner && !c.frozen;
   function captureCity(keep) {
     const p = game.pending; if (!p) return; const city = game.cities.find(c => c.id === p.city); game.pending = null;
     if (!city) return;
-    if (keep && p.by === 'undead') keep = false;
+    if (p.by === 'undead') { freezeCity(city); checkDefeats(); commit({ type: 'capture' }); return; }
     if (keep) { city.owner = p.by; city.acted = true; toast(`${faction(p.by).name} captured ${city.name}`); }
     else { const gain = Math.floor(cityValue(city) / 2); game.points = { ...game.points, [p.by]: (game.points[p.by] || 0) + gain };
       toast(p.by === 'undead' ? `🧟 The dead burned ${city.name} to the ground` : `${city.name} was razed · +${gain} gold`); city.owner = null; city.buildings = []; }
@@ -2652,6 +2673,9 @@
     const dT = hexDist(here, [tgt.col, tgt.row]);
     const sallying = !!sg() && !hostile(team, sg().def) && !shooterSide(team, true) && shooterSide(team, false);
     const relook = () => { const rp = aiState.repass = aiState.repass || new Set(); if (!rp.has(u.id + ':mv')) { rp.add(u.id + ':mv'); aiState.skip.delete(u.id); } };   // after this move it gets one more look this turn (hit the wall / the enemy next to it)
+    if (!easy && !isUndeadFid(team) && darkDmg(here) > 0 && canMoveNow(u) && !u.climb) {   // MEDIUM+: standing in the closing dark: step out of it before anything else
+      const b0 = reach(u), safe = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) && !darkDmg(t)).sort((x, y) => b0.dist.get(key(...x)) - b0.dist.get(key(...y)) || ringOf(y) - ringOf(x))[0];
+      if (safe) { relook(); aiGo({ type: 'move', id: u.id, path: pathTo(b0, safe) }); return; } }
     const breachStep = () => {                                  // attackers: a broken wall piece / broken or open gate is a way in; up to 3 a turn head for each one
       const s2 = sg(); if (!s2 || !hostile(team, s2.def) || u.moved || u.climb || projAt(here, s2.th) >= s2.W + 1.15 || isWallTop(here)) return false;   // (a unit standing in the gap keeps going in)
       const ops = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r], pj = projAt(h, s2.th); if (pj < s2.W || pj >= s2.W + 1.15 || blockedTile(h)) continue;
@@ -2674,13 +2698,19 @@
     if (tgt.ghost && sallyStep()) return;
     const siegeMelee = !!sg() && hostile(team, sg().def) && !T(u).ranged && !T(u).magic && !T(u).structure;   // attackers at the walls keep breaking them even when the defenders are out of sight
     const udDef = !!sg() && !hostile(team, sg().def) && !easy && !(faction(team) || {}).undead && !!(faction(team) || {}).ai && allFoes.some(o => o.team === 'undead') && !u.climb && !T(u).hero && !T(u).structure;   // an AI city holding against the dead
-    if (tgt.ghost && !siegeMelee && !udDef) { const b0 = reach(u), tl = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t)); let best = null;
+    if (tgt.ghost && !siegeMelee && !udDef) { const b0 = reach(u), tl = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) && (easy || isUndeadFid(team) || !darkDmg(t))); let best = null;
       if (!u.moved) for (const t of tl) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
       if (best && best.d < dT) { aiGo({ type: 'move', id: u.id, path: pathTo(b0, best.t) }); return; } aiBusyUntil = Date.now() + ((u.type === 'skeleton' && team === 'undead' ? 15 : 60)) / aiPace(); return; }
     // HARD: tiles under an enemy trebuchet mark or Arrow Rain mark are avoided when the hit would matter
     const dangerAt = h => { let d = 0; for (const w of units) if (hostile(w.team, team) && w.dying === null) { if (w.mark && w.mark[0] === h[0] && w.mark[1] === h[1]) d += w.dmg || 8; if (w.rain) for (const m of w.rain) if (m.col === h[0] && m.row === h[1]) d += CARDS.rain.dmg(m.lvl); } return d; };
-    const badTile = h => { if (!hard) return false; const d = dangerAt(h); return d >= 3 || d >= u.hp * 0.3; };
-    const b = reach(u), tiles = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => (!unitAt(t) || (t[0] === u.col && t[1] === u.row)) && !badTile(t));
+    const zb = bt(), soonRing = hard && zb && udBattle(zb) && (game.round - 1) % ZONE_EVERY >= ZONE_EVERY - 2 ? (zb.zone || 0) : -1;   // HARD: also steps off the ring about to go dark
+    const darkBad = h => !easy && !isUndeadFid(team) && (darkDmg(h) > 0 || (soonRing >= 0 && ringOf(h) === soonRing));   // MEDIUM+: the closing dark is avoided
+    const badTile = h => { if (darkBad(h)) return true; if (!hard) return false; const d = dangerAt(h); return d >= 3 || d >= u.hp * 0.3; };
+    const b = reach(u), tiles0 = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) || (t[0] === u.col && t[1] === u.row));
+    let tiles = tiles0.filter(t => !badTile(t));
+    if (!tiles.length && tiles0.length) { const m = Math.min(...tiles0.map(darkDmg)); tiles = tiles0.filter(t => darkDmg(t) === m); }   // the dark everywhere it can go: the least of it
+    if (darkBad(here) && canMoveNow(u) && !u.moved && !u.climb) { const safe = tiles.filter(t => !darkBad(t)).sort((x, y) => b.dist.get(key(...x)) - b.dist.get(key(...y)) || ringOf(y) - ringOf(x))[0];   // standing in the dark: out first, then act
+      if (safe && (safe[0] !== u.col || safe[1] !== u.row)) { relook(); aiGo({ type: 'move', id: u.id, path: pathTo(b, safe) }); return; } }
     const closest = (pred) => { let best = null; for (const t of tiles) { if (!pred(t)) continue; const d = b.dist.get(key(...t)); if (!best || d < best.d) best = { t, d }; } return best; };
     if (udDef) {                                        // HOLDING A CITY AGAINST THE DEAD: nobody goes out to meet the horde; walls and gaps are held and everything shoots
       const s2 = sg(), real = foes.filter(o => !o.ghost && o.dying === null), pj = h => projAt(h, s2.th), inside = h => pj(h) >= s2.W + 1.15, done = () => { aiBusyUntil = Date.now() + (40) / aiPace(); };
@@ -2956,7 +2986,7 @@
     const pts = () => game.points[f.id] || 0, spend = n => { game.points = { ...game.points, [f.id]: pts() - n }; };
     f.style = 'balanced';                                             // no more personalities: every AI plays the same balanced way
     const myCities = game.cities.filter(c => c.owner === f.id), myArmies = () => units.filter(u => u.troops && u.team === f.id && u.dying === null && !u.inBattle);
-    let freeSpots = game.cities.filter(c => !c.owner && knowsTile(f.id, [c.col, c.row]));
+    let freeSpots = game.cities.filter(c => freeLand(c) && knowsTile(f.id, [c.col, c.row]));
     if (f.diff === 'hard' && freeSpots.some(c => c.row >= WALL_ROW)) freeSpots = freeSpots.filter(c => c.row >= WALL_ROW);
     if (udFeared(f)) freeSpots = freeSpots.filter(c => c.row >= WALL_ROW);   // FEAR: beaten by the dead up there: no new cities beyond the Wall for a while   // HARD: the land beyond the ice wall can wait (let the undead be someone else's problem)
     const settleTarget = myCities.length < 6 && freeSpots.length ? freeSpots.map(c => ({ c, d: Math.min(...myCities.map(m => hexDist([m.col, m.row], [c.col, c.row])), ...myArmies().map(a => hexDist([a.col, a.row], [c.col, c.row]))) })).sort((x, y) => x.d - y.d)[0] : null;
@@ -3107,7 +3137,7 @@
     // pick a goal
     const enemies = [...units.filter(u => u.troops && hostile(u.team, f.id) && u.dying === null && !u.inBattle && sees(f.id, [u.col, u.row])).map(u => ({ tile: [u.col, u.row], army: u, s: troopStrength(u.troops) * (cityAt([u.col, u.row]) ? 1.3 : 1) })),
       ...game.cities.filter(c => c.owner && hostile(c.owner, f.id) && knowsTile(f.id, [c.col, c.row])).map(c => ({ tile: [c.col, c.row], city: c, s: troopStrength(garrisonOf(c).map(troop)) * ((c.buildings || []).includes('walls') ? 1.6 : 1.15) + units.filter(u => u.troops && u.col === c.col && u.row === c.row && sees(f.id, [c.col, c.row])).reduce((x, u) => x + troopStrength(u.troops) * 1.3, 0) }))];
-    const free = game.cities.filter(c => !c.owner);
+    const free = game.cities.filter(freeLand);
     const dist = t => hexDist(here, t);
     let goal = null, mode2 = null;
     if (udFeared(f) && a.row < WALL_ROW && !myCities.some(c => hexDist([a.col, a.row], [c.col, c.row]) <= 1)) {   // FEAR: an army beyond the Wall (not holding one of its own cities there) heads back south
@@ -3228,7 +3258,7 @@
     const after = () => {
       if (atGoalNext && mode2 === 'attack') { const tgtU = unitAt(goal), c = cityAt(goal), tg = tgtU && tgtU.troops && hostile(tgtU.team, f.id) ? tgtU : c; if (tg && units.includes(a) && a.dying === null) engage(a, tg); return; }   // the target may have left or died during the walk
       if (mode2 === 'roadgo' && a.col === goal[0] && a.row === goal[1] && !hasRoad(goal) && !cityAt(goal) && pts() >= ROAD_COST + 4 + (myCities.length >= 3 ? reserve : 0)) { game.roads = [...(game.roads || []), key(...goal)]; spend(ROAD_COST); commit({ type: 'ai' }); return; }   // lay the next piece of the planned road
-      if (atGoalNext && mode2 === 'settle' && pts() >= FOUND_COST) { const c = cityAt(goal); if (c && !c.owner) { c.owner = f.id; c.buildings = []; c.acted = true; spend(FOUND_COST); commit({ type: 'ai' }); return; } }
+      if (atGoalNext && mode2 === 'settle' && pts() >= FOUND_COST) { const c = cityAt(goal); if (freeLand(c)) { c.owner = f.id; c.buildings = []; c.acted = true; spend(FOUND_COST); commit({ type: 'ai' }); return; } }
       if (mode2 === 'road' && f.diff !== 'easy' && pts() >= ROAD_COST + 6 + reserve && !hasRoad([a.col, a.row]) && !cityAt([a.col, a.row])) { game.roads = [...(game.roads || []), key(a.col, a.row)]; spend(ROAD_COST); commit({ type: 'ai' }); }
     };
     if (walk.length) { const mv = { type: 'move', id: a.id, path: walk }; mv.rng = 1; aiBusyUntil = Date.now() + (200) / aiPace(); play(mv, () => { commit(mv); after(); }); }
@@ -3290,7 +3320,7 @@
     while (q.length) {
       const h = q.shift(), d = dist.get(key(...h));
       if (d >= moveOf(u)) continue;
-      if (d > 0 && u.troops && game.view === 'campaign' && zoc(h, u, gh)) continue;          // next to another army: the march stops here
+      if (d > 0 && u.troops && game.view === 'campaign' && u.team !== 'undead' && zoc(h, u, gh)) continue;          // next to another army: the march stops here (the dead march on past it)
       for (const n of neighbors(...h)) {
         const k = key(...n); if (dist.has(k)) continue;
         const o = uAt(n); if (o && o !== u) continue; if ((blockedTile(n) && !gateMine(u, n)) || !canStep(h, n, u)) continue;
@@ -3756,6 +3786,7 @@
   // start-of-turn upkeep for every unit of the side whose turn begins: DoT first, then mana, then expiring tokens
   function turnStartUpkeep(team) {
     if (team === 'undead') { try { udRefill(); } catch (e) { console.error(e); } try { darkSpotTick(); } catch (e) { console.error(e); } }
+    try { darkZoneTick(team); } catch (e) { console.error(e); }
     for (const h of units) if (h.team === team && h.manaMax > MANA_CAP) { h.manaMax = MANA_CAP; h.mana = Math.min(h.mana || 0, MANA_CAP); }   // heroes over the mana cap (it was 10 before v1.70) come down to it
     for (const u of units) if (u.team === team && u.dying === null && u.hp > 0 && u.dots && u.dots.length) {
       for (const d of u.dots) { const amt = steadfast(u, Math.max(0, d.dmg - (d.red || 0))); hitUnit(u, amt); d.turns -= 1; }
@@ -4166,12 +4197,13 @@
         continue; }
       if (city) {                                         // cities on the campaign map (free land is drawn on the ground)
         const fo = faction(city.owner);
-        if (!fo) { R3.tag = { key: 'spot:' + city.id, gy: center(city.col, city.row).y, static: true }; drawMesh(ctx, spotMesh(), p.x, p.y, 0.5, 0, 0); }
+        if (!fo && city.frozen) { R3.tag = { key: 'frozen:' + city.id, gy: center(city.col, city.row).y, static: true }; drawMesh(ctx, frozenMesh(), p.x, p.y, 0, 0, 0); }   // frozen solid: the city in ice
+        else if (!fo) { R3.tag = { key: 'spot:' + city.id, gy: center(city.col, city.row).y, static: true }; drawMesh(ctx, spotMesh(), p.x, p.y, 0.5, 0, 0); }
         if (fo) { if (!R3.on) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(p.x + 3, p.y + 2, 10.5 * K, 10.5 * K * SQ, 0, 0, 7); ctx.fill(); }
           R3.tag = { key: 'city:' + city.id + ':' + fo.id, gy: center(city.col, city.row).y, static: true, dim: localView() === 'campaign' && fogOn() && !sees(viewer(), [city.col, city.row]) }; drawMesh(ctx, cityMesh(fo.col), p.x, p.y, 0, 0, 0); }
         ctx.font = `700 ${Math.min(40, Math.max(15, 13 / z)).toFixed(1)}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(8,10,6,0.85)'; ctx.strokeText(city.name + (fo ? '' : ' · free'), p.x, p.y + 10.5 * K * SQ + 4);
-        ctx.fillStyle = fo ? `rgb(${fo.col.map(v => Math.min(255, v + 100))})` : '#d8cfae'; ctx.fillText(city.name + (fo ? '' : ' · free'), p.x, p.y + 10.5 * K * SQ + 4);
+        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(8,10,6,0.85)'; ctx.strokeText(city.name + (fo ? '' : city.frozen ? ' · frozen' : ' · free'), p.x, p.y + 10.5 * K * SQ + 4);
+        ctx.fillStyle = fo ? `rgb(${fo.col.map(v => Math.min(255, v + 100))})` : city.frozen ? '#bfe4ff' : '#d8cfae'; ctx.fillText(city.name + (fo ? '' : city.frozen ? ' · frozen' : ' · free'), p.x, p.y + 10.5 * K * SQ + 4);
         continue;
       }
       if (hiddenFromMe(u)) continue;
@@ -4393,6 +4425,14 @@
       const m = tileAt(h); ctx.save(); ctx.translate(m.x, m.y); ctx.scale(1, SQ); ctx.fillStyle = 'rgba(214,190,130,0.75)'; ctx.strokeStyle = 'rgba(60,45,20,0.8)'; ctx.lineWidth = 1.5;
       for (const [dx, dy] of [[-8, 0], [0, 0], [8, 0]]) { ctx.beginPath(); ctx.arc(dx, dy, 3.2, 0, 7); ctx.fill(); ctx.stroke(); } ctx.restore(); }
   }
+  let darkPathC = null;
+  function drawDarkZone(t) {                          // the closing dark: a violet-black shroud, deeper where it is older
+    const b = bt(); if (!b || game.view !== 'battle' || !b.zone) return;
+    const ck = `${b.id}:${b.zone}:${COLS}x${ROWS}:${OX}:${OY}`;
+    if (!darkPathC || darkPathC.k !== ck) { const P = []; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) { const d = darkDmg([c, r]); if (d > 0) { const i = Math.min(3, d) - 1; (P[i] = P[i] || new Path2D()); hexPath(c, r, P[i]); } } darkPathC = { k: ck, P }; }
+    const pu = 0.5 + 0.5 * Math.sin(t * 1.6);
+    darkPathC.P.forEach((p, i) => { if (!p) return; ctx.fillStyle = `rgba(12,2,24,${0.6 + 0.12 * i + 0.06 * pu})`; ctx.fill(p); ctx.strokeStyle = `rgba(160,110,240,${0.35 + 0.1 * i})`; ctx.lineWidth = 1.5; ctx.stroke(p); });
+  }
   function drawDarkSpots(t) {                         // dark magic spots: a slow violet-black swirl on the ground
     const b = bt(); if (!b || game.view !== 'battle' || !(b.spots || []).length) return;
     for (const h of b.spots) { if (!seenTile(h)) continue; const m = tileAt(h), pu = 0.5 + 0.5 * Math.sin(t * 2.6 + h[0]);
@@ -4594,7 +4634,7 @@
       ctx.fillStyle = 'rgba(200,50,40,0.18)'; ctx.fill();
       ctx.strokeStyle = 'rgba(230,80,60,0.9)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
     }
-    previewLabels = []; drawDarkSpots(t); try { drawRoadPlans(t); } catch (e) {} drawMarks(t); drawSkillFx(t); if (!armed) drawRanges(t);
+    previewLabels = []; try { drawDarkZone(t); } catch (e) {} drawDarkSpots(t); try { drawRoadPlans(t); } catch (e) {} drawMarks(t); drawSkillFx(t); if (!armed) drawRanges(t);
     if (dmActive() && hover && (placing || dragUnit)) {
       const free = !unitAt(hover) || unitAt(hover) === dragUnit;
       ctx.beginPath(); hexPath(hover[0], hover[1], ctx);
@@ -5192,7 +5232,8 @@
     if (city) {
       const own = city.owner === me, fo = faction(city.owner), sees = seesCity(city, me);
       html += `<div class="t" style="margin-top:${a ? 10 : 0}px;color:${fo ? `rgb(${fo.col.map(v => Math.min(255, v + 70))})` : '#c8b98a'}">🏰 ${city.name}${fo ? ` · ${fo.name}` : ' · free land'}</div>`;
-      if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} gold (right-click it).</div>`;
+      if (city.frozen) html += `<div class="k">❄ Frozen solid by the dead: it can never be a city again.</div>`;
+      else if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} gold (right-click it).</div>`;
       else {
         if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn${inc && inc[2] > 1 ? ` (×${inc[2]} · road-linked to ${inc[3]} cit${inc[3] > 1 ? 'ies' : 'y'}${inc[4] ? `, ${inc[4]} other realm${inc[4] > 1 ? 's' : ''}` : ''})` : ''}</div><div class="k">🛡 Garrison (defends the city in every battle): ${(() => { const n = {}; for (const t of garrisonOf(city)) n[t] = (n[t] || 0) + 1; return Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', '); })()}</div>`; }
         if (sees) {
@@ -5248,7 +5289,7 @@
   modalEl.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.m === 'found') { const c = game.cities.find(x => x.id === b.dataset.city), me = viewer();
-      if (c && !c.owner && pts(me) >= FOUND_COST) { c.owner = me; c.buildings = []; c.acted = true; game.points = { ...game.points, [me]: pts(me) - FOUND_COST }; commit({ type: 'found' }); toast(`${c.name} founded!`); } }
+      if (freeLand(c) && pts(me) >= FOUND_COST) { c.owner = me; c.buildings = []; c.acted = true; game.points = { ...game.points, [me]: pts(me) - FOUND_COST }; commit({ type: 'found' }); toast(`${c.name} founded!`); } }
     if (b.dataset.m === 'autoroad') { const a = units.find(u => u.id === b.dataset.army), home = game.cities.find(c => c.id === b.dataset.from), dest = game.cities.find(c => c.id === b.dataset.to);
       const t = a && home && dest && roadRoute([home.col, home.row], [dest.col, dest.row]); if (t) { a.autoRoad = { from: home.id, to: dest.id, t: t.map(h => h.join()) }; commit({ type: 'road' }); toast(`🛣 ${tr('Road building to')} ${dest.name} ${tr('starts when you end your turn')}`); } }
     if (b.dataset.m === 'keep') captureCity(true);
@@ -5430,7 +5471,7 @@
     const tgt0 = unitAt(h), tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, city = cityAt(h), here = [u.col, u.row];
     const hint = txt => { const m = center(...h); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
     if (impassable(h)) { hint('Impassable'); return; }
-    const foeArmy = tgt && tgt.troops && hostile(tgt.team, u.team) ? tgt : null, foeCity = city && city.owner && hostile(city.owner, u.team) ? city : null, freeSpot = city && !city.owner ? city : null;
+    const foeArmy = tgt && tgt.troops && hostile(tgt.team, u.team) ? tgt : null, foeCity = city && city.owner && hostile(city.owner, u.team) ? city : null, freeSpot = freeLand(city) ? city : null;
     const goAdj = then => {                                          // walk next to the target first (if needed), then do something
       if (hexDist(here, h) === 1) { then(); return; }
       if (u.moved) { hint('Already moved'); return; }
@@ -5454,6 +5495,11 @@
   }
   // drawing: roads, free land markers, cities in their owner's colour, spawn highlights
   const cityMeshCache = {};
+  let frozenMeshC = null;
+  const frozenMesh = () => frozenMeshC || (frozenMeshC = (() => { const m = buildCity([150, 190, 220]);   // the city in ice: pale blue-white, with ice spikes around it
+    const out = { v: m.v, f: m.f.map(f => { const c = f.col, g = (c[0] + c[1] + c[2]) / 3; return { ...f, col: [Math.min(255, 150 + g * 0.35), Math.min(255, 190 + g * 0.25), Math.min(255, 225 + g * 0.12)] }; }) };
+    for (let i = 0; i < 7; i++) { const a = i * 0.9 + 0.3, r = 11.5 + (i % 3) * 1.2; part(out, cylG(1.3, 6 + (i % 3) * 3, 6, 0.1), [200, 232, 255], { p: [Math.cos(a) * r, 0, Math.sin(a) * r], r: [Math.sin(a) * 0.25, 0, Math.cos(a) * 0.25] }); }
+    return out; })());
   const cityMesh = col => cityMeshCache[col.join()] || (cityMeshCache[col.join()] = buildCity(col));
   // gold mine: a rough rock with faceted gold lumps around the edge of the tile, so an army can stand in the middle
   const GOLD_PER_MINE = 4, MINE_COUNT = 4;
@@ -5494,7 +5540,7 @@
       ctx.strokeStyle = pass ? '#8a6c46' : 'rgba(40,28,16,0.75)'; ctx.lineWidth = pass ? 14 : 20;
       let any = false; for (const n of nbIn(c, r, CCOLS, CROWS)) if (nodes.has(key(...n))) { const q = center(...n), qy = q.y + OY - elevPx(...n); any = true; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo((x + q.x + OX) / 2, (y + qy) / 2); ctx.stroke(); }
       ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.ellipse(x, y, (pass ? 7 : 10) * (any ? 1 : 1.6), (pass ? 7 : 10) * SQ * (any ? 1 : 1.6), 0, 0, 7); ctx.fill(); }
-    for (const c of game.cities) if (!c.owner && seenTile([c.col, c.row])) { const m = center(c.col, c.row), x = m.x + OX, y = m.y + OY - elevPx(c.col, c.row);     // free land: a ring of stones
+    for (const c of game.cities) if (freeLand(c) && seenTile([c.col, c.row])) { const m = center(c.col, c.row), x = m.x + OX, y = m.y + OY - elevPx(c.col, c.row);     // free land: a ring of stones
       ctx.strokeStyle = 'rgba(220,210,170,0.55)'; ctx.setLineDash([8, 8]); ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y, S * 0.55, S * 0.55 * SQ, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
     }
     for (const mn of game.mines || []) { if (!seenTile(mn)) continue; const m = center(...mn), x = m.x + OX, y = m.y + OY - elevPx(...mn), pu = 0.5 + 0.5 * Math.sin(t * 2.4 + mn[0]);   // the glow on the ground
@@ -5516,7 +5562,7 @@
         : `<div class="t">⚔ Waiting</div><div class="k">${placingSides().map(f => faction(f).name).join(', ') || '…'} ${placingSides().length === 1 ? 'is' : 'are'} still placing ${b.phase === 'reinforce' ? 'their arriving army' : 'their units'}.</div>${arRow}`;
     } else {
       const inc = b.joined.filter(j => j.dist === 2 && !j.spawned), next = REINF_ROUND * Math.ceil(game.round / REINF_ROUND), godAr = !arHumans(b).length && isHost() && godArOk(b);
-      html = `<div class="t">⚔ Battle · round ${game.round}${battleLimit() ? ` / ${battleLimit()}` : ''}</div><div class="k">${inc.length ? ` ${[...new Set(inc.map(j => faction(j.fid).name))].join(', ')} arrive${inc.length === 1 ? 's' : ''} at round ${REINF_ROUND}.` : ''}</div>${godAr ? `<div class="row">${btn('data-bt="autores"', '⚡ Auto resolve', true)}</div><div class="k">${tr('Settles it from the armies as they started this battle.')}</div>` : ''}`;
+      html = `<div class="t">⚔ Battle · round ${game.round}${udBattle() ? ` · 🌑 the dark closes in at round ${(Math.floor((game.round - 1) / ZONE_EVERY) + 1) * ZONE_EVERY + 1}` : battleLimit() ? ` / ${battleLimit()}` : ''}</div><div class="k">${inc.length ? ` ${[...new Set(inc.map(j => faction(j.fid).name))].join(', ')} arrive${inc.length === 1 ? 's' : ''} at round ${REINF_ROUND}.` : ''}</div>${godAr ? `<div class="row">${btn('data-bt="autores"', '⚡ Auto resolve', true)}</div><div class="k">${tr('Settles it from the armies as they started this battle.')}</div>` : ''}`;
     }
     if (autoFightOn() && me && Object.keys({ ...b.zones, ...b.pockets }).includes(me) && !(faction(me) || {}).ai)
       html += `<div class="k" style="color:${autoFor(me) ? '#ffd27a' : '#9fd8a0'};font-weight:600">${autoFor(me) ? '⚡ Auto-fight ON · the AI is fighting for you' : '🎮 You are in control'}</div><div class="row">${btn('data-bt="auto"', autoFor(me) ? '🎮 Take control back' : '⚡ Auto-fight this battle', true)}</div>`;
