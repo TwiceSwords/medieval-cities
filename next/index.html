@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.59-preview</div>
+  <div class="t">Medieval Cities 3D · v3.60-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2639,6 +2639,9 @@
       const plan = planMarch(ws, x => g.get(x.id), false), moves = []; for (const x of ws) { const p = plan.get(x.id); if (p && p.length) moves.push({ id: x.id, path: p }); }
       if (moves.length) { aiGo({ type: 'gmove', moves }); return; } }
     if (!mine.length || !foes.length) { aiBusyUntil = Date.now() + (400) / aiPace(); commit({ type: 'end' }); return; }
+    const trebHold = (() => { const s2 = sg(), fa = faction(team) || {}; if (!s2 || !hostile(team, s2.def) || fa.diff === 'easy' || isUndeadFid(team)) return false;   // guarding its trebuchets: no marching off as a horde
+      return units.some(x => x.team === team && x.type === 'trebuchet' && x.dying === null && x.hp > 0 && (x.trebIdle || 0) < 3) && !sgOpenings(s2).length; })();
+    if (trebHold) { aiState.horde = true; aiState.horde2 = true; }
     if (!aiState.horde) { aiState.horde = true; const hm = aiHorde(mine, foes); if (hm) { for (const m of hm) aiState.skip.add(m.id); aiGo({ type: 'gmove', moves: hm }); return; } }   // far from the fight: march as one horde
     if (mine.length > 1) { const fr = new Set(mine.filter(x => aiFarGoal(x, foes)).map(x => x.id)); mine.sort((x, y) => fr.has(x.id) - fr.has(y.id));   // the ones that can fight act first, one by one
       if (fr.has(mine[0].id) && !aiState.horde2) { aiState.horde2 = true; const hm = aiHorde(mine, foes); if (hm) { for (const m of hm) aiState.skip.add(m.id); aiGo({ type: 'gmove', moves: hm }); return; } } }   // ...then the rest march together
@@ -2698,7 +2701,7 @@
     if (tgt.ghost && sallyStep()) return;
     const siegeMelee = !!sg() && hostile(team, sg().def) && !T(u).ranged && !T(u).magic && !T(u).structure;   // attackers at the walls keep breaking them even when the defenders are out of sight
     const udDef = !!sg() && !hostile(team, sg().def) && !easy && !(faction(team) || {}).undead && !!(faction(team) || {}).ai && allFoes.some(o => o.team === 'undead') && !u.climb && !T(u).hero && !T(u).structure;   // an AI city holding against the dead
-    if (tgt.ghost && !siegeMelee && !udDef) { const b0 = reach(u), tl = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) && (easy || isUndeadFid(team) || !darkDmg(t))); let best = null;
+    if (tgt.ghost && !siegeMelee && !udDef && !trebHold) { const b0 = reach(u), tl = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) && (easy || isUndeadFid(team) || !darkDmg(t))); let best = null;
       if (!u.moved) for (const t of tl) { const d = hexDist(t, [tgt.col, tgt.row]); if (!best || d < best.d) best = { t, d }; }
       if (best && best.d < dT) { aiGo({ type: 'move', id: u.id, path: pathTo(b0, best.t) }); return; } aiBusyUntil = Date.now() + ((u.type === 'skeleton' && team === 'undead' ? 15 : 60)) / aiPace(); return; }
     // HARD: tiles under an enemy trebuchet mark or Arrow Rain mark are avoided when the hit would matter
@@ -2712,6 +2715,68 @@
     if (darkBad(here) && canMoveNow(u) && !u.moved && !u.climb) { const safe = tiles.filter(t => !darkBad(t)).sort((x, y) => b.dist.get(key(...x)) - b.dist.get(key(...y)) || ringOf(y) - ringOf(x))[0];   // standing in the dark: out first, then act
       if (safe && (safe[0] !== u.col || safe[1] !== u.row)) { relook(); aiGo({ type: 'move', id: u.id, path: pathTo(b, safe) }); return; } }
     const closest = (pred) => { let best = null; for (const t of tiles) { if (!pred(t)) continue; const d = b.dist.get(key(...t)); if (!best || d < best.d) best = { t, d }; } return best; };
+    // SIEGE WITH TREBUCHETS (Medium+ attackers): until there is a way in, the trebuchets break the walls from out of the defenders' reach and the whole
+    // army stays with them as their guard (spears / halberds in front against riders coming out); once a wall or the gate is broken, everyone goes in.
+    // HARD keeps a guard back after the breach while mounted defenders could still ride out to the engines (and, as a side job, may hold the way in).
+    const s2t = sg(), myTrebs = s2t && !easy && !isUndeadFid(team) && hostile(team, s2t.def) ? units.filter(x => x.team === team && x.type === 'trebuchet' && x.dying === null && x.hp > 0) : [];
+    if (myTrebs.length) {
+      const opens = sgOpenings(s2t), defMounted = allFoes.filter(o => T(o).mounted && !T(o).big && !isUndeadFid(o.team));
+      const pieces = Object.entries(s2t.pieces).filter(([, p]) => p.kind !== 'stair').map(([k]) => k.split(',').map(Number));
+      const pieceD = t => pieces.length ? Math.min(...pieces.map(h => hexDist(t, h))) : 99;
+      const safeD = allFoes.some(o => o.type === 'ballista') ? 8 : 6;                       // out of reach of archers / crossbows / towers on the walls (ballistas: 7)
+      const working = myTrebs.some(x => (x.trebIdle || 0) < 3);                             // a trebuchet that can't get anywhere for 3 turns: the old way (straight at the walls)
+      const hold = !opens.length && working, outside = x => !x.climb && !isWallTop([x.col, x.row]) && projAt([x.col, x.row], s2t.th) < s2t.W;
+      if (!aiState.trebEsc) {
+        const army = units.filter(x => x.team === team && x.dying === null && x.hp > 0 && !T(x).structure && x.type !== 'trebuchet' && outside(x));
+        const brace = x => BRACE_C.includes(x.type) || x.type === 'swordmaster';
+        let esc = [];
+        if (hold) esc = army;                                                                // everyone guards the engines until the way in is open
+        else if (hard && defMounted.length) esc = army.filter(brace).sort((x, y) => Math.min(...myTrebs.map(tb => hexDist([x.col, x.row], [tb.col, tb.row]))) - Math.min(...myTrebs.map(tb => hexDist([y.col, y.row], [tb.col, tb.row]))))
+          .slice(0, Math.min(Math.ceil(defMounted.length * 0.6) + 1, Math.floor(army.length * 0.4)));   // HARD after the breach: a few spears / halberds stay with the engines
+        aiState.trebEsc = new Set(esc.map(x => x.id)); }
+      if (u.type === 'trebuchet' && !u.moved && !u.attacked && !opens.length) {   // no way in yet: the piece that takes the fewest boulders (the gate counts a little extra: it is wide)
+        const marked = new Set(myTrebs.filter(x => x.mark).map(x => key(...x.mark)));
+        let best = null; for (const h of pieces) { const p = wallAt(h); if (!p || (p.kind === 'gate' && s2t.gateOpen)) continue;
+          const dh = hexDist(here, h); if (dh > ty.range || dh < 2) continue; const on = liveUnitAt(h); if (on && !hostile(on.team, team)) continue;
+          const shots = Math.ceil(Math.max(1, p.kind === 'gate' ? s2t.gateHp : p.hp) / Math.max(1, u.dmg || 20)) - (p.kind === 'gate' ? 0.6 : 0) - (marked.has(key(...h)) ? 0.8 : 0) - (on ? 0.3 : 0);
+          if (!best || shots < best.shots) best = { h, shots }; }
+        if (best) { u.trebIdle = 0; aiGo({ type: 'mark', id: u.id, col: best.h[0], row: best.h[1] }); return; }
+        let goal = u.trebGoal && !blockedTile(u.trebGoal) && !wallAt(u.trebGoal) && pieceD(u.trebGoal) <= ty.range - 1 && !(liveUnitAt(u.trebGoal) && hostile(liveUnitAt(u.trebGoal).team, team)) ? { t: u.trebGoal } : null;   // keeps its spot until it gets there
+        if (!goal) { for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const t = [c, r]; if (blockedTile(t) || wallAt(t) || (unitAt(t) && unitAt(t) !== u) || projAt(t, s2t.th) >= s2t.W) continue;   // roll up to a spot with a wall in range, out of the archers' reach if it can
+          const pd = pieceD(t); if (pd > ty.range - 1) continue; const d = hexDist(here, t) + (pd < safeD ? 20 : 0); if (!goal || d < goal.d) goal = { t, d }; } if (goal) u.trebGoal = goal.t; }
+        let fp = goal && farPath(u, goal.t);
+        if (goal) { const gh = { ...u, col: -99, row: -99 };   // the route ignoring its own army: the guard keeps off it and makes way
+          const all = (() => { const st = [u.col, u.row], dist = new Map([[key(...st), 0]]), prev = new Map(), q = [st]; while (q.length) { const h = q.shift(); if (h[0] === goal.t[0] && h[1] === goal.t[1]) break;
+            for (const n of neighbors(...h)) { const k = key(...n); if (dist.has(k) || (blockedTile(n) && !gateMine(u, n)) || !canStep(h, n, u) || wallAt(n)) continue; const o = unitAt(n); if (o && hostile(o.team, team)) continue; dist.set(k, 1); prev.set(k, h); q.push(n); } }
+            const p = []; let c = goal.t; if (!prev.has(key(...c))) return []; while (prev.has(key(...c))) { p.unshift(c); c = prev.get(key(...c)); } return p; })();
+          u.trebPath = all.slice(0, 4).map(h => key(...h)); }
+        if (fp && fp.length && hexDist(fp[0], goal.t) < hexDist(here, goal.t)) { let k = Math.min(fp.length, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--; if (k > 0) { aiGo({ type: 'move', id: u.id, path: fp.slice(0, k) }); return; } }
+        if (!(goal && hexDist(here, goal.t) > 0)) u.trebIdle = (u.trebIdle || 0) + 1; else u.trebIdle = (u.trebIdle || 0) + 0.34; }   // stuck behind its own guard for long: give up the careful way
+      if (aiState.trebEsc.has(u.id)) {                     // THE GUARD: anything coming at the engines is met (riders first); otherwise stand by them out of the archers' reach
+        const near = myTrebs.slice().sort((x, y) => hexDist(here, [x.col, x.row]) - hexDist(here, [y.col, y.row]))[0], th = [near.col, near.row];
+        const threat = foes.filter(o => !o.ghost && outside(o) && myTrebs.some(tb => hexDist([o.col, o.row], [tb.col, tb.row]) <= 5)).sort((x, y) => (T(y).mounted - T(x).mounted) || hexDist(here, [x.col, x.row]) - hexDist(here, [y.col, y.row]))[0];
+        if (threat) {
+          if (!ty.ranged && !ty.magic && !u.attacked) { if (gapTo(here, T(u).big, threat) <= 1 && meleeOk(here, threat) && okAt(here, threat)) { aiGo({ type: 'attack', id: u.id, path: [], target: threat.id, targets: [threat.id] }); return; }
+            if (!u.moved) { const s = closest(t => gapTo(t, T(u).big, threat) === 1 && okAt(t, threat) && meleeOk(t, threat)); if (s) { aiGo({ type: 'attack', id: u.id, path: pathTo(b, s.t), target: threat.id, targets: [threat.id] }); return; } } }
+          // shooters (and anyone who can't reach it) go on to their normal fighting below
+        } else {
+          const brace = BRACE_C.includes(u.type) || u.type === 'swordmaster', want = brace ? 1 : 2;
+          const set = pieceD(th) <= T(near).range, fwd = set && brace ? 1 : 0;   // beside / behind the engine while it rolls up; spears may stand a step ahead once it is in place
+          const good = t => hexDist(t, th) >= 1 && hexDist(t, th) <= 3 && pieceD(t) >= Math.min(safeD, pieceD(th) - fwd) && !wallAt(t) && !(near.trebGoal && near.trebGoal[0] === t[0] && near.trebGoal[1] === t[1]) && !(near.trebPath || []).includes(key(...t));
+          const inReach = (ty.ranged || ty.magic) && canShootNow(u) && foes.some(o => !o.ghost && hexDist(here, [o.col, o.row]) <= (ty.range || 1));
+          if (!inReach) {
+            if ((good(here) && Math.abs(hexDist(here, th) - want) <= 1) || u.moved) { aiBusyUntil = Date.now() + (40) / aiPace(); return; }
+            let best = null; for (const t of tiles) { if (!good(t)) continue; const sc = b.dist.get(key(...t)) * 0.3 + Math.abs(hexDist(t, th) - want) - (brace ? (safeD + 3 - pieceD(t)) * 0.2 : 0); if (!best || sc < best.sc) best = { t, sc }; }
+            if (best) { aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return; }
+            const fp = farPath(u, th); if (fp && fp.length > 1) { let k = Math.min(fp.length - 1, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--; if (k > 0) { aiGo({ type: 'move', id: u.id, path: fp.slice(0, k) }); return; } }
+            aiBusyUntil = Date.now() + (40) / aiPace(); return; } } }
+      if (hard && opens.length && defMounted.length && BRACE_C.includes(u.type) && !aiState.trebEsc.has(u.id) && !aiState.gateBlock) {   // HARD, a side job only: one spear/halberd already near a way in holds it against riders coming out
+        const op = opens.filter(h => hexDist(here, h) <= 2 && (!liveUnitAt(h) || liveUnitAt(h) === u)).sort((x, y) => hexDist(here, x) - hexDist(here, y))[0];
+        if (op) { aiState.gateBlock = u.id;
+          const adj = foes.find(o => !o.ghost && gapTo(here, false, o) <= 1 && meleeOk(here, o) && okAt(here, o));
+          if (op[0] === u.col && op[1] === u.row) { if (adj && !u.attacked) { aiGo({ type: 'attack', id: u.id, path: [], target: adj.id, targets: [adj.id] }); return; } aiBusyUntil = Date.now() + (40) / aiPace(); return; }
+          if (!u.moved && b.dist.has(key(...op))) { relook(); aiGo({ type: 'move', id: u.id, path: pathTo(b, op) }); return; } } }
+    }
     if (udDef) {                                        // HOLDING A CITY AGAINST THE DEAD: nobody goes out to meet the horde; walls and gaps are held and everything shoots
       const s2 = sg(), real = foes.filter(o => !o.ghost && o.dying === null), pj = h => projAt(h, s2.th), inside = h => pj(h) >= s2.W + 1.15, done = () => { aiBusyUntil = Date.now() + (40) / aiPace(); };
       const worth = o => (o.type === 'mammoth' ? 3 : o.type === 'uking' || o.type === 'uqueen' ? 2.5 : 1) + (o.hp <= baseDmg(u) ? 2 : 0) - hexDist(here, [o.col, o.row]) * 0.05;
@@ -4112,6 +4177,11 @@
     }
   }
   // trebuchet boulders for the side whose turn is starting
+  function sgOpenings(s2 = sg()) {                     // the ways in: broken wall pieces and a broken / open gate
+    if (!s2) return []; const ops = [];
+    for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r], pj = projAt(h, s2.th); if (pj < s2.W || pj >= s2.W + 1.15 || blockedTile(h)) continue;
+      const p = wallAt(h), o = liveUnitAt(h); if ((!p || (p.kind === 'gate' && s2.gateOpen)) && !(o && T(o).structure)) ops.push(h); }
+    return ops; }
   function trebuchetVolley(team) {
     const groups = new Map();
     for (const u of units) if (u.team === team && u.type === 'trebuchet' && u.mark && u.dying === null && u.hp > 0) {
