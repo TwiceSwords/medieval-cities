@@ -3134,7 +3134,7 @@
     else { after(); if (mode2 === 'road') commit({ type: 'ai' }); aiBusyUntil = Date.now() + (100) / aiPace(); }
   }
   // ---------- Saving: autosave in this browser + save/load files ----------
-  const SAVE_KEY = 'medieval-cities-3d-save-v1';
+  const SAVE_KEY = 'medieval-cities-3d-save-v1@3.55';
   function saveLocal() { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, savedAt: Date.now(), g: exportState(null) })); } catch (e) {} }
   const rowsOf = st => st && Number.isInteger(st.mapRows) && st.mapRows >= 20 && st.mapRows <= 120 ? st.mapRows : 52;   // Wide Small is only 27 rows tall
   const colsOf = st => { const R0 = rowsOf(st); return st && typeof st.terrain === 'string' && st.terrain.length % R0 === 0 && st.terrain.length >= R0 * NARROW ? st.terrain.length / R0 : NARROW; };
