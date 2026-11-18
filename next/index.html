@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.61-preview</div>
+  <div class="t">Medieval Cities 3D · v3.62-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -6339,7 +6339,12 @@
   cv.addEventListener('contextmenu', e => {
     if (!selUnit || busy()) return;
     const h = pick(e.clientX, e.clientY); if (!h) return;
-    const u = selUnit, ty = T(u), tgt0 = units.filter(o => o.col === h[0] && o.row === h[1] && o.dying === null && o.hp > 0).sort((x, y) => (x === selUnit) - (y === selUnit) || (x.team === selUnit.team) - (y.team === selUnit.team))[0], tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, here = [u.col, u.row], dist = hexDist(here, h);
+    const u = selUnit, ty = T(u), tgt0 = units.filter(o => o.col === h[0] && o.row === h[1] && o.dying === null && o.hp > 0).sort((x, y) => (x === selUnit) - (y === selUnit) || (x.team === selUnit.team) - (y.team === selUnit.team))[0]
+        || units.find(o => o !== selUnit && o.dying === null && o.hp > 0 && T(o).big && hexDist(h, [o.col, o.row]) <= 1),   // a big unit (mammoth) is hit on any tile of its body
+      tgt = tgt0 && hiddenFromMe(tgt0) ? null : tgt0, here = [u.col, u.row], bigT = !!(tgt && T(tgt).big),
+      gapT = from => bigT ? gapTo(from, T(u).big, tgt) : hexDist(from, h),                                 // how far to the nearest tile of the target's body
+      aimAt = from => !bigT ? h : footprint([tgt.col, tgt.row], tgt).sort((x, y) => hexDist(from, x) - hexDist(from, y))[0],   // the body tile to swing at from there
+      dist = tgt ? gapT(here) : hexDist(here, h);
     if (game.view === 'battle' && game.bt && game.bt.phase !== 'fight') { if (u.placing && u.team === viewer()) requestOp({ op: 'place', id: u.id, col: h[0], row: h[1] }); return; }
     const hint = (txt, hh) => { const m = center(...hh); addFloat(m.x + OX, m.y + OY - 20, txt, '#cfc9b4', 14); };
     const go = a0 => { const a = fogOrder(u, a0); if (!a) { commit({ type: 'ai' }); refreshUI(); return; } a.rng = Math.floor(Math.random() * 4e9); play(a, () => { commit(a); if (a.skill === 'rain') refreshUI(); }); };   // Arrow Rain stays aimed until Esc, even out of mana, so a right-click never turns into a shot
@@ -6446,7 +6451,7 @@
       for (const [k, d] of b.dist) { if (d === 0) continue; const tile = k.split(',').map(Number); if (unitAt(tile) && !hiddenFromMe(unitAt(tile))) continue;
         if (target && lockedOut(tile, target)) continue;           // a taunted unit may only walk out and then attack someone else
         if (melee && target && !meleeOk(tile, target)) continue;    // can't hit up onto the wall (or down from it)
-        if (hexDist(tile, h) <= r && (!best || d < best.d)) best = { tile, d }; }
+        if ((target && T(target).big ? gapTo(tile, T(u).big, target) : hexDist(tile, h)) <= r && (!best || d < best.d)) best = { tile, d }; }
       return best ? pathTo(b, best.tile) : null;
     };
     if (ty.ranged === 'mark') {                              // trebuchet: right-click marks a tile (empty neighbour = move)
@@ -6490,14 +6495,14 @@
     }
     if (u.type === 'warrior' && tgt && hostile(tgt.team, u.team)) {   // warrior: reach 1 (halberd: 2 in a straight line)
       if (u.attacked) { hint('Already attacked', here); return; }
-      let path = [], from = here, d = warriorAim(u, here, h);
+      let path = [], from = here, d = warriorAim(u, here, aimAt(here));
       if (d === null || lockedOut(here, tgt) || !meleeOk(here, tgt)) {
         if (u.moved) { hint(lockedOut(here, tgt) ? 'Taunted: must target the Paladin' : !meleeOk(here, tgt) ? "Can't reach: one of you is up on the wall" : 'Already moved', here); return; }
         const b = reach(u); let best = null;
         for (const [k, dd] of b.dist) { if (dd === 0) continue; const tile = k.split(',').map(Number); if (unitAt(tile) && !hiddenFromMe(unitAt(tile))) continue;
-          if (lockedOut(tile, tgt) || !meleeOk(tile, tgt)) continue; if (warriorAim(u, tile, h) !== null && (!best || dd < best.d)) best = { tile, d: dd }; }
+          if (lockedOut(tile, tgt) || !meleeOk(tile, tgt)) continue; if (warriorAim(u, tile, aimAt(tile)) !== null && (!best || dd < best.d)) best = { tile, d: dd }; }
         if (!best) { hint(lock ? 'Taunted: must target the Paladin' : 'Out of reach', h); return; }
-        path = pathTo(b, best.tile); from = best.tile; d = warriorAim(u, from, h);
+        path = pathTo(b, best.tile); from = best.tile; d = warriorAim(u, from, aimAt(from));
       }
       go({ type: 'attack', id: u.id, path, target: tgt.id, targets: [tgt.id], dir: d }); return;
     }
@@ -6521,7 +6526,7 @@
       from = path[path.length - 1];
     }
     const targets = [tgt.id];
-    if (r === 2 && hexDist(from, h) === 2) { const ld = lineDir(from, h); if (ld) { const mo = liveUnitAt(step(from, ld.d)); if (mo && hostile(mo.team, u.team) && meleeOk(from, mo)) targets.push(mo.id); } }
+    if (r === 2 && !bigT && hexDist(from, h) === 2) { const ld = lineDir(from, h); if (ld) { const mo = liveUnitAt(step(from, ld.d)); if (mo && hostile(mo.team, u.team) && meleeOk(from, mo)) targets.push(mo.id); } }
     go({ type: 'attack', id: u.id, path, target: tgt.id, targets });
   });
   // ---------- Touch: phones and tablets ----------
