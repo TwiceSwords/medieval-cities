@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.53-preview</div>
+  <div class="t">Medieval Cities 3D · v3.54-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1889,7 +1889,7 @@
   // ---------- the end ----------
   const battleLimit = () => { const v = game.opts && game.opts.battleTurns; return v === undefined ? 50 : Math.max(0, Math.floor(v) || 0); };   // 0 = no limit
   function returnToCampaign(draw) {                   // draw: the battle ran out of turns, every side keeps its survivors
-    draw = draw === true; const w = draw ? null : winner(), b = bt(); if (game.view !== 'battle' || (!w && !draw) || !b) return;
+    draw = draw === true; const w = draw ? null : winner(), b = bt(); if (game.view !== 'battle' || (!w && !draw) || !b) return; udFearNote(b, w);
     const alive = units.filter(u => u.dying === null && u.hp > 0);
     const bySrc = {}; for (const u of alive) { const src = String(u.id).replace(/\.\d+$/, ''); (bySrc[src] = bySrc[src] || []).push(u); }
     const aliveIds = new Set(alive.map(u => u.id)), rost = b.roster || [];
@@ -1952,11 +1952,15 @@
       val[k] = v * (luck ? 0.92 + Math.random() * 0.16 : 1); }                                   // a little luck, never the main thing
     return { sides, keys, val, sc };
   }
+  const UD_FEAR = 40;                                   // AI realms beaten by the undead at or beyond the Wall stay away from that land for this many turns
+  const udFeared = f => !!(f && f.ai && f.udFear !== undefined && game.round - f.udFear < UD_FEAR);
+  function udFearNote(b, w) { if (!b || !w || sideOf(w) !== sideOf('undead') || !b.center || b.center[1] > WALL_ROW + 1) return;
+    for (const j of b.joined || []) { const f = faction(j.fid); if (f && f.ai && !f.undead && sideOf(j.fid) !== sideOf('undead')) f.udFear = game.round; } }
   function arResolve(b) {                             // settles a battle from the campaign map (units = campaign armies)
     const { sides, keys, val, sc } = arValuesOf(b, units, true); if (!keys.length) { game.bt = null; commit({ type: 'ai' }); return; }
     if (!b.beyondFed && game.undead && b.center && b.center[1] < WALL_ROW && b.joined.some(j => j.fid === 'undead')) { b.beyondFed = true; game.undead.extraMammoths = (game.undead.extraMammoths || 0) + 1 + udStep(); }   // beyond the Wall, settled at once: the host up north still grows
     const order = keys.slice().sort((x, y) => val[y] - val[x]), wSide = order[0], margin = val[wSide] - (val[order[1]] || 0);
-    const w = (b.joined.find(j => sideOf(j.fid) === wSide) || {}).fid || wSide;
+    const w = (b.joined.find(j => sideOf(j.fid) === wSide) || {}).fid || wSide; udFearNote(b, w);
     // who survives on the winning side: picked at random (the uncountered ones more likely) while the point margin lasts; at least one
     const pool = sides[wSide].filter(e => e.army), foesOfW = keys.filter(o => o !== wSide).flatMap(o => sides[o]), countered = arCounters(foesOfW, pool).hit;
     const alive = new Set(); let budget = Math.max(1, margin);
@@ -2858,7 +2862,8 @@
     f.style = 'balanced';                                             // no more personalities: every AI plays the same balanced way
     const myCities = game.cities.filter(c => c.owner === f.id), myArmies = () => units.filter(u => u.troops && u.team === f.id && u.dying === null && !u.inBattle);
     let freeSpots = game.cities.filter(c => !c.owner && knowsTile(f.id, [c.col, c.row]));
-    if (f.diff === 'hard' && freeSpots.some(c => c.row >= WALL_ROW)) freeSpots = freeSpots.filter(c => c.row >= WALL_ROW);   // HARD: the land beyond the ice wall can wait (let the undead be someone else's problem)
+    if (f.diff === 'hard' && freeSpots.some(c => c.row >= WALL_ROW)) freeSpots = freeSpots.filter(c => c.row >= WALL_ROW);
+    if (udFeared(f)) freeSpots = freeSpots.filter(c => c.row >= WALL_ROW);   // FEAR: beaten by the dead up there: no new cities beyond the Wall for a while   // HARD: the land beyond the ice wall can wait (let the undead be someone else's problem)
     const settleTarget = myCities.length < 6 && freeSpots.length ? freeSpots.map(c => ({ c, d: Math.min(...myCities.map(m => hexDist([m.col, m.row], [c.col, c.row])), ...myArmies().map(a => hexDist([a.col, a.row], [c.col, c.row]))) })).sort((x, y) => x.d - y.d)[0] : null;
     const reserve = settleTarget && settleTarget.d <= 20 && (f.style !== 'aggressive' || myCities.length < 4) ? FOUND_COST : 0;   // save up to found a city
     if (!aiState.econ) {                                              // buildings and recruits, all at once
@@ -2898,7 +2903,7 @@
           const cost = unitCost(t, f.id); if (pts() < cost + reserve + 10) break; g.troops = [...g.troops, troop(t)]; spend(cost); f.uGold = (f.uGold || 0) + cost; g.recruitN = (g.recruitN || 0) + 1; } }   // at least as much gold goes to units as to buildings (start allowance: a trade post and a first barracks)
       // ---- the opening and the gold mines: a mine pays 4 gold a turn for 1 unit, so the close ones get a 1-unit holder army early (before the army) ----
       const cityD = m => Math.min(99, ...myCities.map(c => hexDist(m, [c.col, c.row])));
-      const nearMines = (game.mines || []).filter(m => knowsTile(f.id, m) && !impassable(m) && cityD(m) <= 8 && !units.some(o => o.troops && o.dying === null && o.team !== f.id && o.col === m[0] && o.row === m[1])).sort((x, y) => cityD(x) - cityD(y));
+      const nearMines = (game.mines || []).filter(m => knowsTile(f.id, m) && !impassable(m) && cityD(m) <= 8 && !(udFeared(f) && m[1] < WALL_ROW) && !units.some(o => o.troops && o.dying === null && o.team !== f.id && o.col === m[0] && o.row === m[1])).sort((x, y) => cityD(x) - cityD(y));
       for (const u of myArmies()) if (u.mineHolder && !nearMines.some(m => m.join() === u.mineGoal) && !mineAt([u.col, u.row])) { u.mineHolder = false; u.mineGoal = null; }   // its mine was lost or taken: free again
       f.cornered = myCities.length < 2 && !freeSpots.length && game.round >= 8;   // CORNERED: one city and no free land known (the 2nd city lost to an enemy): no more 1-unit armies sent to die, everything into one army that takes a city or a mine back
       const unsafe = m => units.some(o => o.troops && hostile(o.team, f.id) && o.dying === null && hexDist([o.col, o.row], m) <= 4) || game.cities.some(o => o.owner && hostile(o.owner, f.id) && hexDist([o.col, o.row], m) <= 3);
@@ -2996,6 +3001,10 @@
     const free = game.cities.filter(c => !c.owner);
     const dist = t => hexDist(here, t);
     let goal = null, mode2 = null;
+    if (udFeared(f) && a.row < WALL_ROW && !myCities.some(c => hexDist([a.col, a.row], [c.col, c.row]) <= 1)) {   // FEAR: an army beyond the Wall (not holding one of its own cities there) heads back south
+      if (a.mineHolder) { a.mineHolder = false; a.mineGoal = null; }
+      const south = myCities.filter(c => c.row >= WALL_ROW).sort((x, y) => hexDist([a.col, a.row], [x.col, x.row]) - hexDist([a.col, a.row], [y.col, y.row]))[0];
+      goal = south ? [south.col, south.row] : [a.col, WALL_ROW + 2]; mode2 = 'home'; }
     const force = t => myArmies().filter(o => o === a || hexDist([o.col, o.row], t) <= 3).reduce((x, o) => x + troopStrength(o.troops), 0);   // this army plus friends close to the target (they join the fight)
     const bigEnough = a.troops.length >= ({ aggressive: 6, balanced: 8, builder: 10 })[f.style || 'balanced'] || a.troops.length >= MAX_TROOPS - 2;
     const mine2 = myArmies().filter(x => !x.guard && !x.mineHolder);
@@ -3009,7 +3018,7 @@
     const hardAI = f.diff === 'hard';
     const forceH = t => myArmies().filter(o => o === a || (hexDist([o.col, o.row], t) <= 8 && o.troops.length >= 3 && !o.scoutRole && !o.guard)).reduce((x, o) => x + troopStrength(o.troops), 0);   // HARD: friends that can come together
     const risky = f.posture === 'risky', hasTreb = a.troops.some(t => t.type === 'trebuchet');
-    const prey = enemies.filter(e => { const d = dist(e.tile); if (e.army && raid && e.s < str * 0.75 && d <= 10) return true;   // early raids on weak armies
+    const prey = enemies.filter(e => { const d = dist(e.tile); if (udFeared(f) && e.tile[1] < WALL_ROW + 1) return false;   // FEAR: nothing beyond the Wall is worth it now if (e.army && raid && e.s < str * 0.75 && d <= 10) return true;   // early raids on weak armies
         if (e.city && f.diff !== 'easy' && (e.city.buildings || []).includes('walls') && !hasTreb) {   // no blind headbutt into walls: bring a trebuchet (a risky AI may gamble)
           if (a.gamble === undefined) a.gamble = Math.random() < (risky ? 0.35 : 0.1); if (!a.gamble) { f.needTreb = true; return false; } }
         return bigEnough && d <= 26 && (hardAI ? forceH(e.tile) : force(e.tile)) >= e.s * (e.city ? (risky ? 1.25 : 1.5) : (risky ? 1.1 : 1.3)); })
