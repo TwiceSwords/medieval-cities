@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.58-preview</div>
+  <div class="t">Medieval Cities 3D · v3.59-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -4404,10 +4404,11 @@
   let previewLabels = [];
   const label = (u, text, color = '#ffb4a0') => { const p = upos(u); previewLabels.push({ x: p.x, y: p.y - headY(u) - 58, text, color }); };
   // 3D: a mark on a wall / gate tile is drawn on the top layer at the height of the wall top (on the ground layer the wall model covered it)
-  const markLifted = h => typeof R3 !== 'undefined' && R3.on && game.view === 'battle' && sg() && ['wall', 'gate'].includes((sg().pieces[key(...h)] || {}).kind);
+  const markLifted = h => game.view === 'battle' && !!sg() && ['wall', 'gate'].includes((sg().pieces[key(...h)] || {}).kind);   // a mark on a wall / gate is drawn on top of it (2D and 3D)
+  let liftQ = [];
   let markPass = 'ground';
   function drawCrosshair(h, col, n, t) {
-    if (markLifted(h) !== (markPass === 'top')) return;
+    if (markLifted(h) && markPass !== 'top') { liftQ.push([h, col, n]); return; }   // held back: drawn after the walls and the units on them
     const m0 = tileAt(h), m = markPass === 'top' ? { x: m0.x, y: m0.y - WALL_PX } : m0, R = S * 0.5 * (n > 1 ? 1.18 : 1), pul = 1 + 0.06 * Math.sin(t * 5);
     ctx.save(); ctx.translate(m.x, m.y); ctx.scale(pul, pul * SQ);
     ctx.strokeStyle = col; ctx.lineWidth = n > 1 ? 5 : 3;
@@ -4642,7 +4643,7 @@
       ctx.strokeStyle = free ? 'rgba(220,190,100,0.9)' : 'rgba(230,80,60,0.9)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
     }
     if (R3.on) { R3.begin(); ctx = ctxTop; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv2.width, cv2.height); ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * off.x, dpr * off.y); ctx.imageSmoothingQuality = 'high'; }
-    drawUnits(t); if (R3.on) { markPass = 'top'; try { drawMarks(t); drawRainMarks(t); } catch (e) {} markPass = 'ground'; } try { drawBattleArrow(t); } catch (e) {} drawChains(t); drawProjectiles(); drawLabels(); try { drawTapPending(t); } catch (e) {}
+    drawUnits(t); { markPass = 'top'; try { for (const [h, col, n] of liftQ) drawCrosshair(h, col, n, t); } catch (e) {} markPass = 'ground'; liftQ = []; } try { drawBattleArrow(t); } catch (e) {} drawChains(t); drawProjectiles(); drawLabels(); try { drawTapPending(t); } catch (e) {}
     if (hostRunsBattle() && !(game.opts && game.opts.god) && !inBattleSides(viewer()) && !allyInBattle(viewer())) {   // the host runs an AI battle it is not part of: it only gets the news, like any spectator
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = 'rgb(16,18,14)'; ctx.fillRect(0, 0, cv.width, cv.height);
       ctx.fillStyle = '#cdbf94'; ctx.textAlign = 'center'; ctx.font = `600 ${22 * dpr}px Georgia, serif`;
