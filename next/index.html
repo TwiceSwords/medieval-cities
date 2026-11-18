@@ -67,6 +67,7 @@
   #cards .cscale{position:absolute;right:-1px;top:-29px;background:rgba(12,13,9,.92);border:1px solid #6b5d36;border-bottom:none;border-radius:8px 8px 0 0;padding:2px 6px;display:flex;gap:4px;align-items:center;font-size:12px;color:#cfc6a4}
   #cards .cscale button{padding:0 7px;font-size:13px;line-height:18px}
   #cards{position:fixed;left:50%;bottom:98px;transform:translateX(-50%) scale(var(--cs,1));transform-origin:50% 100%;background:rgba(12,13,9,.9);border:1px solid #6b5d36;border-radius:10px;padding:10px 12px 12px;color:#d6d9c8;font-size:14px;display:none;width:max-content;max-width:calc((100vw - 40px) / var(--cs,1))}
+  body.touch.armed #cards{display:none!important}   /* phones: while a skill is aimed, the cards step aside so the target can be tapped */
   #cards .chd{font-size:16px;margin-bottom:8px}#cards .chd2{color:#c8b98a;margin:2px 0 8px;font-size:15px}#cards .crow{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px}
   .card{width:228px;min-height:170px;background:linear-gradient(#2a2619,#1b1a12);border:1px solid #6b5d36;border-radius:8px;padding:10px 11px;cursor:pointer;display:flex;flex-direction:column;gap:6px;position:relative}
   .card.passive{background:linear-gradient(#1f2a2e,#151c1f);border-color:#4d6a75}.card.empty{opacity:.65;border-style:dashed;justify-content:center;text-align:center}
@@ -103,6 +104,8 @@
   #lobby .lrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)}#lobby .lrow.off{opacity:.45}#lobby .lnm{width:190px;font-weight:700}
   #lobby .lk{display:flex;gap:4px}#lobby .lk button{padding:3px 8px;font-size:12px}#lobby .lsw{display:flex;gap:3px}#lobby .sw{width:20px;height:20px;padding:0;border-radius:4px;border:2px solid #222}#lobby .sw.on{border-color:#fff4cf;box-shadow:0 0 6px #fff4cf}#lobby .sw:disabled{opacity:.25}
   #lobby #lstart{margin-top:8px;font-size:15px;padding:7px 18px}
+  body.touch #lobby{max-height:calc((100vh - 20px) / var(--tz,1))}   /* the phone zoom shrinks the box: let it use the whole screen height */
+  @media (max-width:720px){#lobby{left:6px;right:6px;top:190px;bottom:6px;transform:none;min-width:0;max-height:none;overflow:auto;padding:12px 12px}#lobby .lrow{flex-wrap:wrap;row-gap:6px}#lobby .lnm{width:100%}}   /* a phone held upright: the start screen fits the width and scrolls, nothing is cut off */
   #modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45)}#modal .mbox{background:#17160f;border:1px solid #6b5d36;border-radius:10px;padding:16px 20px;color:#d6d9c8;max-width:420px;font-size:14px;line-height:1.5}
   #modal.side{background:none;pointer-events:none;justify-content:flex-end;padding-right:4vw}#modal.side .mbox{pointer-events:auto;box-shadow:0 0 0 1px #c9a24a,0 0 28px rgba(255,190,80,.35);max-width:360px}#modal .vs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 8px;font-weight:600;font-size:15px}#modal .vs .arr{color:#ffcf6a;font-size:18px}#modal .t{font-family:Georgia,serif;font-size:19px;color:#f0e2a8;margin-bottom:6px}#modal .row{display:flex;gap:8px;margin-top:12px}
   #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#8f9682;font-size:14px}
@@ -113,7 +116,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.39-preview</div>
+  <div class="t">Medieval Cities 3D · v3.40-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -5455,7 +5458,7 @@
     cardsEl.style.display = 'block';
   }
   const CS_KEY = 'hero-card-scale'; let cardScale = 1;
-  try { cardScale = Math.min(1.6, Math.max(0.6, Number(localStorage.getItem(CS_KEY)) || 1)); } catch (e) {}
+  try { cardScale = Math.min(1.6, Math.max(0.6, Number(localStorage.getItem(CS_KEY)) || (IS_PHONE ? 0.6 : 1))); } catch (e) {}   // phones start with small cards
   cardsEl.style.setProperty('--cs', cardScale);
   cardsEl.addEventListener('click', e => {
     { const cs = e.target.closest('button[data-act="cs-"],button[data-act="cs+"]'); if (cs) { cardScale = Math.round(Math.min(1.6, Math.max(0.6, cardScale + (cs.dataset.act === 'cs+' ? 0.1 : -0.1))) * 10) / 10;
@@ -5499,7 +5502,7 @@
     if (!canManage(u) || !myTurn() || u.team !== game.turn) { toast('Not your turn'); return; }
     if (!canCommand(u) || !canCastCard(u, c) || (u.raining && c.id !== 'rain')) { toast(isStunned(u) ? 'Stunned' : u.watch ? 'On overwatch' : u.raining ? 'Only more Arrow Rain marks this turn' : 'Already used the skill/action this turn'); return; }
     if ((u.mana || 0) < cd.cost(c.lvl)) { toast(`Needs ${cd.cost(c.lvl)} mana`); return; }
-    armed = { id: u.id, skill: c.id, lvl: c.lvl, stage: 'pick' };
+    armed = { id: u.id, skill: c.id, lvl: c.lvl, stage: 'pick' }; document.body.classList.add('armed');
     toast(`${cd.name}: ${castHint(cd, armed)}`);
     refreshUI();
   });
@@ -6153,7 +6156,7 @@
     if (k === 'all' && boxable()) { const all = units.filter(o => ownSel(o)); group = all.map(o => o.id); selUnit = all.find(o => canCommand(o)) || all[0] || null; sel = selUnit ? [selUnit.col, selUnit.row] : null; selCity = null; armed = null; tapPend = null; }
     if (k === 'help') showTouchHelp();
     syncTouchBar(); refreshUI(); });
-  function syncTouchBar() { document.body.classList.toggle('ingame', game.view !== 'lobby'); document.body.classList.toggle('inbattle', game.view === 'battle');
+  function syncTouchBar() { document.body.classList.toggle('armed', !!armed); document.body.classList.toggle('ingame', game.view !== 'lobby'); document.body.classList.toggle('inbattle', game.view === 'battle');
     for (const b of document.querySelectorAll('#touchbar button[data-tb]')) b.classList.toggle('on', (b.dataset.tb === 'box' && boxMode) || (b.dataset.tb === 'add' && addMode));
     if (game.view !== 'battle') { boxMode = false; addMode = false; }
     const rot = document.getElementById('rotate'); rot.textContent = tr('📱↻ Turn your phone sideways for more room'); rot.style.display = touchUI && innerHeight > innerWidth && game.view !== 'lobby' ? 'block' : 'none'; }
