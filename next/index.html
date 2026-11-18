@@ -116,7 +116,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.42-preview</div>
+  <div class="t">Medieval Cities 3D · v3.43-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -844,6 +844,7 @@
   const R3 = { on: false, ready: false, failed: false, tag: null, frame: 0 };
   const WANT3D = (() => { try { if (/[?&]r=2d/.test(location.search)) return false; return localStorage.getItem('mc3d-renderer') !== '2d'; } catch (e) { return true; } })();
   R3.init = async () => {
+    if (LITE) { R3.on = false; applyRendererUI(); return; }   // PHONES: always 2D, the 3D engine and models are never even loaded
     try {
       const THREE = await import('./lib/three.module.js'); R3.T = THREE;
       const gl = document.getElementById('gl');
@@ -980,12 +981,12 @@
   };
   function setRenderer(want3d) {
     try { localStorage.setItem('mc3d-renderer', want3d ? '3d' : '2d'); } catch (e) {}
-    R3.on = want3d && R3.ready; applyRendererUI();
+    R3.on = want3d && R3.ready && !LITE; applyRendererUI();
   }
   function applyRendererUI() {
     const gl = document.getElementById('gl'), c2 = document.getElementById('c2'), b = document.getElementById('brend');
     gl.style.display = R3.on ? 'block' : 'none'; c2.style.display = R3.on ? 'block' : 'none';
-    if (b) { b.textContent = R3.failed ? '🧊 3D: not supported' : `🧊 Renderer: ${R3.on ? '3D' : '2D'}`; b.disabled = R3.failed || !R3.ready; }
+    if (b) { b.textContent = R3.failed ? '🧊 3D: not supported' : `🧊 Renderer: ${R3.on ? '3D' : '2D'}`; b.disabled = R3.failed || !R3.ready; b.style.display = LITE ? 'none' : ''; }   // phones: 2D only, no switch
   }
   function meshPose(mesh, t, dazed = 0, anim = null) {           // the animated model points (not yet turned)
     const breathe = 0.012 * Math.sin(t * 2.1);
