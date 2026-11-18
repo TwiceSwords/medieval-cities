@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.60-preview</div>
+  <div class="t">Medieval Cities 3D · v3.61-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1193,7 +1193,7 @@
   function exportState(last) {
     if (shadowSt && spectating()) return { ...shadowSt, last: last || shadowSt.last };
     return { seq: game.seq, by: game.by || null, turn: game.turn, round: game.round, dm: !!game.dm, battle: !!game.battle, types: game.types, last: last || null,
-      view: game.view, cities: game.cities, campaign: game.campaign, factions: game.factions, roads: game.roads, terrain: game.terrain, bt: game.bt, pending: game.pending, arReport: game.arReport || null, cwinner: game.cwinner, undead: game.undead, opts: game.opts, heights: game.heights, mapRows: CROWS, explored: game.explored, mines: game.mines || [],
+      view: game.view, cities: game.cities, campaign: game.campaign, factions: game.factions, roads: game.roads, terrain: game.terrain, bt: game.bt, pending: game.pending, arReport: game.arReport || null, cwinner: game.cwinner, cwinners: game.cwinners || null, lvd: game.lvd || null, undead: game.undead, opts: game.opts, heights: game.heights, mapRows: CROWS, explored: game.explored, mines: game.mines || [],
       ...(game.water && game.water.length ? { water: game.water } : {}), units: units.filter(u => u.dying === null && u.hp > 0).map(u => ({ id: u.id, type: u.type, team: u.team, col: u.col, row: u.row, hp: u.hp, maxHp: u.maxHp, sta: u.sta, staMax: u.staMax, mana: u.mana, manaMax: u.manaMax,
         face: Math.round(u.want * 100) / 100, moved: u.moved, attacked: u.attacked, ...(u.recruitN ? { recruitN: u.recruitN } : {}),
         ...(u.stun ? { stun: u.stun } : {}), ...(u.stunActive ? { stunActive: true } : {}), ...(u.mark ? { mark: u.mark } : {}),
@@ -1216,7 +1216,7 @@
       points: { blue: 0, red: 0, ...(st.points && typeof st.points === 'object' ? st.points : {}) }, water: Array.isArray(st.water) ? st.water : [],
       view: ['campaign', 'lobby'].includes(st.view) ? st.view : 'battle', cities: Array.isArray(st.cities) ? st.cities : [], campaign: st.campaign || null,
       factions: Array.isArray(st.factions) ? st.factions : [], roads: Array.isArray(st.roads) ? st.roads : [], terrain: typeof st.terrain === 'string' ? st.terrain : null,
-      bt: st.bt || null, pending: st.pending || null, arReport: st.arReport || null, cwinner: st.cwinner || null, undead: st.undead || null, opts: st.opts || {}, heights: typeof st.heights === 'string' ? st.heights : null, explored: st.explored || {}, mines: Array.isArray(st.mines) ? st.mines.filter(m => Array.isArray(m) && m.length === 2) : [] };
+      bt: st.bt || null, pending: st.pending || null, arReport: st.arReport || null, cwinner: st.cwinner || null, cwinners: Array.isArray(st.cwinners) ? st.cwinners : null, lvd: st.lvd || null, undead: st.undead || null, opts: st.opts || {}, heights: typeof st.heights === 'string' ? st.heights : null, explored: st.explored || {}, mines: Array.isArray(st.mines) ? st.mines.filter(m => Array.isArray(m) && m.length === 2) : [] };
     if (spectating()) { shadowSt = st; units = ((st.campaign && st.campaign.armies) || []).map(runtimeUnit); } else shadowSt = null;
     syncTeams(); ensureLayers();
     if (prevView !== game.view) { setTimeout(centerOnUnits, 0); selCity = null; placingArmy = null; }
@@ -1490,6 +1490,46 @@
   }
   const seesArmy = (u, fid = viewer()) => !hostile(u.team, fid);
   const aliveFactions = () => (game.factions || []).filter(f => f.alive);
+  // ===== LIVING VS DEAD (game mode): every realm starts in one alliance against the dead; anyone may betray it at any time and leave,
+  // and those who left may ally with each other (the other side is asked). Only the set number of realms can win: past the last wave, the dead
+  // keep coming, stronger every time, while more realms than that still live.
+  const lvdOn = () => !!(game.opts && game.opts.lvd), lvdWinN = () => Math.max(1, Math.floor((game.opts && game.opts.lvdWin) || 1));
+  const lvdLiving = () => (game.factions || []).filter(f => f.alive && !f.undead);
+  const lvdMates = f => f && f.tm ? lvdLiving().filter(o => o !== f && o.tm === f.tm) : [];
+  const lvdFree = f => !!f && f.alive && !f.undead && f.tm !== 1;                       // out of the first alliance: may ally with others who are out
+  const lvdCanAsk = (a, b) => lvdOn() && lvdFree(a) && lvdFree(b) && a !== b && hostile(a.id, b.id) && !((game.lvd && game.lvd.asks) || []).some(q => (q.from === a.id && q.to === b.id) || (q.from === b.id && q.to === a.id));
+  const lvdOk = () => lvdOn() && game.view === 'campaign' && !game.cwinner && !game.bt;
+  function lvdBetrayOp(fid, seat) {
+    const f = faction(fid); if (!lvdOk() || (seat && seat !== fid) || !f || !f.alive || f.undead || !lvdMates(f).length) return;
+    game.lvd = game.lvd || { seq: 100, asks: [] }; const was = f.tm; f.tm = ++game.lvd.seq; f.betrayer = true;
+    game.lvd.asks = game.lvd.asks.filter(q => q.from !== fid && q.to !== fid);
+    toast(`🗡 ${f.name} betrays ${was === 1 ? 'the alliance of the living' : 'its allies'} and stands alone`); commit({ type: 'lvd' }); }
+  const lvdAiYes = (to, from) => { const size = lvdLiving().filter(o => o.tm === to.tm || o.tm === from.tm).length;   // an AI says yes when the new alliance is small enough to win together
+    return size <= lvdWinN() && !(to.diff === 'easy' && Math.random() < 0.3); };
+  function lvdMerge(from, to) { const keep = from.tm, old = to.tm; for (const o of lvdLiving()) if (o.tm === old) o.tm = keep;
+    toast(`🤝 ${to.name} and ${from.name} are now allies`); }
+  function lvdProposeOp(fromId, toId, seat) {
+    const a = faction(fromId), b = faction(toId); if (!lvdOk() || (seat && seat !== fromId) || !lvdCanAsk(a, b)) return;
+    if (b.ai) { if (lvdAiYes(b, a)) lvdMerge(a, b); else toast(`${b.name} turns down ${a.name}'s offer of an alliance`); commit({ type: 'lvd' }); return; }
+    game.lvd = game.lvd || { seq: 100, asks: [] }; game.lvd.asks = [...game.lvd.asks, { id: 'q' + (++game.lvd.seq), from: fromId, to: toId, round: game.round }];
+    toast(`🤝 ${a.name} offers ${b.name} an alliance`); commit({ type: 'lvd' }); }
+  function lvdAnswerOp(qid, yes, seat) {
+    const q = game.lvd && game.lvd.asks.find(x => x.id === qid); if (!q || !lvdOn() || (seat && seat !== q.to)) return;
+    game.lvd.asks = game.lvd.asks.filter(x => x !== q); const a = faction(q.from), b = faction(q.to);
+    if (yes && lvdFree(a) && lvdFree(b) && hostile(a.id, b.id) && !game.cwinner) lvdMerge(a, b); else toast(`${b.name} turns down ${a.name}'s offer of an alliance`);
+    commit({ type: 'lvd' }); }
+  function lvdAiTurn(f) {                                // an AI realm's choices, once a turn: betray when it must, look for a small alliance once out
+    if (!lvdOn() || f.lvdAt === game.round || !lvdOk()) return; f.lvdAt = game.round;
+    const ud = game.undead, many = lvdLiving().length > lvdWinN(), mates = lvdMates(f);
+    if (ud && ud.final && many && mates.length + 1 > lvdWinN()) {   // past the last wave the dead won't stop: an alliance bigger than the winners breaks up
+      const pw = o => units.filter(u => u.troops && u.team === o.id && u.dying === null).reduce((x, u) => x + troopStrength(u.troops), 0) + game.cities.filter(c => c.owner === o.id).length * 30;
+      const rank = [f, ...mates].sort((x, y) => pw(y) - pw(x)).indexOf(f), base = f.diff === 'easy' ? 0.08 : f.diff === 'hard' ? 0.25 : 0.15;
+      if (Math.random() < base * (rank === 0 ? 2 : 1)) { lvdBetrayOp(f.id, null); return; } }   // the strongest goes first
+    if (lvdFree(f) && many && Math.random() < 0.3) {     // out of the alliance: offer one to the strongest realm it could win with
+      const pw = o => units.filter(u => u.troops && u.team === o.id && u.dying === null).reduce((x, u) => x + troopStrength(u.troops), 0);
+      const c = lvdLiving().filter(o => lvdCanAsk(f, o) && lvdLiving().filter(x => x.tm === o.tm || x.tm === f.tm).length <= lvdWinN()).sort((x, y) => pw(y) - pw(x))[0];
+      if (c) lvdProposeOp(f.id, c.id, null); }
+  }
   const LOST_TURNS = 3;                               // a realm with no city left has 3 turns to take (or found) one, or its armies scatter
   function checkDefeats() {
     for (const f of game.factions || []) { if (!f.alive || f.undead) continue;
@@ -1501,6 +1541,8 @@
         units = units.filter(u => !(u.troops && u.team === f.id)); f.alive = false; delete f.lostAt; toast(`${f.name} could not take a city back · its armies scatter · defeated`); }
     }
     const al = aliveFactions().filter(f => !f.undead), ud = game.undead;          // the last realm must also destroy the undead
+    if (!game.cwinner && game.view === 'campaign' && lvdOn() && al.length) {   // LIVING VS DEAD: the set number of realms (or fewer) left, and the dead beaten
+      if (al.length <= lvdWinN() && ud && ud.final && !undeadArmies().length && !ud.pool.length) { game.cwinners = al.map(f => f.id); game.cwinner = al[0].id; } return; }
     if (!game.cwinner && game.view === 'campaign') { if (!al.length) game.cwinner = 'undead'; else if (new Set(al.map(f => sideOf(f.id))).size === 1 && (!ud || (ud.final && !undeadArmies().length && !ud.pool.length))) game.cwinner = al[0].id; }
   }
   // ---------- lobby ----------
@@ -1514,9 +1556,9 @@
     let w = null; for (let i = 0; i < 70 && !(w && w.ok); i++) { const t = genWorld((Math.random() * 4e9) >>> 0, nSpots, i < 25 ? 6 : i < 50 ? 5 : 4); if (!w || t.ok || t.spots.length > w.spots.length) w = t; }
     const R = w.R, names = CITY_NAMES.slice(); for (let i = names.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [names[i], names[j]] = [names[j], names[i]]; }
     const spots = w.spots.slice(); for (let i = spots.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [spots[i], spots[j]] = [spots[j], spots[i]]; }
-    const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai' || (game.opts && game.opts.god), alive: true, ...(f.diff ? { diff: f.diff } : {}), ...(f.tm ? { tm: f.tm } : {}), ...(f.pname ? { pname: f.pname } : {}), style: 'balanced' }));
+    const factions = setup.map(f => ({ id: f.id, name: f.name, col: f.col, color: f.color, ai: f.kind === 'ai' || (game.opts && game.opts.god), alive: true, ...(f.diff ? { diff: f.diff } : {}), ...(f.tm && !(game.opts && game.opts.lvd) ? { tm: f.tm } : {}), ...(f.pname ? { pname: f.pname } : {}), style: 'balanced' }));
     if (game.opts && game.opts.blessed) factions[(Math.random() * factions.length) | 0].blessed = true;   // a secret: one realm gets 3 passive gold a turn
-    if (game.opts && game.opts.coop) {                 // co-op: each team starts together, the two teams at opposite ends of the land
+    if (game.opts && game.opts.coop && !game.opts.lvd) {                 // co-op: each team starts together, the two teams at opposite ends of the land
       const team = side => factions.map((f, i) => i).filter(i => !!factions[i].ai === side), H = team(false), A = team(true);
       const byRow = spots.slice().sort((x, y) => x[1] - y[1]), south = R() < 0.5, west = R() < 0.5, side = game.opts.coopLayout === 'side';
       const nw = [0, WALL_ROW + 2], ne = [CCOLS - 1, WALL_ROW + 2];            // side by side: both teams up north by the wall, one west and one east
@@ -1562,6 +1604,7 @@
     factions.forEach((f, i) => { const c = cities[i];
       const n = nbIn(c.col, c.row, CCOLS, CROWS).find(([a, b]) => T[b * CCOLS + a] !== 'w' && T[b * CCOLS + a] !== 'm');
       armies.push({ id: `army-${f.id}-1`, type: 'army', team: f.id, col: n[0], row: n[1], hp: 1, maxHp: 1, face: 0, moved: false, attacked: false, troops: [troop('swordsman')] }); });
+    if (game.opts && game.opts.lvd) for (const f of factions) f.tm = 1;   // LIVING VS DEAD: every realm starts in one alliance (spread out like rivals)
     factions.push({ id: 'undead', name: 'Undead', col: UNDEAD_COL, ai: true, alive: true, style: 'undead', undead: true });   // the undead play last, with no city and no army yet
     const points = {}; for (const f of factions) points[f.id] = f.undead ? 0 : START_GOLD;
     const mines = [], spotsAll = cities.map(c => [c.col, c.row]), cand = [];
@@ -1571,7 +1614,7 @@
     for (let tries = 0; tries < 3000 && mines.length < nMines && cand.length; tries++) { const p = cand[(Math.random() * cand.length) | 0];
       if (mines.every(m => hexDist(m, p) >= Math.max(3, 8 - Math.floor(tries / 300)))) mines.push(p); }
     const st = { ...exportState(null), mapRows: CROWS, seq: game.seq + 1, view: 'campaign', turn: factions[0].id, round: 1, factions, cities, roads: [], terrain: T, heights: w.heights, explored: {}, mines, points, units: armies,
-      sides: null, campaign: null, cwinner: null, pending: null, battle: false, undead: { pool: [], waves: [], final: false, countdownEnd: null } };
+      sides: null, campaign: null, cwinner: null, cwinners: null, lvd: game.opts && game.opts.lvd ? { seq: 100, asks: [] } : null, pending: null, battle: false, undead: { pool: [], waves: [], final: false, countdownEnd: null } };
     st.last = { type: 'start', seq: st.seq };
     floats = []; selUnit = null; sel = null; selCity = null; applyState(st); publish(st.last);
     startOfFactionTurn(factions[0].id, true); commit({ type: 'income' });
@@ -2048,6 +2091,9 @@
     if (op.op === 'arok') arAck(op.fid, seat);
     if (op.op === 'answer') answerAsk(op.i, op.yes, seat);
     if (op.op === 'join') joinRunningBattle(op.id, seat);
+    if (op.op === 'betray') lvdBetrayOp(op.fid, seat);
+    if (op.op === 'ally') lvdProposeOp(op.fid, op.to, seat);
+    if (op.op === 'allyans') lvdAnswerOp(op.q, !!op.yes, seat);
   }
   // ===================== SIEGES: walls, gate, stairs, ladders, towers =====================
   const WALL_HP = 24, GATE_HP = 72, WALL_PX = 5.6 * Math.sqrt(1 - SQ * SQ) * K;
@@ -2288,6 +2334,15 @@
       toast(`🧟 The main army of the dead falls on ${c.name}`); commit({ type: 'ai' }); engage(main, c); return true; }
     commit({ type: 'ai' }); return true;
   }
+  const ENDLESS_EVERY = 20;
+  function lvdEndlessWave() {                         // LIVING VS DEAD past the last wave: every 20 turns a bigger host, with more mammoths, Kings and Queens each time
+    const ud = game.undead; ud.endless = (ud.endless || 0) + 1; const k = ud.endless;
+    const ud2 = (game.opts && game.opts.undeadDiff) || 'easy', mult = ud2 === 'medium' ? 1.5 : ud2 === 'hard' || ud2 === 'extreme' ? 2 : 1;
+    const elites = []; for (let i = 0; i < k; i++) elites.push(...hordeElites());
+    const mobs = skels(Math.round(WAVE_SIZE(FINAL_WAVE) * mult * (1 + 0.25 * k)));
+    const main = newUndeadArmy([...elites, ...mobs], { released: true });
+    toast(`🧟 More than ${lvdWinN()} realm${lvdWinN() > 1 ? 's' : ''} still live · the dead will not rest · wave ${k} after the last: ${main.troops.length} strong`);
+    raiseRaiders(main, mult); }
   function undeadWave(T) {                           // every 50 turns: a new army of skeletons (20 more each wave) marches south; the last wave: the host up north comes, as one army
     const ud = game.undead; if (ud.waves.includes(T)) return; ud.waves.push(T);
     const ud2 = (game.opts && game.opts.undeadDiff) || 'easy', mult = ud2 === 'medium' ? 1.5 : ud2 === 'hard' || ud2 === 'extreme' ? 2 : 1;   // undead difficulty: more skeletons each wave
@@ -2298,9 +2353,9 @@
     if (!h) h = others.shift() || newUndeadArmy([], {});
     for (const a of others) h.troops = [...h.troops, ...a.troops]; units = units.filter(u => !others.includes(u));
     h.troops = [...h.troops.filter(t => !t.ward), ...mobs];   // the 200 guards stay home; the wave's skeletons march with the host
-    const living = game.factions.filter(f => f.alive && !isUndeadFid(f.id)), team = living.length > 1 && new Set(living.map(f => sideOf(f.id))).size === 1;
+    const living = game.factions.filter(f => f.alive && !isUndeadFid(f.id)), team = !lvdOn() && living.length > 1 && new Set(living.map(f => sideOf(f.id))).size === 1;
     if (team) h.troops = [...hordeElites(), ...h.troops];   // the last ones standing are one team: twice the mammoths, Kings and Queens
-    h.released = true; h.horde = true;
+    h.released = true; h.horde = true; ud.finalRound = game.round;
     for (const a of undeadArmies()) a.released = true;
     toast(`🧟 The last wave: the host of the dead marches south · ${h.troops.length} strong${team ? ' · against one team: twice the mammoths, Kings and Queens' : ''}`);
     raiseRaiders(h, mult);
@@ -2309,8 +2364,9 @@
     const ud = game.undead; if (!ud) return;
     ensureHorde(); flushPool(); compactArmies();
     const living = game.factions.filter(f => f.alive && !isUndeadFid(f.id));
-    const oneSide = living.length && new Set(living.map(f => sideOf(f.id))).size === 1;   // only one realm (or one team) left: the last wave comes in 5 turns, not at round 200
-    if (oneSide && !ud.final && (!ud.countdownEnd || ud.countdownEnd > game.round + 5)) { ud.countdownEnd = game.round + 5; toast(`🧟 Only ${living.length === 1 ? 'one realm stands' : 'one team stands'} · the last wave of the dead comes in 5 turns`); }
+    const oneSide = lvdOn() ? living.length && living.length <= lvdWinN() : living.length && new Set(living.map(f => sideOf(f.id))).size === 1;   // LIVING VS DEAD: down to the winners' number   // only one realm (or one team) left: the last wave comes in 5 turns, not at round 200
+    if (oneSide && !ud.final && (!ud.countdownEnd || ud.countdownEnd > game.round + 5)) { ud.countdownEnd = game.round + 5; toast(`🧟 Only ${lvdOn() ? (living.length === 1 ? 'one realm stands' : living.length + ' realms stand') : living.length === 1 ? 'one realm stands' : 'one team stands'} · the last wave of the dead comes in 5 turns`); }
+    if (lvdOn() && ud.final && living.length > lvdWinN() && ud.finalRound !== undefined && game.round > ud.finalRound && (game.round - ud.finalRound) % ENDLESS_EVERY === 0) lvdEndlessWave();   // too many still live: the dead keep coming
     if (ud.countdownEnd && game.round >= ud.countdownEnd && !ud.final) undeadWave(FINAL_WAVE);
     else if (game.round % WAVE_EVERY === 0 && game.round <= FINAL_WAVE) undeadWave(game.round);
   }
@@ -3048,6 +3104,7 @@
   }
   function aiCampaignStep(f) {
     if (!aiState || aiState.kind !== 'camp' || aiState.fid !== f.id) aiState = { kind: 'camp', fid: f.id, econ: false, done: new Set() };
+    try { lvdAiTurn(f); } catch (e) { console.error(e); }
     const pts = () => game.points[f.id] || 0, spend = n => { game.points = { ...game.points, [f.id]: pts() - n }; };
     f.style = 'balanced';                                             // no more personalities: every AI plays the same balanced way
     const myCities = game.cities.filter(c => c.owner === f.id), myArmies = () => units.filter(u => u.troops && u.team === f.id && u.dying === null && !u.inBattle);
@@ -5193,6 +5250,7 @@
       <div class="lsub">${host ? `<button id="lbless" class="${game.opts && game.opts.blessed ? 'on' : ''}">🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}</button>` : `🎲 Blessed realm: ${game.opts && game.opts.blessed ? 'On' : 'Off'}`} · one random faction (players included) secretly gets 3 passive gold a turn instead of 1</div>
       <div class="lsub">${host ? `<button id="lgod" class="${game.opts && game.opts.god ? 'on' : ''}">👁 God mode: ${game.opts && game.opts.god ? 'On' : 'Off'}</button>` : `👁 God mode: ${game.opts && game.opts.god ? 'On' : 'Off'}`} · every realm (yours too) is played by the AI; you watch everything with no fog, battles are fought out on the board and the camera follows the action</div>
       <div class="lsub">${host ? `<button id="lcoop" class="${game.opts && game.opts.coop ? 'on' : ''}">🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}</button>` : `🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}`} · all players are one team against all AI realms; each team shares its sight</div>
+      <div class="lsub">${host ? `<button id="llvd" class="${game.opts && game.opts.lvd ? 'on' : ''}">💀 Living vs Dead: ${game.opts && game.opts.lvd ? 'On' : 'Off'}</button>` : `💀 Living vs Dead: ${game.opts && game.opts.lvd ? 'On' : 'Off'}`} · every realm starts in one alliance against the dead; anyone can betray it at any time and ally with others who left; past the last wave the dead keep coming, stronger each time, while too many realms live${game.opts && game.opts.lvd ? ` · 🏆 ${tr('How many can win')}: ${host ? `<select id="llvdwin" style="background:#2a2618;color:#e8dfc8;border:1px solid #6b5d36;border-radius:4px;padding:3px 4px;font-size:12px">${Array.from({ length: Math.max(1, n - 1) }, (_, i) => i + 1).map(k => `<option value="${k}" ${Math.min(Math.max(1, n - 1), (game.opts.lvdWin || 1)) === k ? 'selected' : ''}>${k}</option>`).join('')}</select>` : `<b>${Math.min(Math.max(1, n - 1), game.opts.lvdWin || 1)}</b>`}` : ''}</div>
       <div class="lsub">${host ? `<button id="lauto" class="${autoFightOn() ? 'on' : ''}">⚡ Auto-fight button: ${autoFightOn() ? 'On' : 'Off'}</button>` : `⚡ Auto-fight button: ${autoFightOn() ? 'On' : 'Off'}`} · players get a button in battles that lets the AI fight it out for their side</div>
       ${game.opts && game.opts.coop ? `<div class="lsub">Teams start: ${[['ends', '↕ North vs South'], ['side', '↔ Side by side, both by the wall']].map(([k, l]) => host ? `<button data-coopl="${k}" class="${((game.opts.coopLayout || 'ends') === k) ? 'on' : ''}">${l}</button>` : ((game.opts.coopLayout || 'ends') === k ? `<b>${l}</b>` : '')).join(' ')}</div>` : ''}
       ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
@@ -5219,7 +5277,8 @@
     if (b.dataset && b.dataset.udiff && isHost()) { game.opts = { ...(game.opts || {}), undeadDiff: b.dataset.udiff }; commit({ type: 'setup' }); return; }
     if (b.dataset && b.dataset.team && isHost()) { const f = game.factions[+b.dataset.team]; if (f) { f.tm = ((f.tm || 0) + 1) % 9 || undefined; if (!f.tm) delete f.tm; if (f.tm && game.opts) game.opts = { ...game.opts, coop: false }; } commit({ type: 'setup' }); return; }
     if (b.dataset && b.dataset.coopl && isHost()) { game.opts = { ...(game.opts || {}), coopLayout: b.dataset.coopl }; commit({ type: 'setup' }); return; }
-    if (b.id === 'lcoop' && isHost()) { game.opts = { ...(game.opts || {}), coop: !(game.opts && game.opts.coop) }; if (game.opts.coop) for (const f of game.factions) delete f.tm; commit({ type: 'setup' }); return; }
+    if (b.id === 'llvd' && isHost()) { game.opts = { ...(game.opts || {}), lvd: !(game.opts && game.opts.lvd), coop: false }; if (game.opts.lvd) for (const f of game.factions) delete f.tm; commit({ type: 'setup' }); return; }
+    if (b.id === 'lcoop' && isHost()) { game.opts = { ...(game.opts || {}), coop: !(game.opts && game.opts.coop), lvd: false }; if (game.opts.coop) for (const f of game.factions) delete f.tm; commit({ type: 'setup' }); return; }
     if (b.id === 'lbless' && isHost()) { game.opts = { ...(game.opts || {}), blessed: !(game.opts && game.opts.blessed) }; commit({ type: 'setup' }); return; }
     if (b.dataset.kind && isHost()) { const [i, k] = b.dataset.kind.split(':'); game.factions[i].kind = k; commit({ type: 'setup' }); }
     if (b.dataset.color) { const [i, k] = b.dataset.color.split(':'), f = game.factions[i], p = PALETTE.find(x => x.key === k);
@@ -5227,11 +5286,12 @@
       f.color = k; f.col = p.col; const same = game.factions.filter(o => o !== f && o.color === k).length; f.name = same ? `${p.name} ${same + 1}` : p.name; commit({ type: 'setup' }); }
   });
   lobbyEl.addEventListener('change', e => { const sl = e.target;
+    if (sl && sl.id === 'llvdwin' && isHost() && game.view === 'lobby') { game.opts = { ...(game.opts || {}), lvdWin: Math.max(1, Math.floor(Number(sl.value)) || 1) }; commit({ type: 'setup' }); return; }
     if (sl && sl.id === 'lbturns' && isHost() && game.view === 'lobby') { const v = Math.max(0, Math.min(999, Math.floor(Number(sl.value)) || 0)); game.opts = { ...(game.opts || {}), battleTurns: v }; commit({ type: 'setup' }); return; }
     if (sl && sl.dataset && (sl.dataset.diffsel !== undefined || sl.dataset.teamsel !== undefined) && isHost() && game.view === 'lobby') {   // the difficulty / team dropdowns
       const f = game.factions[+(sl.dataset.diffsel ?? sl.dataset.teamsel)]; if (!f) return;
       if (sl.dataset.diffsel !== undefined) { if (sl.value === 'medium') delete f.diff; else f.diff = sl.value; }
-      else { const n = +sl.value; if (n) { f.tm = n; if (game.opts) game.opts = { ...game.opts, coop: false }; } else delete f.tm; }
+      else { const n = +sl.value; if (n) { f.tm = n; if (game.opts) game.opts = { ...game.opts, coop: false, lvd: false }; } else delete f.tm; }
       commit({ type: 'setup' }); return; }
     const el = e.target; if (!el || el.dataset.pname === undefined || game.view !== 'lobby') return;
     const f = game.factions[+el.dataset.pname]; if (!f || !(mode === 'online' ? f.id === mySeat : true)) return;
@@ -5240,6 +5300,7 @@
     if (e.target && e.target.dataset && e.target.dataset.pname !== undefined) { e.stopPropagation(); if (e.key === 'Enter') e.target.blur(); } });
   function undeadInfo() {
     const ud = game.undead; if (!ud) return '';
+    if (ud.final && lvdOn() && lvdLiving().length > lvdWinN() && ud.finalRound !== undefined) { const l = ENDLESS_EVERY - ((game.round - ud.finalRound) % ENDLESS_EVERY); return ` · 🧟 ${lvdLiving().length} realms live, ${lvdWinN()} can win · more dead in ${l}`; }
     if (ud.final) return ' · 🧟 the last wave is out';
     if (ud.countdownEnd) return ` · 🧟 the dead come in ${Math.max(0, ud.countdownEnd - game.round)}`;
     const left = game.round % WAVE_EVERY === 0 ? 0 : WAVE_EVERY - (game.round % WAVE_EVERY); return ` · 🧟 ${left ? `next wave in ${left}` : 'a wave rises this turn'}`;
@@ -5267,6 +5328,16 @@
     facsEl.style.display = 'block';
   }
   const btn = (attr, label, ok, title = '') => `<button ${attr} ${ok ? '' : 'disabled'} title="${title}">${label}</button>`;
+  function lvdPanel(me) {                              // LIVING VS DEAD: your alliance, betrayal, offers
+    const f = faction(me); if (!lvdOn() || !f || !f.alive || f.undead || game.cwinner) return '';
+    const mates = lvdMates(f), free = lvdFree(f), ok = game.view === 'campaign' && !game.bt, asks = (game.lvd && game.lvd.asks) || [];
+    let h = `<div class="sub">💀 Living vs Dead · ${lvdWinN()} can win · ${lvdLiving().length} live</div>`;
+    h += `<div class="k">${f.tm === 1 ? 'You stand in the alliance of the living' : mates.length ? 'Your alliance' : 'You stand alone'}${mates.length ? ': ' + mates.map(o => o.name).join(', ') : ''}</div>`;
+    if (mates.length) h += `<div class="row">${btn('data-lvd="betray"', '🗡 Betray ' + (f.tm === 1 ? 'the alliance' : 'your allies'), ok, 'Leave your alliance: your allies become enemies')}</div>`;
+    if (free) { const can = lvdLiving().filter(o => lvdCanAsk(f, o)); const out = asks.filter(q => q.from === me);
+      if (can.length) h += `<div class="k">Offer an alliance (only to realms that left the alliance of the living):</div><div class="grid">${can.map(o => btn(`data-lvdally="${o.id}"`, '🤝 ' + o.name, ok)).join('')}</div>`;
+      if (out.length) h += `<div class="k">Waiting for: ${out.map(q => faction(q.to).name).join(', ')}</div>`; }
+    return h; }
   function renderCamp() {
     if (game.view === 'battle' && game.bt && !spectating()) { renderBattlePanel(); return; }
     if (localView() !== 'campaign' || dmActive()) { campEl.style.display = 'none'; return; }
@@ -5320,10 +5391,12 @@
       }
     }
     if (!html) html = `<div class="k">Click a city or an army.</div>`;
+    html += lvdPanel(me);
     if (campEl.dataset.h !== html) { campEl.dataset.h = html; campEl.innerHTML = html; }
     campEl.style.display = 'block';
   }
   campEl.addEventListener('click', e => {
+    { const lb = e.target.closest('button[data-lvd], button[data-lvdally]'); if (lb && !lb.disabled) { const me = viewer(); if (lb.dataset.lvd === 'betray') showModal(`<div class="mbox"><div class="t">🗡 Betray your alliance?</div><div>Your allies become your enemies at once. Afterwards you can offer an alliance to any realm that also left.</div><div class="row"><button data-lvdbetray="1">🗡 Betray</button><button data-lvdkeep="1">Keep faith</button></div></div>`); else requestOp({ op: 'ally', fid: me, to: lb.dataset.lvdally }); return; } }   // at any time, not only on your turn
     { const hb = e.target.closest('button[data-hero]'); if (hb) { openHero(selUnit, Number(hb.dataset.hero)); return; } }
     const b = e.target.closest('button'); if (!b || b.disabled || !myCampaignTurn()) return;
     const me = viewer(), a = selUnit && selUnit.troops ? selUnit : null, city = selCity || (a && cityAt([a.col, a.row]));
@@ -5404,10 +5477,21 @@
   modalEl.addEventListener('click', e => { if (!e.target.closest('button[data-arok]')) return; const r = game.arReport; modalEl.dataset.arr = ''; hideModal(); if (!r) return;
     const me = viewer(), mine = mode === 'local' || r.need.includes(me) || (r.need.includes('host') && isHost());
     if (mine) requestOp({ op: 'arok', fid: r.need.includes('host') && isHost() ? 'host' : me }); else arReadLocal.add(r.id); refreshUI(); });
+  function renderLvdAsk() {                         // LIVING VS DEAD: someone offers you an alliance — a question on screen, whoever's turn it is
+    const me = viewer(), q = lvdOn() && game.lvd && !game.cwinner && game.view === 'campaign' ? game.lvd.asks.find(x => x.to === me) : null;
+    if (!q) { if (modalEl.dataset.lvdq) { modalEl.dataset.lvdq = ''; hideModal(); } return false; }
+    if (modalEl.dataset.lvdq === q.id) return true; modalEl.dataset.lvdq = q.id; const a = faction(q.from);
+    showModal(`<div class="mbox"><div class="t">🤝 ${a.name} wants to be your ally</div><div>Accept and you fight side by side: shared sight, no fighting each other. ${lvdWinN()} realm${lvdWinN() > 1 ? 's' : ''} can win; either of you can betray the other later.</div>
+      <div class="row"><button data-lvdans="${q.id}" data-yes="1">🤝 Accept</button><button data-lvdans="${q.id}" data-yes="0">✖ Decline</button></div></div>`);
+    return true; }
+  modalEl.addEventListener('click', e => { const b = e.target.closest('button[data-lvdans], button[data-lvdbetray], button[data-lvdkeep]'); if (!b) return;
+    if (b.dataset.lvdans) { modalEl.dataset.lvdq = ''; hideModal(); requestOp({ op: 'allyans', q: b.dataset.lvdans, yes: b.dataset.yes === '1', fid: viewer() }); return; }
+    hideModal(); if (b.dataset.lvdbetray) requestOp({ op: 'betray', fid: viewer() }); });
   function renderPending() {                        // the capturing player decides: keep the city or raze it
     if (renderAsk()) return;
     if (renderArReport()) return;
     if (renderArPrompt()) return;
+    if (renderLvdAsk()) return;
     if (modalEl.dataset.ask && !(game.bt && game.bt.phase === 'ask')) { modalEl.dataset.ask = ''; hideModal(); }
     const p = game.pending;
     if (p && p.type === 'capture' && p.by === viewer() && (mode === 'local' || mySeat === p.by) && !faction(p.by).ai) {
@@ -5968,7 +6052,7 @@
       (selUnit.team === game.turn ? ` · ${statusOf(selUnit)}` : '') : '';
     const w = winner(), where = game.view === 'campaign' ? '🗺 Campaign' : game.view === 'lobby' ? '⚙ Setting up' : '⚔ Battle';
     const turnHtml = w ? `${where} · <b style="color:rgb(${TEAM[w].map(c => c + 70)})">${teamName(w)} wins the battle!</b> · back to the campaign map…`
-      : spectating() ? `⚔ A battle rages (${game.bt.sides.map(f => faction(f).name).join(' vs ')}) · battle round ${shadowSt ? shadowSt.round : '?'} · ${battleSidesHtml().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')}` : game.bt && game.bt.phase === 'ask' ? '⚔ A battle is about to start · waiting for answers…' : game.view === 'lobby' ? `${where} a new campaign` : game.cwinner ? `👑 <b style="color:rgb(${TEAM[game.cwinner].map(c => Math.min(255, c + 70))})">${teamName(game.cwinner)} rules the land!</b> · hold ⟲ Reset for a new campaign` : `${where} · ${localView() === 'campaign' ? `Turn ${game.round}${undeadInfo()}` : `Round ${game.round}`} · <b style="color:rgb(${TEAM[game.turn].map(c => c + 70)})">${poss(teamName(game.turn))} turn</b>` +
+      : spectating() ? `⚔ A battle rages (${game.bt.sides.map(f => faction(f).name).join(' vs ')}) · battle round ${shadowSt ? shadowSt.round : '?'} · ${battleSidesHtml().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')}` : game.bt && game.bt.phase === 'ask' ? '⚔ A battle is about to start · waiting for answers…' : game.view === 'lobby' ? `${where} a new campaign` : game.cwinner ? `👑 <b style="color:rgb(${TEAM[game.cwinner].map(c => Math.min(255, c + 70))})">${game.cwinners && game.cwinners.length > 1 ? game.cwinners.map(teamName).join(', ') + ' rule the land!' : teamName(game.cwinner) + ' rules the land!'}</b> · hold ⟲ Reset for a new campaign` : `${where} · ${localView() === 'campaign' ? `Turn ${game.round}${undeadInfo()}` : `Round ${game.round}`} · <b style="color:rgb(${TEAM[game.turn].map(c => c + 70)})">${poss(teamName(game.turn))} turn</b>` +
         (mode === 'online' ? (myTurn() ? ' · your move' : ' · waiting for opponent') : '');
     if (Date.now() - resetArmed > 2000 && lastTurnHtml !== turnHtml) { lastTurnHtml = turnHtml; turnEl.innerHTML = turnHtml; }
     const bdm = document.getElementById('bdm'), dmEl = document.getElementById('dm');
@@ -6037,11 +6121,11 @@
       if (w || game.cwinner) {
         const n = document.getElementById('vname');
         const coopW = t => { if (!t || t === 'undead' || !teamsOn()) return null; const sd = sideOf(t); if (sd === t) return null; return sd === 'ai' ? 'The AI realms' : sd === 'humans' ? 'The players' : tr('Team') + ' ' + sd.slice(4); };
-        n.textContent = w ? `${coopW(w) || teamName(w)} win${coopW(w) ? '' : 's'} the battle` : `${coopW(game.cwinner) || teamName(game.cwinner)} win${coopW(game.cwinner) ? '' : 's'} the campaign`;
+        n.textContent = w ? `${coopW(w) || teamName(w)} win${coopW(w) ? '' : 's'} the battle` : game.cwinners && game.cwinners.length > 1 ? `${game.cwinners.map(teamName).join(', ')} win the campaign` : `${coopW(game.cwinner) || teamName(game.cwinner)} win${coopW(game.cwinner) ? '' : 's'} the campaign`;
         n.style.color = `rgb(${TEAM[w || game.cwinner].map(v => Math.min(255, v + 80))})`;
         const me = viewer(), wf = w || game.cwinner, tEl = document.getElementById('vtitle');
         const took = w ? (me && (inBattleSides(me) || allyInBattle(me) || (game.bt && game.bt.joined.some(j => j.fid === me || (teamsOn() && !hostile(j.fid, me)))))) : (me && (game.factions || []).some(f => f.id === me));
-        const mine = me && !hostile(me, wf), lost = me && took && !mine;
+        const mine = me && (!w && game.cwinners ? game.cwinners.includes(me) : !hostile(me, wf)), lost = me && took && !mine;
         tEl.textContent = mine && (took || !w) ? 'VICTORY' : lost ? 'DEFEAT' : w ? 'BATTLE OVER' : 'CAMPAIGN OVER';
         tEl.style.color = mine && (took || !w) ? '' : lost ? '#e0533e' : '#cfc9b4';
         vicEl.classList.add('show'); vicTimer = setTimeout(() => vicEl.classList.remove('show'), 4000);
