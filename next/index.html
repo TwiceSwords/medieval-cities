@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.50-preview</div>
+  <div class="t">Medieval Cities 3D · v3.51-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2534,7 +2534,10 @@
         case 'cripple': for (const e of near(here, R2)) if (ok(here, e)) add(val(e, rangedDmg(baseDmg(u), e)) + (T(e).ranged ? 0.5 : 2), { target: e.id }); break;
         case 'fireball': { const [d0, d1] = card.dmg(L), seen = new Set();
           for (const e of near(here, R2 + 1)) for (const t of [pos(e), ...neighbors(...pos(e))]) { const k = key(...t); if (seen.has(k) || !onBoard(t) || hexDist(here, t) > R2) continue; seen.add(k);
-            let sc = 0; for (const o of units) { if (!live(o)) continue; const dd = hexDist(t, pos(o)); if (dd > 1) continue; const dm = dd === 0 ? d0 : d1; sc += hostile(o.team, team) ? val(o, dm) : -1.5 * Math.min(dm, o.hp) - (dm >= o.hp ? 6 : 0); }
+            let sc = 0, nHit = 0; const ce = liveUnitAt(t), centerFoe = !!(ce && enemies.includes(ce));
+            for (const o of units) { if (!live(o)) continue; const dd = hexDist(t, pos(o)); if (dd > 1) continue; const dm = dd === 0 ? d0 : d1; if (hostile(o.team, team)) { sc += val(o, dm); if (enemies.includes(o)) nHit++; } else sc += -1.5 * Math.min(dm, o.hp) - (dm >= o.hp ? 6 : 0); }
+            if (!centerFoe && nHit < 2) continue;                  // never just the splash on a lone enemy: the middle goes on an enemy, or the blast catches several
+            sc += (centerFoe ? 2 : 0) + Math.max(0, nHit - 1) * 1.5;   // the middle on an enemy, and as many enemies as possible in the blast
             if (sc >= 4 && (!liveUnitAt(t) || ok(here, liveUnitAt(t)))) add(sc, { col: t[0], row: t[1] }); } break; }
         case 'lightning': for (const e of near(here, R2)) if (ok(here, e)) add(val(e, card.dmg(L)) + 2.5, { col: e.col, row: e.row }); break;
         case 'blink': if (u.hp < u.maxHp * 0.45 && near(here, 1).length) { let best = null;
@@ -2692,6 +2695,23 @@
         const sc = (hard ? hardVal(t) : 1 + 2 * (1 - t.hp / Math.max(1, t.maxHp))) - (st === here ? 0 : b.dist.get(key(...st)) * 0.15);
         if (!best || sc > best.sc) best = { sc, st, d }; }
       if (best) { aiGo({ type: 'charge', id: u.id, dir: best.d, ...(best.st === here ? {} : { path: pathTo(b, best.st) }) }); return; } }
+    if (ty.magic && hasPassive(u, 'mender')) {           // Healer's Touch: the basic attack HEALS, so it goes to hurt allies (or burns the undead), never to other enemies
+      const hurt = o => o.dying === null && o.hp > 0 && !T(o).structure && !hostile(o.team, team) && o.hp < o.maxHp;
+      const mel = foes.filter(o => !T(o).ranged && !T(o).magic && !o.ghost && !T(o).structure), minMelee = t => Math.min(99, ...mel.map(o => hexDist(t, [o.col, o.row])));
+      const prio = o => (o.maxHp - o.hp) + (1 - o.hp / o.maxHp) * 4 + (T(o).hero ? 1 : 0);
+      const pickIn = from => { const fr = units.filter(o => hurt(o) && hexDist(from, [o.col, o.row]) <= ty.range).sort((x, y) => prio(y) - prio(x))[0];
+        const ud = foes.filter(o => !o.ghost && T(o).undead && hexDist(from, [o.col, o.row]) <= ty.range && okAt(from, o)).sort((x, y) => x.hp - y.hp)[0];
+        return fr && (!ud || prio(fr) >= 3) ? fr : ud || fr || null; };
+      if (!u.attacked && canShootNow(u)) { const t0 = pickIn(here); if (t0) { aiGo({ type: 'shoot', id: u.id, target: t0.id }); return; } }
+      if (!u.moved && !u.attacked && !noMoveShoot(u)) {   // walk to where someone needs it, staying out of melee
+        let best = null; for (const t of tiles) { const tg = pickIn(t); if (!tg) continue; const sf = minMelee(t), sc = (tg.team === team || !hostile(tg.team, team) ? prio(tg) : 2) + Math.min(sf, 3) * 0.8 - b.dist.get(key(...t)) * 0.05; if (!best || sc > best.sc) best = { t, tg, sc }; }
+        if (best) { aiGo({ type: 'shoot', id: u.id, path: pathTo(b, best.t), target: best.tg.id }); return; } }
+      if (!u.moved) { const mates = units.filter(o => o !== u && o.team === team && o.dying === null && o.hp > 0 && !T(o).structure);   // nobody to heal: keep close to the army, out of melee
+        if (mates.length) { const cx = mates.reduce((x, o) => x + o.col, 0) / mates.length, cy = mates.reduce((x, o) => x + o.row, 0) / mates.length, mid = [Math.round(cx), Math.round(cy)];
+          let best = null; for (const t of tiles) { if (minMelee(t) < 2) continue; const d = hexDist(t, mid); if (!best || d < best.d) best = { t, d }; }
+          if (best && best.d < hexDist(here, mid)) { aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return; } } }
+      aiState.skip.add(u.id); aiBusyUntil = Date.now() + 30; return;
+    }
     if (ty.ranged === 'arc' || ty.magic) {
       if (ty.mounted && !u.moved && !u.attacked && canShootNow(u)) {    // horse archer kites: ride to the tile farthest from every enemy that still has one in range, then shoot
         let best = null; const seen = allFoes.filter(o => sees(team, [o.col, o.row]));   // only enemies it can see count (fog)
