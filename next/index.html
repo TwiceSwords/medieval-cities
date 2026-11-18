@@ -10,6 +10,7 @@
   canvas{display:block;width:100vw;height:100vh;cursor:grab;touch-action:none}
   canvas.drag{cursor:grabbing}
   #gl,#c2{position:fixed;left:0;top:0;pointer-events:none;display:none}
+  #hud{display:none!important}   /* the title / help box is gone (PC and phones); it stays in the page only for the version number */
   body.touch #hud .k,body.touch #hud .t{display:none}body.touch #hud{zoom:var(--tz,1);left:66px;top:auto;bottom:8px;padding:5px 10px;max-width:46vw}
   body.touch #top,body.touch #camp,body.touch #facs,body.touch #net,body.touch #savebar,body.touch #godbar,body.touch #goldhud,body.touch #cards,body.touch #teams,body.touch #tst,body.touch #udwarn,body.touch #lobby,body.touch #modal .mbox,body.touch #dm{zoom:var(--tz,1)}
   body.touch button{min-height:30px;touch-action:manipulation}
@@ -117,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.47-preview</div>
+  <div class="t">Medieval Cities 3D · v3.48-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
