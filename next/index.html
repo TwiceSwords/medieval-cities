@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.51-preview</div>
+  <div class="t">Medieval Cities 3D · v3.52-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2633,6 +2633,7 @@
       if (us) { tgt = { col: us[0], row: us[1], hp: 99, id: null, ghost: true }; foes = [tgt]; } }
     const dT = hexDist(here, [tgt.col, tgt.row]);
     const sallying = !!sg() && !hostile(team, sg().def) && !shooterSide(team, true) && shooterSide(team, false);
+    const relook = () => { const rp = aiState.repass = aiState.repass || new Set(); if (!rp.has(u.id + ':mv')) { rp.add(u.id + ':mv'); aiState.skip.delete(u.id); } };   // after this move it gets one more look this turn (hit the wall / the enemy next to it)
     const breachStep = () => {                                  // attackers: a broken wall piece / broken or open gate is a way in; up to 3 a turn head for each one
       const s2 = sg(); if (!s2 || !hostile(team, s2.def) || u.moved || u.climb || projAt(here, s2.th) >= s2.W + 1.15 || isWallTop(here)) return false;   // (a unit standing in the gap keeps going in)
       const ops = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r], pj = projAt(h, s2.th); if (pj < s2.W || pj >= s2.W + 1.15 || blockedTile(h)) continue;
@@ -2641,10 +2642,12 @@
       const used = aiState.breachN = aiState.breachN || {};
       for (const op of ops.filter(o => (used[key(...o)] || 0) < 3).sort((a, b) => hexDist(here, a) - hexDist(here, b)).slice(0, 3)) {
         if (hexDist(here, op) > moveOf(u) * 4 + 2) continue;          // too far away: help break the wall nearby instead
+        if (liveUnitAt(op) && liveUnitAt(op) !== u) continue;          // the gap is taken (an enemy holding it, or a friend already in it): break the wall instead of milling around it
         const inner = neighbors(...op).filter(n => onBoard(n) && !blockedTile(n) && projAt(n, s2.th) >= s2.W + 1.15 && !wallAt(n)).sort((a, b) => hexDist(here, a) - hexDist(here, b))[0] || op;
         const fp = farPath(u, inner); if (!fp || !fp.length) continue;
         let k = Math.min(fp.length, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--; if (k <= 0) continue;
-        used[key(...op)] = (used[key(...op)] || 0) + 1; aiGo({ type: 'move', id: u.id, path: fp.slice(0, k) }); return true; }
+        if (hexDist(fp[k - 1], inner) >= hexDist(here, inner)) continue;   // that move would not get it any closer: no circling around the gap
+        used[key(...op)] = (used[key(...op)] || 0) + 1; relook(); aiGo({ type: 'move', id: u.id, path: fp.slice(0, k) }); return true; }
       return false; };
     const sallyStep = () => { if (!sallying || u.moved) return false; const fp = farPath(u, [tgt.col, tgt.row]);   // defenders going out: follow the whole way (stairs, gate) a turn at a time
       if (!fp || !fp.length) return false; let k = Math.min(fp.length, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--;
@@ -2727,6 +2730,17 @@
       if (walkToward()) return;
     } else if (ty.ranged === 'line' || ty.ranged === 'pierce') {
       if (!u.moved && !u.attacked) for (let d = 0; d < 6; d++) { const f = firstInLine(here, d, ty.range); if (f && hostile(f.unit.team, team) && okAt(here, f.unit) && !pierceJammed(u, d)) { aiGo({ type: ty.ranged === 'line' ? 'bolt' : 'pierce', id: u.id, dir: d }); return; } }
+      if (!u.moved && !u.climb && moveOf(u) > 0) {        // no clear line from here (a mountain, a wall, a friend in the way): go where there is one, and shoot next turn
+        const mel = foes.filter(o => !o.ghost && !T(o).ranged && !T(o).magic && !T(o).structure); let best = null;
+        for (const t of tiles) { if (t[0] === u.col && t[1] === u.row) continue; let line = false;
+          for (let d = 0; d < 6 && !line; d++) { const f = firstInLine(t, d, ty.range); if (f && f.unit !== u && hostile(f.unit.team, team) && !f.unit.ghost && okAt(t, f.unit)) line = true; }
+          if (!line) continue; const sf = Math.min(9, ...mel.map(o => hexDist(t, [o.col, o.row]))), sc = b.dist.get(key(...t)) + (sf <= 1 ? 6 : sf <= 2 ? 2 : 0);
+          if (!best || sc < best.sc) best = { t, sc }; }
+        if (best) { aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return; }
+        let far = null;                                    // none in reach this turn: head (around the obstacle) for the nearest spot that has one
+        for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const t = [c, r], dh = hexDist(here, t); if (dh < 1 || dh > 14 || blockedTile(t) || unitAt(t) || (far && dh >= far.dh)) continue;
+          for (let d = 0; d < 6; d++) { const f = firstInLine(t, d, ty.range); if (f && f.unit !== u && hostile(f.unit.team, team) && !f.unit.ghost) { far = { t, dh }; break; } } }
+        if (far) { const fp = farPath(u, far.t); if (fp && fp.length) { let k = Math.min(fp.length, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--; if (k > 0) { aiGo({ type: 'move', id: u.id, path: fp.slice(0, k) }); return; } } } }
       if (walkToward()) return;
     } else if (ty.ranged === 'mark') {
       if (!u.moved && !u.attacked && dT <= ty.range) { aiGo({ type: 'mark', id: u.id, col: tgt.col, row: tgt.row }); return; }
