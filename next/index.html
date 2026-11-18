@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.48-preview</div>
+  <div class="t">Medieval Cities 3D · v3.49-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1010,17 +1010,17 @@
   }
 
   const MAMMOTH_SIZE = 1.6; let drawScale = 1;      // mammoths are drawn bigger, to fill the 7 tiles they stand on
-  // PHONES: every model is drawn once into a small picture (per facing, pose, team colour and zoom) and the picture is reused
+  // 2D (PC and phones): every model is drawn once into a small picture (per facing, pose, team colour and zoom) and the picture is reused
   const SPR = new Map(); let sprId = 0;
   function drawMesh(g, mesh, bx, by, th, t, flash = 0, dazed = 0, anim = null) {
     if (R3.on) { R3.submit(g, mesh, bx, by, th, t, flash, dazed, anim); return; }
     if (mesh.hMax === undefined) mesh.hMax = Math.max(1, ...mesh.v.map(v => v[1]));
-    if (LITE) {
+    {
       if (!mesh.sid) mesh.sid = ++sprId;
       const TAU = Math.PI * 2, ab = Math.round((((th % TAU) + TAU) % TAU) / TAU * 16) % 16, thq = ab / 16 * TAU;   // 16 facings
       const wk = anim && anim.walk !== null && anim.walk !== undefined ? Math.round((((anim.walk % TAU) + TAU) % TAU) / TAU * 6) % 6 : -1;   // 6 walking steps
       const at = anim && anim.atk ? Math.round(anim.atk * 4) : 0, die = anim && anim.die ? Math.round(anim.die * 5) : 0, dz = dazed ? 1 + (Math.round((Math.sin(t * 3.2) + 1) * 1.5)) : 0, fl = Math.round(Math.min(1, flash) * 3);
-      const zs = z * dpr, res = zs <= 0.4 ? 0.4 : zs <= 0.6 ? 0.6 : zs <= 0.85 ? 0.85 : zs <= 1.2 ? 1.2 : zs <= 1.7 ? 1.7 : 2.4;   // a few zoom levels, sharp enough at each
+      const zs = z * dpr, res = zs <= 0.4 ? 0.4 : zs <= 0.6 ? 0.6 : zs <= 0.85 ? 0.85 : zs <= 1.2 ? 1.2 : zs <= 1.7 ? 1.7 : zs <= 2.4 ? 2.4 : zs <= 3.4 ? 3.4 : zs <= 4.8 ? 4.8 : 6.8;   // a few zoom levels, sharp enough at each
       const key = mesh.sid + '|' + ab + '|' + wk + '|' + at + '|' + die + '|' + dz + '|' + fl + '|' + drawScale + '|' + res + '|' + K;
       let sp = SPR.get(key);
       if (sp) { SPR.delete(key); SPR.set(key, sp); }   // most recently used last
