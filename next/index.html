@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.56-preview</div>
+  <div class="t">Medieval Cities 3D · v3.57-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2865,18 +2865,27 @@
   // ---- AGAINST THE UNDEAD (Medium+ AIs on the undead front) ----
   // the mix that beats the horde: mass ranged behind walls (crossbows stun from the walls, archers add damage from behind them), horsemen (20 HP) holding the
   // broken wall tiles with halberds right behind them (reach 2, double damage on mammoths: they count as mounted), a couple of ballistas for the gaps, a trebuchet or two for the mammoths
-  const UD_MIX = { crossbow: 0.24, archer: 0.24, horseman: 0.16, halberdier: 0.16, ballista: 0.1, trebuchet: 0.06, spearman: 0.02, swordsman: 0.02 };
+  // anti-undead army styles: each defence commits to one (tested vs undead raids at 17 units: all four held 4-6 of 6, a balanced mix only 2 of 6)
+  const UD_DOCS = {
+    xbowhorde: { w: 3, mix: { crossbow: 8, archer: 6, horseman: 3 }, b: ['crossbow', 'archer', 'horseman'] },                          // crossbow horde: stun everything, archers finish
+    killzone:  { w: 3, mix: { crossbow: 6, archer: 4, ballista: 3, horseman: 2, halberdier: 2 }, b: ['crossbow', 'archer', 'ballista'] },   // killzone: ballistas rake the breaches
+    stunshot:  { w: 3, mix: { crossbow: 6, archer: 6, horseman: 2, halberdier: 2, trebuchet: 1 }, b: ['crossbow', 'archer', 'horseman'] },  // stun & shoot, a trebuchet for mammoths (best vs big waves)
+    volley:    { w: 1, mix: { crossbow: 7, archer: 7, halberdier: 2, trebuchet: 1 }, b: ['crossbow', 'archer', 'halberdier'] },         // volley: pure firepower, halberds plug the gate
+  };
+  const udDocOf = seed => { const ks = Object.keys(UD_DOCS), tot = ks.reduce((x, k) => x + UD_DOCS[k].w, 0); let r = seed % (tot * 97) / 97; for (const k of ks) { r -= UD_DOCS[k].w; if (r < 0) return k; } return ks[0]; };
   const waveIn = () => game.round % WAVE_EVERY === 0 ? 0 : WAVE_EVERY - (game.round % WAVE_EVERY);
   const isNorthCity = c => !!c && (c.row < WALL_ROW || !!c.wall);
   function udFront(f) {                               // is this realm facing the dead: a city beyond the Wall / Frostgate, or a wave near and a city close to the Wall
     if (!f || f.undead || f.diff === 'easy' || !game.undead) return false; const my = game.cities.filter(c => c.owner === f.id);
     return my.some(isNorthCity) || (waveIn() <= 12 && my.some(c => c.row < WALL_ROW + 7)); }
-  function udPick(troops, types) {                    // the type this army is shortest of, measured against the anti-undead mix
+  function udPick(troops, types, doc) {               // the type this army is shortest of, measured against its anti-undead style
+    const mix = (UD_DOCS[doc] || UD_DOCS.stunshot).mix, tot = Object.values(mix).reduce((x, v) => x + v, 0);
     const n = troops.length + 1, cnt = t => troops.filter(x => x.type === t).length; let best = null;
-    for (const t of types) { const w = UD_MIX[t]; if (!w) continue; let gap = w * n - cnt(t);
-      if (t === 'trebuchet' && cnt(t) >= (n >= 14 ? 2 : 1)) gap = -9; if (t === 'ballista' && cnt(t) >= (n >= 12 ? 2 : 1)) gap = -9;   // only a few engines
-      if (!best || gap > best.gap) best = { t, gap }; }
-    return best && best.gap > -1 ? best.t : null; }
+    for (const t of types) { if (!mix[t]) continue; const gap = mix[t] / tot * n - cnt(t); if (!best || gap > best.gap) best = { t, gap }; }
+    if (best && best.gap > -1) return best.t;
+    return ['crossbow', 'archer'].find(t => types.includes(t)) || null; }   // a part of the style it can't recruit here: more shooters stand in
+  const udPlanOf = (c, f) => { if (!c.udPlan || c.udPlan.owner !== f.id) c.udPlan = { owner: f.id, walls: Math.random() < 0.8, nw: Math.random() < 0.9, doc: udDocOf((Math.random() * 1e6) | 0) };   // Frostgate: walls 80%, Night's Watch 90%; every holder picks a style
+    if (!c.udPlan.doc) c.udPlan.doc = udDocOf((Math.random() * 1e6) | 0); return c.udPlan; };
   function aiCounterWants(f) {                        // type -> how much the AI wants it as an answer to what it saw
     const th = aiThreats(f), w = {}, add = (ts, v) => { for (const t of ts) w[t] = (w[t] || 0) + v; };
     for (const [t, { n, share }] of Object.entries(th)) {
@@ -2893,7 +2902,7 @@
   }
   function aiPickTroop(id, troops, types, gold, f, northGuard) {
     const plain = types.filter(t => !HEROES.includes(t)), heroes = types.filter(t => HEROES.includes(t)), rnd = a => a[(Math.random() * a.length) | 0];
-    if (udFront(f) && (northGuard || Math.random() < 0.6)) { const t = udPick(troops, plain); if (t) return t; }   // on the undead front: build the anti-undead army
+    if (udFront(f) && (northGuard || idHash(id + 'ud') % 5 < 3)) { const t = udPick(troops, plain, udDocOf(idHash(id + 'doc'))); if (t) return t; }   // on the undead front: 3 in 5 field armies commit fully to an anti-undead style
     if (f && f.diff !== 'easy' && f.needTreb && plain.includes('trebuchet') && troops.length >= 4 && !troops.some(x => x.type === 'trebuchet') && Math.random() < 0.7) return 'trebuchet';   // a trebuchet for the walls it wants to take
     if (f && f.diff !== 'easy' && plain.length && !(idHash(id) % 4 === 0 && troops.length)) {   // answer what it has seen (an all-one-type army keeps its type)
       const cw = aiCounterWants(f), opts = plain.filter(t => cw[t] > 0), tot = opts.reduce((x, t) => x + cw[t], 0);
@@ -2970,8 +2979,9 @@
       const wantGuard = new Set([...myCities.map(c => ({ c, v: cityImp(c) })).filter(x => x.v >= 3).sort((x, y) => y.v - x.v).slice(0, maxGuards).map(x => x.c.id), ...(f.diff !== 'easy' ? myCities.filter(c => c.row < WALL_ROW || c.wall).map(c => c.id) : [])]);   // a city beyond the Wall always keeps its guard
       for (const u of units) if (u.troops && u.team === f.id && u.guard && (!wantGuard.has(u.guard) || !myCities.some(c => c.id === u.guard))) u.guard = null;   // not needed (or can't afford it) any more: back to the field
       const guardOf = c => units.find(u => u.troops && u.team === f.id && u.dying === null && u.guard === c.id);
-      const guardSize = c => (c.row < WALL_ROW || c.wall) ? northGuardN() : Math.min(8, (f.diff === 'hard' ? 4 : 3) + (cityImp(c) >= 5 && incNow >= 8 ? 2 : 0) + ((c.buildings || []).includes('walls') ? 1 : 0));
-      const guardPick = (c, troops, types) => { if (isNorthCity(c) && f.diff !== 'easy') { const t0 = udPick(troops, types.filter(t => !HEROES.includes(t))); if (t0) return t0; }
+      const guardSize = c => (c.row < WALL_ROW || c.wall) ? (f.diff !== 'easy' && (c.row < WALL_ROW || waveIn() <= 12) ? Math.min(MAX_TROOPS, northGuardN() + 8) : northGuardN()) :   // a wave coming: the guard keeps growing while the gold allows
+        Math.min(8, (f.diff === 'hard' ? 4 : 3) + (cityImp(c) >= 5 && incNow >= 8 ? 2 : 0) + ((c.buildings || []).includes('walls') ? 1 : 0));
+      const guardPick = (c, troops, types) => { if (isNorthCity(c) && f.diff !== 'easy') { const t0 = udPick(troops, types.filter(t => !HEROES.includes(t)), udPlanOf(c, f).doc); if (t0) return t0; }
         const plain = types.filter(t => !HEROES.includes(t)), rnd = a2 => a2[(Math.random() * a2.length) | 0], n = ts => troops.filter(x => ts.includes(x.type)).length;
         const SH = ['archer', 'crossbow'], TK = ['spearman', 'swordsman', 'halberdier', 'swordmaster'], walls = (c.buildings || []).includes('walls'), sh = plain.filter(t => SH.includes(t)), tk = plain.filter(t => TK.includes(t));
         if (sh.length && n(SH) < (walls ? 2 : 1)) return rnd(sh);                                   // a couple of shooters for the walls
@@ -2986,8 +2996,9 @@
         const g = runtimeUnit({ id: `army-${f.id}-g${Date.now().toString(36)}${c.id}`, type: 'army', team: f.id, col: c.col, row: c.row, hp: 1, maxHp: 1, face: 0, moved: true, attacked: true, troops: [troop(t)], guard: c.id, recruitN: 1, fresh: true });
         units.push(g); f.raisedAt = game.round; spend(cost); f.uGold = (f.uGold || 0) + cost; }
       for (const c of myCities) { const g = guardOf(c); if (!g || g.fresh || (g.moved && !g.recruitN) || g.col !== c.col || g.row !== c.row) continue;     // top the guards up slowly, never before the field army
-        for (let k = 0; k < 2 && g.troops.length < guardSize(c) && (g.recruitN || 0) < MAX_RECRUIT_TURN; k++) { const types = recruitable(c), t = types.length && guardPick(c, g.troops, types); if (!t) break;
-          const cost = unitCost(t, f.id); if (pts() < cost + reserve + 10) break; g.troops = [...g.troops, troop(t)]; spend(cost); f.uGold = (f.uGold || 0) + cost; g.recruitN = (g.recruitN || 0) + 1; } }   // at least as much gold goes to units as to buildings (start allowance: a trade post and a first barracks)
+        const udUrg = f.diff !== 'easy' && isNorthCity(c) && (c.row < WALL_ROW || waveIn() <= 12);   // beyond the Wall, or a wave close: the guard is filled first and fast
+        for (let k = 0; k < (udUrg ? 4 : 2) && g.troops.length < guardSize(c) && (g.recruitN || 0) < MAX_RECRUIT_TURN; k++) { const types = recruitable(c), t = types.length && guardPick(c, g.troops, types); if (!t) break;
+          const cost = unitCost(t, f.id); if (pts() < cost + (udUrg ? 0 : reserve + 10)) break; g.troops = [...g.troops, troop(t)]; spend(cost); f.uGold = (f.uGold || 0) + cost; g.recruitN = (g.recruitN || 0) + 1; } }   // at least as much gold goes to units as to buildings (start allowance: a trade post and a first barracks)
       // ---- the opening and the gold mines: a mine pays 4 gold a turn for 1 unit, so the close ones get a 1-unit holder army early (before the army) ----
       const cityD = m => Math.min(99, ...myCities.map(c => hexDist(m, [c.col, c.row])));
       const nearMines = (game.mines || []).filter(m => knowsTile(f.id, m) && !impassable(m) && cityD(m) <= 8 && !(udFeared(f) && m[1] < WALL_ROW) && !units.some(o => o.troops && o.dying === null && o.team !== f.id && o.col === m[0] && o.row === m[1])).sort((x, y) => cityD(x) - cityD(y));
@@ -3018,21 +3029,23 @@
       const pool = f.aiOrder;
       const unitB = c => recruitable(c).filter(t => !HEROES.includes(t)).length;
       const threat = c => units.some(u => u.troops && hostile(u.team, f.id) && u.dying === null && hexDist([u.col, u.row], [c.col, c.row]) <= 6 && sees(f.id, [u.col, u.row]));
-      const cw0 = f.diff === 'easy' ? {} : { ...aiCounterWants(f), ...(f.needTreb ? { trebuchet: 4 } : {}) }, cw = udFront(f) ? { ...cw0, crossbow: 4, archer: 3, horseman: 3, halberdier: 3, ballista: 2, trebuchet: 2 } : cw0, haveT = t => myCities.some(x => x.buildings.includes(t));
+      const cw0 = f.diff === 'easy' ? {} : { ...aiCounterWants(f), ...(f.needTreb ? { trebuchet: 4 } : {}) }, cw = udFront(f) ? (() => { const w = { ...cw0 }, docs = myCities.filter(isNorthCity).map(c => udPlanOf(c, f).doc); if (!docs.length) docs.push('stunshot');   // unit buildings for the styles its northern cities chose
+          for (const d of docs) { const m = UD_DOCS[d].mix, tot = Object.values(m).reduce((x, v) => x + v, 0); for (const t in m) w[t] = Math.max(w[t] || 0, 1.6 + 6 * m[t] / tot); } return w; })() : cw0, haveT = t => myCities.some(x => x.buildings.includes(t));
       const nextUnit = c => pool.filter(t => !c.buildings.includes(t)).sort((x, y) => ((cw[y] || 0) > 1.5 && !haveT(y)) - ((cw[x] || 0) > 1.5 && !haveT(x)) || count(x) - count(y) || pool.indexOf(x) - pool.indexOf(y))[0];   // a counter it lacks comes first
       const fieldT = t => !HEROES.includes(t) && !SIEGE.includes(t), noField = !myCities.some(c => recruitable(c).some(fieldT));   // no city can recruit a field unit (only trade posts, or only siege): that comes first, whatever the gold rules say
       for (const c of myCities) {
         if (c.acted || c.buildings.length >= CITY_SLOTS) continue;
         let want = null;
         if (isNorthCity(c)) {                                // a city beyond the Wall, or Frostgate: what it needs to hold against the dead
-          if (!c.udPlan || c.udPlan.owner !== f.id) c.udPlan = { owner: f.id, walls: Math.random() < 0.8, nw: Math.random() < 0.9 };   // Frostgate: walls 80% of the time, Night's Watch (double damage on the dead) 90%
-          const need = c.wall ? [...(c.udPlan.walls ? ['walls'] : []), ...(c.udPlan.nw ? ['nightswatch'] : []), 'crossbow', 'tower', 'archer', 'garrison', 'tower', 'holyground']
-            : ['walls', 'crossbow', 'tower', 'archer', 'garrison', 'tower'], have = [...c.buildings];
+          const pl = udPlanOf(c, f), D = UD_DOCS[pl.doc].b;   // its style decides which unit buildings it needs
+          const need = c.wall ? ['tradepost', ...(pl.walls ? ['walls'] : []), ...(pl.nw ? ['nightswatch'] : []), D[0], D[1], D[2], 'tower', 'garrison', 'holyground']
+            : ['tradepost', 'walls', D[0], D[1], D[2], 'tower', 'garrison'], have = [...c.buildings];   // 6 slots: whatever is past them never gets built
           const w = need.find(x => { const i = have.indexOf(x); if (i < 0) return true; have.splice(i, 1); return false; });
           const urgent = c.row < WALL_ROW || waveIn() <= 12;    // beyond the Wall (raided every wave), or a wave close: before anything else
           if (w && BUILDINGS[w]) { const cost = BUILDINGS[w].cost;
             if (pts() >= cost + (urgent ? 0 : 25)) { c.buildings = [...c.buildings, w]; c.acted = true; spend(cost); f.bGold = (f.bGold || 0) + cost; owned.push(w); continue; }
-            if (urgent) continue; } }   // saving up for it
+            continue; }   // saving up for it: a northern city spends no slot on anything off its list
+          if (!w) continue; }
         if (noField && c.buildings.includes('tradepost')) { const w = pool.find(t => fieldT(t) && !c.buildings.includes(t) && BUILDINGS[t]); if (w && pts() >= BUILDINGS[w].cost) { c.buildings = [...c.buildings, w]; c.acted = true; spend(BUILDINGS[w].cost); f.bGold = (f.bGold || 0) + BUILDINGS[w].cost; owned.push(w); } continue; }
         if (!c.buildings.includes('tradepost') && !(threat(c) && !unitB(c))) want = 'tradepost';   // trade first: it pays for everything else
         else if (!unitB(c)) want = nextUnit(c);                                        // then something to recruit
@@ -3213,7 +3226,7 @@
     const adjGoal = path.length >= 2 ? path[path.length - 2] : here, atGoalNext = path.length === 1 || (stop === path.length - 2);
     const walk = stop >= 0 ? pathTo(b, path[stop]) : [];
     const after = () => {
-      if (atGoalNext && mode2 === 'attack') { const tgtU = unitAt(goal), c = cityAt(goal); engage(a, tgtU && tgtU.troops && hostile(tgtU.team, f.id) ? tgtU : c); return; }
+      if (atGoalNext && mode2 === 'attack') { const tgtU = unitAt(goal), c = cityAt(goal), tg = tgtU && tgtU.troops && hostile(tgtU.team, f.id) ? tgtU : c; if (tg && units.includes(a) && a.dying === null) engage(a, tg); return; }   // the target may have left or died during the walk
       if (mode2 === 'roadgo' && a.col === goal[0] && a.row === goal[1] && !hasRoad(goal) && !cityAt(goal) && pts() >= ROAD_COST + 4 + (myCities.length >= 3 ? reserve : 0)) { game.roads = [...(game.roads || []), key(...goal)]; spend(ROAD_COST); commit({ type: 'ai' }); return; }   // lay the next piece of the planned road
       if (atGoalNext && mode2 === 'settle' && pts() >= FOUND_COST) { const c = cityAt(goal); if (c && !c.owner) { c.owner = f.id; c.buildings = []; c.acted = true; spend(FOUND_COST); commit({ type: 'ai' }); return; } }
       if (mode2 === 'road' && f.diff !== 'easy' && pts() >= ROAD_COST + 6 + reserve && !hasRoad([a.col, a.row]) && !cityAt([a.col, a.row])) { game.roads = [...(game.roads || []), key(a.col, a.row)]; spend(ROAD_COST); commit({ type: 'ai' }); }
