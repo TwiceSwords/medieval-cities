@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.69-preview</div>
+  <div class="t">Medieval Cities 3D · v3.70-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1805,7 +1805,8 @@
     const beyond = !!(b.center && b.center[1] < WALL_ROW);   // beyond the Wall (Frostgate's own tile doesn't count)
     let n = (1 + udStep()) * (beyond ? 2 : 1);
     const holy = sc && sc.wall && (sc.buildings || []).includes('holyground'), z = b.siege && b.zones[b.siege.def], inside = h => z && z.siege && projAt(h, z.siege.th) >= z.siege.W - 0.6;
-    const ok = h => !blockedTile(h) && !wallAt(h) && !units.some(u => T(u).structure && u.col === h[0] && u.row === h[1]) && !(holy && inside(h)) && !b.spots.some(q => hexDist(q, h) < 2);
+    const P = (b.siege && b.siege.pieces) || {}, onPiece = h => !!P[key(...h)];   // the board's own walls / gate / stairs (wallAt() can't see them yet while the battle is being set up)
+    const ok = h => !blockedTile(h) && !onPiece(h) && !wallAt(h) && !units.some(u => T(u).structure && u.col === h[0] && u.row === h[1]) && !(holy && inside(h)) && !b.spots.some(q => hexDist(q, h) < 2);
     const all = []; for (let r = 1; r < BROWS - 1; r++) for (let c = 1; c < BCOLS - 1; c++) all.push([c, r]);
     for (let tries = 0; n > 0 && tries < 4000; tries++) { const h = all[Math.floor(Math.random() * all.length)]; if (ok(h)) { b.spots.push(h); n--; } }
     if (beyond) {                                      // beyond the Wall: mammoths join the fight, and the host up north grows for good
@@ -1843,6 +1844,7 @@
     for (const u of sp) { floatOn(u, 'CRUMBLES', '#b98cff', 0, 14); u.hp = 0; u.dying = 0; } }
   function darkSpotTick() {                            // the undead's battle turn begins: each spot raises a skeleton, or hurts whoever stands on it
     const b = bt(); if (!b || !(b.spots || []).length || game.view !== 'battle' || udMainGone()) return;
+    if (b.spots.some(h => wallAt(h))) b.spots = b.spots.filter(h => !wallAt(h));   // never under a wall, gate or stair (older saves)
     b.spots.forEach((h, i) => { const o = liveUnitAt(h);
       if (o) { floatOn(o, 'DARK MAGIC', '#b98cff', 0, 14); hitUnit(o, 1); return; }
       if (compactOn()) { b.spotAcc = [...(b.spotAcc || [])]; b.spotAcc[i] = (b.spotAcc[i] || 0) + 0.2; if (b.spotAcc[i] < 0.999) return; b.spotAcc[i] -= 1; }   // Compact horde: a strong one every 5th turn
