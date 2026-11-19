@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.90-preview</div>
+  <div class="t">Medieval Cities 3D · v3.91-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -5332,15 +5332,17 @@
     if (busy()) { lastRemote = st; lastRemoteFrom = from || null; return; }   // finish current animation first
     if (from) from.acc = Math.max(from.acc || 0, st.seq);   // taken (only now, not while it waited)
     const a = st.last;
-    if (a && a.seq === st.seq && st.seq === game.seq + 1 && ACTIONS.includes(a.type) && !document.hidden && !(st.view === 'battle' && st.bt && !(st.bt.sides.includes(viewer()) || (st.bt.waiting || []).includes(viewer())))) {   // a hidden tab doesn't animate: just jump to the result
+    if (a && a.seq === st.seq && st.seq === game.seq + 1 && ACTIONS.includes(a.type) && !document.hidden && !(st.view === 'battle' && st.bt && spectating())) {   // everyone looking at the battle sees it play out (players, teammates watching, god-mode watchers)   // a hidden tab doesn't animate: just jump to the result
       game.seq = st.seq; playPending = st;                   // claim it so we don't replay twice (and keep it: if the animation hangs, the watchdog applies it anyway)
       play(a, () => { if (playPending === st) playPending = null; applyState(st); publish(st.last); });  // then keep a copy in my presence too
     } else {
       if (a && a.type === 'reset') { floats = []; projectiles = []; }
       applyState(st); publish(st.last);
+      const hit = st.view === 'battle' && !spectating() && !document.hidden;   // watching this battle: the boulders land here too, with their damage numbers (same dice as the device that ended the turn; its result follows anyway)
+      if (hit && a && a.type === 'end' && (Array.isArray(a.impacts) || Array.isArray(a.rain))) seedRng(st.seq * 7919 + 13);
       if (a && a.type === 'end' && Array.isArray(a.impacts))       // show the other side's trebuchet boulders landing
-        launchBoulders(a.impacts.map(i => ({ tile: i.tile, from: (i.from || []).map(id => units.find(u => u.id === id)).filter(Boolean) })), false);
-      if (a && a.type === 'end' && Array.isArray(a.rain)) launchRain(a.rain, false);
+        launchBoulders(a.impacts.map(i => ({ tile: i.tile, from: (i.from || []).map(id => units.find(u => u.id === id)).filter(Boolean) })), hit);
+      if (a && a.type === 'end' && Array.isArray(a.rain)) launchRain(a.rain, hit);
     }
   }
   function seatsTaken() { const s = {}; for (const p of peerList) if (!p.sameTab && p.presence && p.presence.seat) s[p.presence.seat] = true; return s; }
