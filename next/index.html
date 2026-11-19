@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.89-preview</div>
+  <div class="t">Medieval Cities 3D · v3.90-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2829,7 +2829,11 @@
     const dangerAt = h => { let d = 0; for (const w of units) if (hostile(w.team, team) && w.dying === null) { if (w.mark && w.mark[0] === h[0] && w.mark[1] === h[1]) d += w.dmg || 8; if (w.rain) for (const m of w.rain) if (m.col === h[0] && m.row === h[1]) d += CARDS.rain.dmg(m.lvl); } return d; };
     const zb = bt(), soonRing = hard && zb && udBattle(zb) && (game.round - 1) % ZONE_EVERY >= ZONE_EVERY - 2 ? (zb.zone || 0) : -1;   // HARD: also steps off the ring about to go dark
     const darkBad = h => !easy && !isUndeadFid(team) && (darkDmg(h) > 0 || (soonRing >= 0 && ringOf(h) === soonRing));   // MEDIUM+: the closing dark is avoided
-    const badTile = h => { if (darkBad(h)) return true; if (!hard) return false; const d = dangerAt(h); return d >= 3 || d >= u.hp * 0.3; };
+    // MAMMOTHS: half of the time (rolled each turn) a mammoth keeps its whole 7-tile body out from under the enemy trebuchet marks, and still attacks from a safe spot if it can
+    const mamDodge = u.type === 'mammoth' && isUndeadFid(team) && (() => { if (u.dodgeR !== game.round) { u.dodgeR = game.round; u.dodgeOn = Math.random() < 0.5; } return u.dodgeOn; })();
+    const trebMarked = h => units.some(w => w.type === 'trebuchet' && w.mark && hostile(w.team, team) && w.dying === null && w.mark[0] === h[0] && w.mark[1] === h[1]);
+    const bodyMarked = h => [h, ...neighbors(...h)].some(trebMarked);
+    const badTile = h => { if (darkBad(h)) return true; if (mamDodge && bodyMarked(h)) return true; if (!hard) return false; const d = dangerAt(h); return d >= 3 || d >= u.hp * 0.3; };
     const b = reach(u), tiles0 = [...b.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) || (t[0] === u.col && t[1] === u.row));
     let tiles = tiles0.filter(t => !badTile(t));
     if (!tiles.length && tiles0.length) { const m = Math.min(...tiles0.map(darkDmg)); tiles = tiles0.filter(t => darkDmg(t) === m); }   // the dark everywhere it can go: the least of it
@@ -3038,6 +3042,11 @@
       if (walkToward()) return;
     } else if (!u.attacked) {                                       // melee
       const r = u.type === 'warrior' ? (hasPassive(u, 'halberd') ? 2 : 1) : (ty.reach || 1);
+      if (mamDodge && bodyMarked(here) && !u.moved && canMoveNow(u)) {   // a boulder is coming down on it: step out from under it, to a spot it can still attack from
+        let s = null, tg = null; for (const o of [tgt, ...foes.filter(x => x !== tgt)]) { if (!o || o.ghost) continue; const c = closest(t => (t[0] !== u.col || t[1] !== u.row) && gapTo(t, true, o) === 1 && okAt(t, o) && meleeOk(t, o)); if (c) { s = c; tg = o; break; } }
+        if (s) { aiGo({ type: 'attack', id: u.id, path: pathTo(b, s.t), target: tg.id, targets: [tg.id] }); return; }
+        const away = tiles.filter(t => t[0] !== u.col || t[1] !== u.row).sort((x, y) => hexDist(x, [tgt.col, tgt.row]) - hexDist(y, [tgt.col, tgt.row]))[0];
+        if (away) { aiGo({ type: 'move', id: u.id, path: pathTo(b, away) }); return; } }
       const adj = foes.find(o => !o.ghost && gapTo(here, T(u).big, o) <= 1 && meleeOk(here, o));
       if (adj) { aiGo({ type: 'attack', id: u.id, path: [], target: adj.id, targets: [adj.id], dir: u.type === 'warrior' ? warriorAim(u, here, [adj.col, adj.row]) : undefined }); return; }
       if (!u.moved && !tgt.ghost) { const s = closest(t => gapTo(t, T(u).big, tgt) === 1 && okAt(t, tgt) && meleeOk(t, tgt));
