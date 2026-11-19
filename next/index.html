@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.70-preview</div>
+  <div class="t">Medieval Cities 3D · v3.71-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -4584,7 +4584,7 @@
     if (ty.ranged === 'arc' || ty.ranged === 'mark') {
       for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) { const d = hexDist(here, [c, r]); if (d > 0 && d <= ty.range) set.add(key(c, r)); }
     } else if (ty.ranged === 'line' || ty.ranged === 'pierce') {
-      for (let d = 0; d < 6; d++) for (const h of lineTiles(here, d, ty.range)) { if (blockedTile(h)) break; set.add(key(...h)); if (ty.ranged === 'line' && liveUnitAt(h)) break; }
+      for (let d = 0; d < 6; d++) for (const h of lineTiles(here, d, ty.range)) { if (blockedTile(h) || shotBlocked(h)) break; set.add(key(...h)); if (ty.ranged === 'line' && liveUnitAt(h)) break; if (flatStop(isWallTop(here), h)) break; }   // a wall stops the line unless shot from the wall top
     } else if (ty.charge) {
       for (let d = 0; d < 6; d++) lineTiles(here, d, ty.charge).forEach((h, i) => { if (i >= 3) set.add(key(...h)); });
     }
@@ -4684,9 +4684,9 @@
         let dmg = u.dmg;
         for (const h of lineTiles(here, ld.d, ty.range)) {
           if (blockedTile(h)) break; tintHex(h, 'rgba(245,105,75,0.12)');
-          const o = liveUnitAt(h); if (!o) continue;
+          const o = liveUnitAt(h); if (!o) { if (flatStop(isWallTop(here), h)) break; continue; }
           outlineHex(h, 'rgba(255,70,50,0.95)', 4); label(o, `-${rangedDmg(dmg, o)}`, o.team === u.team ? '#ffd27a' : '#ffb4a0');
-          dmg -= 2; if (dmg <= 0) break;
+          dmg -= 2; if (dmg <= 0 || flatStop(isWallTop(here), h)) break;
         }
       }
       return;
