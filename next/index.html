@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.67-preview</div>
+  <div class="t">Medieval Cities 3D · v3.68-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -4415,7 +4415,7 @@
       if (u.type === 'mammoth') { drawScale = MAMMOTH_SIZE;   // see-through while it hides someone behind it
         const tall = headY(u) + U * 0.6, hides = list.some(e => e.u && e.u !== u && e.u.dying === null && !hiddenFromMe(e.u) && e.p.y < by && by - e.p.y < tall && Math.abs(e.p.x - bx) < U * 1.7);
         if (hides) ctx.globalAlpha *= 0.45; }
-      drawMesh(ctx, u.mesh, bx, by - walk * 0.6 + Math.max(0, (u.dying || 0) - 0.5) * 8, u.face, t + u.phase, u.flash, dz ? 1 : 0,
+      drawMesh(ctx, u.mesh, bx, by - walk * 0.6 + Math.max(0, (u.dying || 0) - 0.5) * 8, u.troops && localView() === 'campaign' ? 0 : u.face, t + u.phase,   /* campaign army banners always face the camera */ u.flash, dz ? 1 : 0,
         T(u).structure ? null : { walk: u.path && u.path.length && !u.push && !u.climb ? (t + u.phase) * (u.fast ? 16 : 10) : null, atk: u.atk ? Math.min(1, u.atk.t) : 0, die: u.dying !== null ? Math.min(1, u.dying * 1.8) : 0, quad: !!(T(u).mounted || T(u).big) });
       drawScale = 1;
       if (icy && u.dying === null) for (let k = 0; k < 5; k++) {   // frost motes drifting up around the King / Queen
