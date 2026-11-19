@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.79-preview</div>
+  <div class="t">Medieval Cities 3D · v3.80-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1723,7 +1723,10 @@
     const nearU = units.filter(u => u.troops && u.dying === null && u !== att && u !== tgtArmy && !u.inBattle && D([u.col, u.row]) <= (u.team === 'undead' ? 2 : 1) && !(u.refuse && u.refuse > game.round))
       .sort((x, y) => D([x.col, x.row]) - D([y.col, y.row]));
     let undeadNow = 0;
-    for (const u of nearU) { let dist = 2; if (u.team === 'undead' && undeadNow < 2) { dist = 1; undeadNow++; } asks.push({ kind: 'army', id: u.id, fid: u.team, dist, ans: null }); }
+    const twoNow = new Set();   // setting: each side's closest extra army fights from the start (2 armies a side)
+    for (const u of nearU) { let dist = 2; if (u.team === 'undead' && undeadNow < 2) { dist = 1; undeadNow++; }
+      else if (u.team !== 'undead' && game.opts && game.opts.twoStart && !twoNow.has(u.team)) { dist = 1; twoNow.add(u.team); }
+      asks.push({ kind: 'army', id: u.id, fid: u.team, dist, ans: null }); }
     for (const c of game.cities) if (c.owner && c !== city && D([c.col, c.row]) <= 1) asks.push({ kind: 'city', id: c.id, fid: c.owner, dist: 1, ans: null });
     att.moved = true; att.attacked = true;
     game.bt = { id: 'b' + Date.now().toString(36), center: there, from: here, base: terrainAt(there) === 'w' ? 'g' : terrainAt(there), initiator: att.team, defender: defFid, attStr: att.troops ? troopStrength(att.troops) : 0,
@@ -5386,6 +5389,7 @@
       <div class="lsub">${host ? `<button id="lcoop" class="${game.opts && game.opts.coop ? 'on' : ''}">🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}</button>` : `🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}`} · all players are one team against all AI realms; each team shares its sight</div>
       <div class="lsub">${host ? `<button id="llvd" class="${game.opts && game.opts.lvd ? 'on' : ''}">💀 Living vs Dead: ${game.opts && game.opts.lvd ? 'On' : 'Off'}</button>` : `💀 Living vs Dead: ${game.opts && game.opts.lvd ? 'On' : 'Off'}`} · every realm starts in one alliance against the dead; anyone can betray it at any time and ally with others who left; past the last wave the dead keep coming, stronger each time, while too many realms live${game.opts && game.opts.lvd ? ` · 🏆 ${tr('How many can win')}: ${host ? `<select id="llvdwin" style="background:#2a2618;color:#e8dfc8;border:1px solid #6b5d36;border-radius:4px;padding:3px 4px;font-size:12px">${Array.from({ length: Math.max(1, n - 1) }, (_, i) => i + 1).map(k => `<option value="${k}" ${Math.min(Math.max(1, n - 1), (game.opts.lvdWin || 1)) === k ? 'selected' : ''}>${k}</option>`).join('')}</select>` : `<b>${Math.min(Math.max(1, n - 1), game.opts.lvdWin || 1)}</b>`}` : ''}</div>
       <div class="lsub">${host ? `<button id="lauto" class="${autoFightOn() ? 'on' : ''}">⚡ Auto-fight button: ${autoFightOn() ? 'On' : 'Off'}</button>` : `⚡ Auto-fight button: ${autoFightOn() ? 'On' : 'Off'}`} · players get a button in battles that lets the AI fight it out for their side</div>
+      <div class="lsub">${host ? `<button id="ltwo" class="${game.opts && game.opts.twoStart ? 'on' : ''}">⚔ Second army from the start: ${game.opts && game.opts.twoStart ? 'On' : 'Off'}</button>` : `⚔ Second army from the start: ${game.opts && game.opts.twoStart ? 'On' : 'Off'}`} · in every battle, each side's closest army next to the fight joins from turn 1 (2 armies a side) instead of arriving as reinforcements at round 15; any further armies still come at round 15</div>
       ${game.opts && game.opts.coop ? `<div class="lsub">Teams start: ${[['ends', '↕ North vs South'], ['side', '↔ Side by side, both by the wall']].map(([k, l]) => host ? `<button data-coopl="${k}" class="${((game.opts.coopLayout || 'ends') === k) ? 'on' : ''}">${l}</button>` : ((game.opts.coopLayout || 'ends') === k ? `<b>${l}</b>` : '')).join(' ')}</div>` : ''}
       ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
         return `<div class="lsub">${host ? `<button id="${id}" class="${on ? 'on' : ''}">${lab}: ${on ? 'On' : 'Off'}</button>` : `${lab}: ${on ? 'On' : 'Off'}`} · ${txt} · the AI plays by the same fog</div>`; }).join('')}
@@ -5399,6 +5403,7 @@
     const b = e.target.closest('button'); if (!b || game.view !== 'lobby') return;
     if (b.dataset && b.dataset.lang) { setLang(b.dataset.lang); return; }
     if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
+    if (b.id === 'ltwo' && isHost()) { game.opts = { ...(game.opts || {}), twoStart: !(game.opts && game.opts.twoStart) }; commit({ type: 'setup' }); return; }
     if ((b.id === 'lfogc' || b.id === 'lfogb') && isHost()) { const k = b.id === 'lfogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: !!(game.opts && game.opts[k] === false) }; commit({ type: 'setup' }); return; }
     if (b.id === 'lauto' && isHost()) { game.opts = { ...(game.opts || {}), autoFight: !autoFightOn() }; commit({ type: 'setup' }); return; }
     if (b.id === 'lgod' && isHost()) { const on = !(game.opts && game.opts.god); game.opts = { ...(game.opts || {}), god: on };
