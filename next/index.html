@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.81-preview</div>
+  <div class="t">Medieval Cities 3D · v3.82-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -5592,7 +5592,8 @@
   function renderArPrompt() {
     const b = bt(), me = viewer();
     if (modalEl.dataset.ar && !(b && game.view === 'battle' && b.phase === 'place' && b.id === modalEl.dataset.ar)) { modalEl.dataset.ar = ''; hideModal(); return false; }
-    if (!b || game.view !== 'battle' || b.phase !== 'place' || !me || undeadFight(b) || !arHumans(b).includes(me) || (b.arVote || {})[me] || arSeen.has(b.id + me)) return !!modalEl.dataset.ar;
+    const mate = !!(b && me && mode !== 'local' && !arHumans(b).includes(me) && faction(me) && !faction(me).ai && b.joined.some(j => sideOf(j.fid) === sideOf(me)));   // a teammate of someone in this battle: sees the balance too, just to know (no choice to make)
+    if (!b || game.view !== 'battle' || b.phase !== 'place' || !me || undeadFight(b) || !(arHumans(b).includes(me) || mate) || (b.arVote || {})[me] || arSeen.has(b.id + me)) return !!modalEl.dataset.ar;
     if (modalEl.dataset.ar === b.id) return true;
     const armies = game.campaign ? game.campaign.armies : units, { keys, val, sides } = arValuesOf(b, armies, false); if (!keys.length) return false;
     const mySide = sideOf(me), tot = keys.reduce((x, k) => x + val[k], 0) || 1, nm = k => { const fid = (b.joined.find(j => sideOf(j.fid) === k) || {}).fid; return fid ? teamName(fid) : k; };
@@ -5601,8 +5602,9 @@
     const lines = keys.slice().sort((x, y) => (y === mySide) - (x === mySide)).map(k => `<div>${k === mySide ? '🛡' : '⚔'} <b>${nm(k)}</b> · ${tr('strength')} ${Math.round(val[k])} (${Math.round(val[k] / tot * 100)}%)<div class="k" style="margin:0 0 4px 18px">${arListTxt(arArmyOf(sides[k])) || '–'}</div></div>`).join('');
     modalEl.dataset.ar = b.id;
     showModal(`<div class="mbox"><div class="t">⚔ ${tr('Balance of power')}</div><div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin:6px 0 8px">${bar}</div>${lines}
-      <div class="k" style="margin-top:6px">${tr('Auto resolve settles it at once by unit values and counters, with a little luck. Your units count 15% more.')}${arHumans(b).length > 1 && mode !== 'local' ? ' ' + tr('Every player in this battle has to choose it.') : ''}</div>
-      <div class="row"><button data-ar="fight">⚔ ${tr('Fight it out')}</button><button data-ar="auto">⚡ ${tr('Auto resolve')}</button></div></div>`);
+      ${mate ? `<div class="k" style="margin-top:6px">🤝 ${tr('Your teammate is in this battle')}: ${[...new Set(b.joined.filter(j => sideOf(j.fid) === mySide).map(j => j.fid))].map(teamName).join(', ')}</div>
+      <div class="row"><button data-ar="ok">✔ OK</button></div></div>` : `<div class="k" style="margin-top:6px">${tr('Auto resolve settles it at once by unit values and counters, with a little luck. Your units count 15% more.')}${arHumans(b).length > 1 && mode !== 'local' ? ' ' + tr('Every player in this battle has to choose it.') : ''}</div>
+      <div class="row"><button data-ar="fight">⚔ ${tr('Fight it out')}</button><button data-ar="auto">⚡ ${tr('Auto resolve')}</button></div></div>`}`);
     return true;
   }
   modalEl.addEventListener('click', e => { const x = e.target.closest('button[data-ar]'); if (!x) return; const b = bt(), me = viewer(); if (!b) return;
