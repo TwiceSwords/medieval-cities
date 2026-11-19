@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.80-preview</div>
+  <div class="t">Medieval Cities 3D · v3.81-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -5147,7 +5147,7 @@
       if (p2p.lost) { clearTimeout(p2p.lost.timer); p2p.lost = null; showLost(); toast('Reconnected to the host'); }
       refreshUI(); try { c.send({ hello: 1, want: p2p.wantSeat || null, ver: GAME_VER }); } catch (e) {} });
     c.on('data', d => { if (!d || typeof d !== 'object') return; c.heard = Date.now(); d = unchunk(c, d); if (!d) return;
-      if (d.full) { p2p.lost = null; showLost(); p2pStop('That game has no free player seat'); return; }
+      if (d.full) { nlog('host says: no free seat'); p2p.lost = null; showLost(); p2pStop('That game has no free player seat'); return; }
       if (d.assign) { mySeat = d.assign; p2p.wantSeat = d.assign; refreshUI(); }
       if (d.ver) versionWarn(d.ver, tr('the host'));
       if (d.pong && typeof d.hs === 'number') {      // step-check: still behind the host after two pings, or a different turn at the same point? ask for the host's game
@@ -5180,8 +5180,8 @@
       const human = x => x.id !== hostSeat() && (x.kind ? x.kind === 'human' : !x.ai);
       let f = want && (game.factions || []).find(x => x.id === want && human(x));
       if (f) for (const o of p2p.conns.filter(o => o !== c && o.seat === f.id)) dropConn(o);   // the same friend coming back: the old link is dead
-      else f = (game.factions || []).find(x => human(x) && !x.joined);
-      if (!f) { try { c.send({ full: 1 }); } catch (e) {} setTimeout(() => { try { c.close(); } catch (e) {} }, 400); return; }
+      else f = (game.factions || []).find(x => human(x) && (!x.joined || !p2p.conns.some(o => o !== c && o.seat === x.id && o.open)));   // a seat still marked taken with nobody on it (a loaded save, a link that died unseen) is free
+      if (!f) { nlog('no free seat for a friend', (game.factions || []).map(x => x.id + (human(x) ? (x.joined ? ':taken' : ':free') : ':ai')).join(' ')); try { c.send({ full: 1 }); } catch (e) {} setTimeout(() => { try { c.close(); } catch (e) {} }, 400); return; }
       f.joined = true; c.seat = f.id; if (!p2p.conns.includes(c)) p2p.conns.push(c); mode = 'online'; mySeat = hostSeat(); p2p.status = '';
       try { c.send({ assign: f.id }); } catch (e) {}
       commit({ type: 'setup' }); toast(`${f.name} joined`);
@@ -5235,6 +5235,8 @@
     peer.on('disconnected', () => nlog('friend lost the signalling server'));
     peer.on('error', e => { nlog('friend peer error', errInfo(e));
       if (p2p.lost) return;                               // rejoining: the next try comes by itself
+      if (p2p.peer === peer && p2p.conn && p2p.conn.open && ['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected'].includes(e.type)) {   // only the matchmaking server is gone: the direct link to the host doesn't need it, keep playing
+        nlog('server lost, link to host kept'); setTimeout(() => { if (p2p.peer === peer && !peer.destroyed && peer.disconnected) try { peer.reconnect(); } catch (er) {} }, 5000); return; }
       if (e.type === 'peer-unavailable' && tries < 8 && p2p.peer === peer) { setTimeout(attempt, 2500); return; }
       p2pStop(e.type === 'peer-unavailable' ? `No game found with code ${code}. Make sure the host's box says "Ready" and the code matches.`
         : 'Connection error (' + e.type + ') · check internet / firewall and try again'); });
