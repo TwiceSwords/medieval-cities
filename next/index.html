@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.88-preview</div>
+  <div class="t">Medieval Cities 3D · v3.89-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1612,7 +1612,7 @@
     const T = w.terrain, armies = [];
     factions.forEach((f, i) => { const c = cities[i];
       const n = nbIn(c.col, c.row, CCOLS, CROWS).find(([a, b]) => T[b * CCOLS + a] !== 'w' && T[b * CCOLS + a] !== 'm');
-      armies.push({ id: `army-${f.id}-1`, type: 'army', team: f.id, col: n[0], row: n[1], hp: 1, maxHp: 1, face: 0, moved: false, attacked: false, troops: [troop('swordsman')] }); });
+      armies.push({ id: `army-${f.id}-1`, type: 'army', team: f.id, col: n[0], row: n[1], hp: 1, maxHp: 1, face: 0, moved: false, attacked: false, troops: [troop('swordsman'), ...(game.opts && game.opts.startHero ? [startHeroTroop(setup.find(x => x.id === f.id), f)] : [])] }); });
     if (game.opts && game.opts.lvd) for (const f of factions) f.tm = 1;   // LIVING VS DEAD: every realm starts in one alliance (spread out like rivals)
     factions.push({ id: 'undead', name: 'Undead', col: UNDEAD_COL, ai: true, alive: true, style: 'undead', undead: true });   // the undead play last, with no city and no army yet
     const points = {}; for (const f of factions) points[f.id] = f.undead ? 0 : START_GOLD;
@@ -3958,6 +3958,16 @@
   const heroCards = u => HERO_CARDS[u.type] || null;
   const hasPassive = (u, id) => !!(u.cards && u.cards.passive === id);
   const emptyCards = () => ({ passive: null, skills: [null, null, null] });
+  const heroSlots = type => Math.min(3, ((HERO_CARDS[type] || {}).skill || []).length);   // a warrior has only 2 skills to pick from
+  function startHeroTroop(pick, f) {                  // setting: the hero a realm starts with · full HP, mana and damage; its first cards are free (the AI picks its own at once)
+    const type = pick && HEROES.includes(pick.startHero) ? pick.startHero : HEROES[(Math.random() * HEROES.length) | 0], ty = UNIT_TYPES[type], t = troop(type);
+    t.maxHp = t.hp = ty.hpCap || 40; t.manaMax = t.mana = MANA_CAP; t.manaBought = Math.max(0, MANA_CAP - (typeStat(type, 'manaMax') || 0)); if (ty.dmgCap) t.dmgBought = ty.dmgCap - ty.dmg;
+    t.cards = emptyCards(); t.freeCards = true;
+    if (f && f.ai) { const HC = HERO_CARDS[type], pool = HC.skill.slice().sort(() => Math.random() - 0.5); t.cards.passive = HC.passive[(Math.random() * HC.passive.length) | 0];
+      for (let i = 0; i < heroSlots(type); i++) t.cards.skills[i] = { id: pool[i], lvl: 1 }; delete t.freeCards; }
+    return t;
+  }
+  const freeCardsDone = u => !!(u.cards && u.cards.passive) && u.cards.skills.filter(Boolean).length >= heroSlots(u.type);
 
   // deterministic dice: every action carries a seed, so both players roll the same results
   let rngS = 1;
@@ -5382,7 +5392,9 @@
       const difB = f.kind !== 'ai' ? '' : host ? `<select data-diffsel="${i}" title="This AI's difficulty" style="${SEL}">${Object.entries(DL).map(([k, l]) => `<option value="${k}" ${(f.diff || 'medium') === k ? 'selected' : ''}>${tr(l)}</option>`).join('')}</select>` : `<b>${tr(DL[f.diff || 'medium'])}</b>`;
       const tmB = host ? `<select data-teamsel="${i}" title="Team: same number = allies" style="${SEL}"><option value="0" ${!f.tm ? 'selected' : ''}>👥 ${tr('No team')}</option>${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}" ${f.tm === n ? 'selected' : ''}>👥 ${tr('Team')} ${n}</option>`).join('')}</select>` : `<b title="Team">👥 ${f.tm ? tr('Team') + ' ' + f.tm : tr('No team')}</b>`;
       const goldB = f.kind !== 'ai' ? '' : host ? `<input data-goldsel="${i}" type="number" min="0" max="50" value="${f.baseGold ?? 5}" title="${tr('Base gold per turn for this AI')}" style="${SEL};width:46px">🪙` : `<b>${f.baseGold ?? 5}🪙</b>`;
-      return `<div class="lrow ${f.kind === 'off' ? 'off' : ''}"><span class="lnm" style="color:rgb(${f.col.map(v => Math.min(255, v + 70))})">${f.name}${f.id === me ? ' (you)' : ''}${who}${nameB ? `<br>${nameB}` : ''}</span><span class="lk">${kindSel} ${difB} ${goldB} ${tmB}</span><span class="lsw">${sw}</span></div>`;
+      const heroB = !(game.opts && game.opts.startHero) || f.kind !== 'human' || !(mode === 'online' ? f.id === me : true) ? '' :   // the starting hero: chosen on your own screen only, nobody else sees it
+        `<select data-herosel="${i}" title="${tr('Your starting hero (only you see this)')}" style="${SEL}"><option value="" ${!f.startHero ? 'selected' : ''}>🦸 ${tr('Random hero')}</option>${HEROES.map(t => `<option value="${t}" ${f.startHero === t ? 'selected' : ''}>🦸 ${tr(UNIT_TYPES[t].name)}</option>`).join('')}</select>`;
+      return `<div class="lrow ${f.kind === 'off' ? 'off' : ''}"><span class="lnm" style="color:rgb(${f.col.map(v => Math.min(255, v + 70))})">${f.name}${f.id === me ? ' (you)' : ''}${who}${nameB ? `<br>${nameB}` : ''}</span><span class="lk">${kindSel} ${difB} ${goldB} ${tmB} ${heroB}</span><span class="lsw">${sw}</span></div>`;
     }).join('');
     const n = game.factions.filter(f => f.kind !== 'off').length;
     const html = `<div class="lt">⚔ Medieval Cities · new campaign</div>
@@ -5403,6 +5415,7 @@
       <div class="lsub">${host ? `<button id="lcoop" class="${game.opts && game.opts.coop ? 'on' : ''}">🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}</button>` : `🤝 Co-op vs AI: ${game.opts && game.opts.coop ? 'On' : 'Off'}`} · all players are one team against all AI realms; each team shares its sight</div>
       <div class="lsub">${host ? `<button id="llvd" class="${game.opts && game.opts.lvd ? 'on' : ''}">💀 Living vs Dead: ${game.opts && game.opts.lvd ? 'On' : 'Off'}</button>` : `💀 Living vs Dead: ${game.opts && game.opts.lvd ? 'On' : 'Off'}`} · every realm starts in one alliance against the dead; anyone can betray it at any time and ally with others who left; past the last wave the dead keep coming, stronger each time, while too many realms live${game.opts && game.opts.lvd ? ` · 🏆 ${tr('How many can win')}: ${host ? `<select id="llvdwin" style="background:#2a2618;color:#e8dfc8;border:1px solid #6b5d36;border-radius:4px;padding:3px 4px;font-size:12px">${Array.from({ length: Math.max(1, n - 1) }, (_, i) => i + 1).map(k => `<option value="${k}" ${Math.min(Math.max(1, n - 1), (game.opts.lvdWin || 1)) === k ? 'selected' : ''}>${k}</option>`).join('')}</select>` : `<b>${Math.min(Math.max(1, n - 1), game.opts.lvdWin || 1)}</b>`}` : ''}</div>
       <div class="lsub">${host ? `<button id="lauto" class="${autoFightOn() ? 'on' : ''}">⚡ Auto-fight button: ${autoFightOn() ? 'On' : 'Off'}</button>` : `⚡ Auto-fight button: ${autoFightOn() ? 'On' : 'Off'}`} · players get a button in battles that lets the AI fight it out for their side</div>
+      <div class="lsub">${host ? `<button id="lhero" class="${game.opts && game.opts.startHero ? 'on' : ''}">🦸 ${tr('Starting hero')}: ${game.opts && game.opts.startHero ? 'On' : 'Off'}</button>` : `🦸 ${tr('Starting hero')}: ${game.opts && game.opts.startHero ? 'On' : 'Off'}`} · ${tr('every realm starts with a hero of its choice at full HP, mana and damage; its passive card and one skill for each slot are free (picked in the game). Nobody sees which hero the others chose')}</div>
       <div class="lsub">${host ? `<button id="ltwo" class="${game.opts && game.opts.twoStart ? 'on' : ''}">⚔ Second army from the start: ${game.opts && game.opts.twoStart ? 'On' : 'Off'}</button>` : `⚔ Second army from the start: ${game.opts && game.opts.twoStart ? 'On' : 'Off'}`} · in every battle, each side's closest army next to the fight joins from turn 1 (2 armies a side) instead of arriving as reinforcements at round 15; any further armies still come at round 15</div>
       ${game.opts && game.opts.coop ? `<div class="lsub">Teams start: ${[['ends', '↕ North vs South'], ['side', '↔ Side by side, both by the wall']].map(([k, l]) => host ? `<button data-coopl="${k}" class="${((game.opts.coopLayout || 'ends') === k) ? 'on' : ''}">${l}</button>` : ((game.opts.coopLayout || 'ends') === k ? `<b>${l}</b>` : '')).join(' ')}</div>` : ''}
       ${[['lfogc', 'fogCamp', '🌫 Fog on the campaign map', 'unexplored land stays dark; enemy armies only show while yours or a city are within 5 tiles'], ['lfogb', 'fogBattle', '🌫 Fog in battles', 'enemy units only show within 5 tiles of your own units']].map(([id, k, lab, txt]) => { const on = !(game.opts && game.opts[k] === false);
@@ -5417,6 +5430,7 @@
     const b = e.target.closest('button'); if (!b || game.view !== 'lobby') return;
     if (b.dataset && b.dataset.lang) { setLang(b.dataset.lang); return; }
     if (b.id === 'lstart') { if (isHost()) startCampaign(); return; }
+    if (b.id === 'lhero' && isHost()) { game.opts = { ...(game.opts || {}), startHero: !(game.opts && game.opts.startHero) }; commit({ type: 'setup' }); return; }
     if (b.id === 'ltwo' && isHost()) { game.opts = { ...(game.opts || {}), twoStart: !(game.opts && game.opts.twoStart) }; commit({ type: 'setup' }); return; }
     if ((b.id === 'lfogc' || b.id === 'lfogb') && isHost()) { const k = b.id === 'lfogc' ? 'fogCamp' : 'fogBattle'; game.opts = { ...(game.opts || {}), [k]: !!(game.opts && game.opts[k] === false) }; commit({ type: 'setup' }); return; }
     if (b.id === 'lauto' && isHost()) { game.opts = { ...(game.opts || {}), autoFight: !autoFightOn() }; commit({ type: 'setup' }); return; }
@@ -5442,6 +5456,8 @@
       f.color = k; f.col = p.col; const same = game.factions.filter(o => o !== f && o.color === k).length; f.name = same ? `${p.name} ${same + 1}` : p.name; commit({ type: 'setup' }); }
   });
   lobbyEl.addEventListener('change', e => { const sl = e.target;
+    if (sl && sl.dataset && sl.dataset.herosel !== undefined && game.view === 'lobby') { const f = game.factions[+sl.dataset.herosel];   // your own starting hero
+      if (!f || !(mode === 'online' ? f.id === mySeat : true)) return; if (HEROES.includes(sl.value)) f.startHero = sl.value; else delete f.startHero; commit({ type: 'setup' }); return; }
     if (sl && sl.dataset && sl.dataset.goldsel !== undefined && isHost() && game.view === 'lobby') { const f = game.factions[+sl.dataset.goldsel]; if (!f) return;   // an AI's base gold per turn
       f.baseGold = Math.max(0, Math.min(50, Math.floor(Number(sl.value)) || 0)); commit({ type: 'setup' }); return; }
     if (sl && sl.id === 'llvdwin' && isHost() && game.view === 'lobby') { game.opts = { ...(game.opts || {}), lvdWin: Math.max(1, Math.floor(Number(sl.value)) || 1) }; commit({ type: 'setup' }); return; }
@@ -5517,7 +5533,7 @@
         html += `<div class="k">${a.recruitN ? `Recruited ${a.recruitN}/${MAX_RECRUIT_TURN} this turn · can move next turn` : a.moved ? 'Has moved this turn' : 'Can move 3 (4 if every step is on road)'}</div>`;
         const heroes = a.troops.map((t, i) => ({ t, i })).filter(({ t }) => HERO_CARDS[t.type]);
         if (heroes.length) html += `<div class="sub">Heroes</div><div class="grid">${heroes.map(({ t, i }) => { const cd = t.cards || {}, nCards = (cd.passive ? 1 : 0) + (cd.skills || []).filter(Boolean).length;
-          return btn(`data-hero="${i}"`, `🃏 ${UNIT_TYPES[t.type].name} · ${nCards} card${nCards === 1 ? '' : 's'}${heroSel && heroSel.troopOf.army === a.id && heroSel.troopOf.idx === i ? ' ✓' : ''}`, true); }).join('')}</div>`;
+          return btn(`data-hero="${i}"`, `🃏 ${UNIT_TYPES[t.type].name} · ${nCards} card${nCards === 1 ? '' : 's'}${t.freeCards ? ' · 🎁 ' + tr('free cards to pick') : ''}${heroSel && heroSel.troopOf.army === a.id && heroSel.troopOf.idx === i ? ' ✓' : ''}`, true); }).join('')}</div>`;
         const here = [a.col, a.row], road = hasRoad(here);
         html += `<div class="row">${!road && !cityAt(here) ? btn('data-ca="road"', `Build road here · ${ROAD_COST} gold`, my && p >= ROAD_COST) : ''}${road ? btn('data-ca="unroad"', 'Destroy road here', my) : ''}</div>`;
         if (a.autoRoad) { const dc = game.cities.find(c => c.id === a.autoRoad.to), left = (a.autoRoad.t || []).filter(k => !hasRoad(k.split(',').map(Number))).length;
@@ -6013,7 +6029,7 @@
     const next = c.kind === 'skill' && l < 5 ? `<div class="nx">Next (Lv ${l + 1}): ${c.text(l + 1)}${c.cost(l + 1) !== c.cost(l) ? ` · ${c.cost(l + 1)} mana` : ''}</div>` : '';
     return `<div class="card ${c.kind}${o.armed ? ' armed' : ''}"${o.slot !== undefined ? ` data-slot="${o.slot}"` : ''}>
       <div class="ct">${c.name}${stars}</div>${cost}<div class="cd">${c.text(l)}</div>${o.showNext ? next : ''}
-      ${o.buy ? `<button data-buy="${id}" ${o.can ? '' : 'disabled'}>Buy · ${CARD_PRICE} gold</button>` : ''}
+      ${o.buy ? `<button data-buy="${id}" ${o.can ? '' : 'disabled'}>${o.free ? '🎁 ' + tr('Take · free') : `Buy · ${CARD_PRICE} gold`}</button>` : ''}
       ${o.upgrade ? `<button data-up="${o.slot}" ${o.can ? '' : 'disabled'}>Upgrade · ${upPrice(l)} gold</button>` : ''}</div>`;
   }
   function slotHtml(u, slot) {
@@ -6033,7 +6049,7 @@
   function syncHero() {                               // write the managed hero back into its army
     if (!heroSel || spectating()) return; const o = heroSel.troopOf, a = units.find(x => x.id === o.army && x.troops);   // (just looking while someone else's battle runs: nothing to write back)
     if (!a || !a.troops[o.idx] || a.troops[o.idx].type !== o.type || game.view !== 'campaign') { heroSel = null; return; }
-    const u = heroSel; a.troops = a.troops.map((t, i) => i !== o.idx ? t : { ...t, hp: u.hp, maxHp: u.maxHp, mana: u.mana, manaMax: u.manaMax, cards: u.cards, ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}) });
+    const u = heroSel; a.troops = a.troops.map((t, i) => i !== o.idx ? t : { ...t, hp: u.hp, maxHp: u.maxHp, mana: u.mana, manaMax: u.manaMax, cards: u.cards, freeCards: u.freeCards || undefined, ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}) });
   }
   function renderCards() {
     if (heroSel && (localView() !== 'campaign' || !selUnit || selUnit.id !== heroSel.troopOf.army)) heroSel = null;
@@ -6048,7 +6064,7 @@
     let html = `<div class="chd"><b style="color:rgb(${TEAM[u.team].map(v => v + 80)})">${teamName(u.team)} ${u.name}</b> · HP ${u.hp}/${u.maxHp} <span class="cap">(max ${hpCap})</span> ·${T(u).dmgCap ? ` Damage ${u.dmg} <span class="cap">(max ${T(u).dmgCap})</span> ·` : ''} Mana ${u.mana}/${u.manaMax} <span class="cap">(max ${MANA_CAP})</span> · <i class="coin"></i> Gold: <b>${pts}</b>${mine ? '' : ' · view only'}${statBtns}</div>`;
     if (shopFor && shopFor.id === u.id) {
       const list = shopFor.slot === 'p' ? hc.passive : hc.skill.filter(id => !owned.has(id));
-      html += `<div class="chd2">Choose a ${shopFor.slot === 'p' ? 'passive' : 'skill'} card</div><div class="crow">${list.map(id => cardHtml(id, 1, { buy: true, can: mine && pts >= CARD_PRICE })).join('')}</div><button data-act="closeshop">Cancel</button>`;
+      html += `<div class="chd2">Choose a ${shopFor.slot === 'p' ? 'passive' : 'skill'} card</div><div class="crow">${list.map(id => cardHtml(id, 1, { buy: true, free: !!u.freeCards, can: mine && (u.freeCards || pts >= CARD_PRICE) })).join('')}</div><button data-act="closeshop">Cancel</button>`;
     } else html += `<div class="crow">${slotHtml(u, 'p')}${[0, 1, 2].map(i => slotHtml(u, i)).join('')}</div>`;
     if (heroSel) html = `<div class="k" style="display:flex;justify-content:space-between;align-items:center"><span>🏕 In the field with the army · cards and upgrades stay with the hero</span><button data-act="closehero">✕ Close</button></div>` + html;
     html = `<div class="cscale" title="Card size (only on your screen)">🔍<button data-act="cs-">−</button><span>${Math.round(cardScale * 100)}%</span><button data-act="cs+">+</button></div>` + html;
@@ -6071,12 +6087,13 @@
     if (game.view !== 'campaign' && ((b && (b.dataset.buy || b.dataset.stat || b.dataset.up !== undefined)) || (card && card.classList.contains('empty')))) { toast('Hero cards and upgrades can only be bought on the campaign map'); return; }   // no shopping in battle
     const pts = game.points[u.team] || 0;
     if (b && b.dataset.buy) {
-      if (!canManage(u) || pts < CARD_PRICE) return;
+      const price = u.freeCards ? 0 : CARD_PRICE;   // the starting hero's first passive and skills are free
+      if (!canManage(u) || pts < price) return;
       const id = b.dataset.buy;
       if (shopFor.slot === 'p') u.cards = { ...u.cards, passive: id };
       else { const sk = [...u.cards.skills]; sk[shopFor.slot] = { id, lvl: 1 }; u.cards = { ...u.cards, skills: sk }; }
-      game.points = { ...game.points, [u.team]: pts - CARD_PRICE }; shopFor = null;
-      commit({ type: 'cards' }); toast(`${CARDS[id].name} bought`); return;
+      game.points = { ...game.points, [u.team]: pts - price }; shopFor = null; if (u.freeCards && freeCardsDone(u)) delete u.freeCards;
+      syncHero(); commit({ type: 'cards' }); toast(`${CARDS[id].name} ${price ? 'bought' : tr('picked (free)')}`); return;
     }
     if (b && b.dataset.stat) {                                   // hero stats: +2 HP per point, +1 max mana for a rising price
       if (!canManage(u)) return;
