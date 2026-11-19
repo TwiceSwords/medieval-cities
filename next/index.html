@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.86-preview</div>
+  <div class="t">Medieval Cities 3D · v3.87-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1492,11 +1492,12 @@
     return { pts, lines };
   }
   // who may see what: buildings are visible to the owner and to anyone owning a city directly linked to it by road
+  const lvdHides = () => !!(game.opts && game.opts.lvd);   // Living vs Dead: anyone can betray, so even allies keep their armies and buildings to themselves
   function seesCity(city, fid = viewer()) {
-    if (!city.owner || !hostile(city.owner, fid)) return true;
+    if (!city.owner || city.owner === fid || (!hostile(city.owner, fid) && !(lvdHides() && fid))) return true;   // your own, and your teammates' (not in Living vs Dead)
     const comp = roadComponents(); return (game.cities || []).some(o => o.owner === fid && connectedCities(o, comp).includes(city));
   }
-  const seesArmy = (u, fid = viewer()) => !hostile(u.team, fid);
+  const seesArmy = (u, fid = viewer()) => u.team === fid || (!hostile(u.team, fid) && !(lvdHides() && fid));   // your own and your teammates' troops (not in Living vs Dead)
   const aliveFactions = () => (game.factions || []).filter(f => f.alive);
   // ===== LIVING VS DEAD (game mode): every realm starts in one alliance against the dead; anyone may betray it at any time and leave,
   // and those who left may ally with each other (the other side is asked). Only the set number of realms can win: past the last wave, the dead
@@ -5505,7 +5506,9 @@
       const mine = a.team === me, fa = faction(a.team);
       html += `<div class="t" style="color:rgb(${fa.col.map(v => Math.min(255, v + 70))})">⚑ ${fa.name} army</div>`;
       if (a.inBattle) html += '<div class="k">⚔ Fighting a battle right now.</div>';
-      if (!mine) html += '<div class="k">Its troops are unknown.</div>';
+      if (!mine && seesArmy(a, me)) { const n = {}; for (const t of a.troops) n[t.type] = (n[t.type] || 0) + 1;   // a teammate's army: what it has, nothing to press
+        html += `<div>${Object.entries(n).map(([t, k]) => `${k}× ${tr(UNIT_TYPES[t].name)}`).join(', ') || 'no troops'} <span class="k">(${a.troops.length}/${MAX_TROOPS})</span></div><div class="k">🤝 ${tr('Your teammate\'s army')}</div>`; }
+      else if (!mine) html += '<div class="k">Its troops are unknown.</div>';
       else if (!a.inBattle && game.bt && game.bt.saved && nextToBattle(game.bt, a))
         html += `<div class="row">${btn('data-ca="join"', '⚔ Join the battle next to you', myCampaignTurn() && !(a.refuse && a.refuse > game.round))}</div><div class="k">It marches in and arrives at battle round ${game.bt.saved.round + LATE_DELAY}.</div>${a.refuse > game.round ? `<div class="k">It stayed out earlier: can join from campaign round ${a.refuse}.</div>` : ''}`;
       else {
@@ -5535,8 +5538,9 @@
       else if (!city.owner) html += `<div class="k">An army next to it can found a city here for ${FOUND_COST} gold (right-click it).</div>`;
       else {
         if (own) { const inc = incomeOf(me).lines.find(l => l[0] === city.name); html += `<div class="k">Gives ${inc ? inc[1] : 1} gold/turn${inc && inc[2] > 1 ? ` (×${inc[2]} · road-linked to ${inc[3]} cit${inc[3] > 1 ? 'ies' : 'y'}${inc[4] ? `, ${inc[4]} other realm${inc[4] > 1 ? 's' : ''}` : ''})` : ''}</div><div class="k">🛡 Garrison (defends the city in every battle): ${(() => { const n = {}; for (const t of garrisonOf(city)) n[t] = (n[t] || 0) + 1; return Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', '); })()}</div>`; }
+        else if (seesArmy({ team: city.owner }, me)) html += `<div class="k">🤝 ${tr('Your teammate\'s city')} · 🛡 Garrison: ${(() => { const n = {}; for (const t of garrisonOf(city)) n[t] = (n[t] || 0) + 1; return Object.entries(n).map(([t, k]) => `${k}× ${UNIT_TYPES[t].name}`).join(', ') || '–'; })()}</div>`;   // a teammate's city: its defenders too
         if (sees) {
-          html += `<div class="sub">Buildings ${city.buildings.length + (city.building ? 1 : 0)}/${CITY_SLOTS}${!own ? ' (seen through the road link)' : ''}</div><div class="blist">${city.buildings.map((b, i) => `<span class="bld">${BUILDINGS[b].name}${own ? btn(`data-unbuild="${i}"`, '✕', my && !city.acted && p >= DESTROY_COST, `Destroy (${DESTROY_COST} gold)`) : ''}</span>`).join('') || '<span class="k">none</span>'}</div>`;
+          html += `<div class="sub">Buildings ${city.buildings.length + (city.building ? 1 : 0)}/${CITY_SLOTS}${!own && !seesArmy({ team: city.owner }, me) ? ' (seen through the road link)' : ''}</div><div class="blist">${city.buildings.map((b, i) => `<span class="bld">${BUILDINGS[b].name}${own ? btn(`data-unbuild="${i}"`, '✕', my && !city.acted && p >= DESTROY_COST, `Destroy (${DESTROY_COST} gold)`) : ''}</span>`).join('') || '<span class="k">none</span>'}</div>`;
         } else html += '<div class="k">Its buildings are unknown. Connect a road to it to see them.</div>';
         if (own) {
           html += city.acted ? '<div class="k">Already built or destroyed something here this turn.</div>' : '';
