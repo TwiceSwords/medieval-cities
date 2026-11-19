@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.85-preview</div>
+  <div class="t">Medieval Cities 3D · v3.86-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1680,7 +1680,8 @@
     const g = new Array(BCOLS * BROWS).fill(base), v = VARIETY[base] || base, R = Math.random;
     for (let i = 0; i < 9; i++) { const c = (R() * BCOLS) | 0, r = (R() * BROWS) | 0; for (let c2 = 0; c2 < BCOLS; c2++) for (let r2 = 0; r2 < BROWS; r2++) if (hexDist([c, r], [c2, r2]) <= 2 && R() < 0.7) g[r2 * BCOLS + c2] = v; }
     const free = h => !zones.some(z => hexDist(z.a, h) <= z.r + 1);
-    for (let i = 0; i < 14; i++) {                    // rock clusters: chokepoints to fight around
+    const nRock = Math.round(2 + 12 * R() ** 1.6);     // rock clusters: chokepoints to fight around · how many changes per battle, fewer most of the time (2-14, about 7 on average; was always 14)
+    for (let i = 0; i < nRock; i++) {
       let h = [(R() * BCOLS) | 0, (R() * BROWS) | 0]; const cl = [];
       for (let k = 0; k < 2 + ((R() * 4) | 0); k++) { if (free(h)) cl.push(h); const n = nbIn(h[0], h[1], BCOLS, BROWS); h = n[(R() * n.length) | 0]; }
       const back = cl.map(t => g[t[1] * BCOLS + t[0]]); cl.forEach(t => g[t[1] * BCOLS + t[0]] = 'r');
