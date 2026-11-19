@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.87-preview</div>
+  <div class="t">Medieval Cities 3D · v3.88-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1179,7 +1179,7 @@
     const staMax = s.staMax ?? typeStat(type, 'staMax'), manaMax = s.manaMax ?? typeStat(type, 'manaMax');
     return { name: T.name, maxHp: T.maxHp, move: T.move, moved: false, attacked: false, ...s, dmg: T.dmg + (s.dmgBought || 0), dmgBought: s.dmgBought || 0, type,
       staMax, manaMax, sta: s.sta ?? staMax, mana: s.mana ?? manaMax,
-      hpShown: s.hp, want: s.face, mesh: meshFor(type, s.team), phase: Math.random() * 6,
+      hpShown: s.hp, want: s.face, mesh: meshFor(type, s.team, s.spot && type === 'skeleton' ? 'spot' : ''), phase: Math.random() * 6,
       cards: s.cards || (T.hero ? emptyCards() : null), dots: s.dots || [], tauntR: s.tauntR || 0, guard: s.guard || null,
       path: null, segT: 0, atk: null, flash: 0, dying: null };
   }
@@ -1202,7 +1202,7 @@
         ...(u.cards ? { cards: u.cards } : {}), ...(u.tauntR ? { tauntR: u.tauntR } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}),
         ...(u.dots && u.dots.length ? { dots: u.dots } : {}), ...(u.skillUsed ? { skillUsed: true } : {}),
         ...(u.raining ? { raining: true } : {}), ...(u.fresh ? { fresh: true } : {}), ...(u.guard ? { guard: u.guard } : {}), ...(u.scoutRole ? { scoutRole: true } : {}), ...(u.scoutGoal ? { scoutGoal: u.scoutGoal } : {}), ...(u.mineGoal ? { mineGoal: u.mineGoal } : {}), ...(u.gamble !== undefined ? { gamble: u.gamble } : {}), ...(u.probed ? { probed: u.probed } : {}), ...(u.watch ? { watch: u.watch } : {}), ...(u.rain && u.rain.length ? { rain: u.rain } : {}),
-        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.risen ? { risen: true } : {}), ...(u.summoned ? { summoned: true } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.raidCity ? { raidCity: u.raidCity } : {}), ...(u.autoRoad ? { autoRoad: u.autoRoad } : {}), ...(u.mineHolder ? { mineHolder: true } : {}), ...(u.farMine ? { farMine: true } : {}), ...(u.refitUntil ? { refitUntil: u.refitUntil, refitMax: u.refitMax || 0 } : {}), ...(u.raidDone ? { raidDone: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.raidCity ? { raidCity: u.raidCity } : {}), ...(u.autoRoad ? { autoRoad: u.autoRoad } : {}), ...(u.mineHolder ? { mineHolder: true } : {}), ...(u.farMine ? { farMine: true } : {}), ...(u.refitUntil ? { refitUntil: u.refitUntil, refitMax: u.refitMax || 0 } : {}), ...(u.raidDone ? { raidDone: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
+        ...(u.slows && u.slows.length ? { slows: u.slows } : {}), ...(u.slowNow ? { slowNow: u.slowNow } : {}), ...(u.manaBought ? { manaBought: u.manaBought } : {}), ...(u.invis ? { invis: u.invis } : {}), ...(u.placing ? { placing: true } : {}), ...(u.spot ? { spot: true } : {}), ...(u.climb ? { climb: u.climb } : {}), ...(u.turner ? { turner: true } : {}), ...(u.risen ? { risen: true } : {}), ...(u.summoned ? { summoned: true } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.raidCity ? { raidCity: u.raidCity } : {}), ...(u.autoRoad ? { autoRoad: u.autoRoad } : {}), ...(u.mineHolder ? { mineHolder: true } : {}), ...(u.farMine ? { farMine: true } : {}), ...(u.refitUntil ? { refitUntil: u.refitUntil, refitMax: u.refitMax || 0 } : {}), ...(u.raidDone ? { raidDone: true } : {}), ...(u.replaced ? { replaced: u.replaced } : {}), ...(u.enter ? { enter: u.enter } : {}), ...(u.inBattle ? { inBattle: u.inBattle } : {}), ...(u.refuse ? { refuse: u.refuse } : {}), ...(u.released ? { released: true } : {}), ...(u.horde ? { horde: true } : {}), ...(u.raidCity ? { raidCity: u.raidCity } : {}), ...(u.autoRoad ? { autoRoad: u.autoRoad } : {}), ...(u.mineHolder ? { mineHolder: true } : {}), ...(u.farMine ? { farMine: true } : {}), ...(u.refitUntil ? { refitUntil: u.refitUntil, refitMax: u.refitMax || 0 } : {}), ...(u.raidDone ? { raidDone: true } : {}), ...(u.dmgBought ? { dmgBought: u.dmgBought } : {}), ...(u.dsMark ? { dsMark: u.dsMark } : {}), ...(u.troops ? { troops: u.troops } : {}), ...(u.ambush ? { ambush: u.ambush } : {}) })), points: game.points };
   }
   function applyState(st) {                       // snap to a shared state (keeps smooth facing/HP bars)
     CROWS = rowsOf(st); CCOLS = colsOf(st); BCOLS = (st.bt && st.bt.cols) || BASE_B; BROWS = (st.bt && st.bt.rows) || BASE_B;
@@ -1211,7 +1211,7 @@
     units = st.units.map(s => { const o = old.get(s.id);
       if (!o || o.type !== (UNIT_TYPES[s.type] ? s.type : 'swordsman') || o.team !== s.team) return runtimeUnit(s);
       if (typeof s.face === 'number') o.want = s.face;          // keep facing in sync with the shared game
-      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, climb: s.climb || 0, turner: !!s.turner, released: !!s.released, horde: !!s.horde, raidCity: s.raidCity || null, raidDone: !!s.raidDone, autoRoad: s.autoRoad || null, mineHolder: !!s.mineHolder, farMine: !!s.farMine, refitUntil: s.refitUntil || 0, refitMax: s.refitMax || 0, fresh: !!s.fresh, replaced: s.replaced || null, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
+      Object.assign(o, { col: s.col, row: s.row, hp: s.hp, maxHp: s.maxHp || o.maxHp, sta: s.sta ?? o.sta, staMax: s.staMax ?? o.staMax, mana: s.mana ?? o.mana, manaMax: s.manaMax ?? o.manaMax, moved: s.moved, attacked: s.attacked, stun: s.stun || 0, stunActive: !!s.stunActive, mark: s.mark || null, spot: !!s.spot, cards: s.cards || (T(o).hero ? emptyCards() : null), tauntR: s.tauntR || 0, guard: s.guard || null, dots: s.dots || [], skillUsed: !!s.skillUsed, raining: !!s.raining, watch: s.watch || null, rain: s.rain || null, slows: s.slows || null, slowNow: s.slowNow || null, manaBought: s.manaBought || 0, dmgBought: s.dmgBought || 0, dmg: UNIT_TYPES[o.type].dmg + (s.dmgBought || 0), dsMark: s.dsMark || null, troops: s.troops, placing: !!s.placing, climb: s.climb || 0, turner: !!s.turner, released: !!s.released, horde: !!s.horde, raidCity: s.raidCity || null, raidDone: !!s.raidDone, autoRoad: s.autoRoad || null, mineHolder: !!s.mineHolder, farMine: !!s.farMine, refitUntil: s.refitUntil || 0, refitMax: s.refitMax || 0, fresh: !!s.fresh, replaced: s.replaced || null, enter: s.enter || 0, inBattle: s.inBattle || null, refuse: s.refuse || 0, invis: s.invis || null, ambush: s.ambush || 0, wait: 0, watchHit: null, noTurn: false, path: null, atk: null, dying: null, dragPos: null, push: false, fast: false });
       return o; });
     const prevView = game.view;
     game = { seq: st.seq, by: st.by || null, turn: st.turn, round: st.round, dm: !!st.dm, battle: !!st.battle, types: (st.types && typeof st.types === 'object') ? st.types : {},
@@ -1811,7 +1811,7 @@
   function darkSpotsFor(b, sc) {                       // a fight with the undead: dark magic spots that raise a skeleton every turn
     b.spots = []; if (!(b.sides || []).includes('undead')) return;
     const beyond = !!(b.center && b.center[1] < WALL_ROW);   // beyond the Wall (Frostgate's own tile doesn't count)
-    let n = (1 + udStep()) * (beyond ? 2 : 1);
+    let n = 4 * (1 + udStep());                        // 4 spots on Easy, +4 for every harder undead step (8 / 12 / 16)
     const holy = sc && sc.wall && (sc.buildings || []).includes('holyground'), z = b.siege && b.zones[b.siege.def], inside = h => z && z.siege && projAt(h, z.siege.th) >= z.siege.W - 0.6;
     const P = (b.siege && b.siege.pieces) || {}, onPiece = h => !!P[key(...h)];   // the board's own walls / gate / stairs (wallAt() can't see them yet while the battle is being set up)
     const ok = h => !blockedTile(h) && !onPiece(h) && !wallAt(h) && !units.some(u => T(u).structure && u.col === h[0] && u.row === h[1]) && !(holy && inside(h)) && !b.spots.some(q => hexDist(q, h) < 2);
@@ -2441,8 +2441,8 @@
     return { v: mesh.v, f: mesh.f.map(f => { const c = f.col, g = (c[0] + c[1] + c[2]) / 3, skin = c === C.SKIN;
       return { ...f, col: skin ? [196, 192, 176] : [g * 0.55 + 70, g * 0.55 + 74, g * 0.55 + 82] }; }) };
   }
-  function buildSkeleton(team) {
-    const m = { v: [], f: [] }, BONE = [200, 196, 180], DB = [150, 146, 132], RAG = [70, 72, 78];
+  function buildSkeleton(team, v) {                   // v 'spot': raised by a dark magic spot · dark purple bones (they crumble once the real host is gone)
+    const dk = v === 'spot', m = { v: [], f: [] }, BONE = dk ? [118, 76, 156] : [200, 196, 180], DB = dk ? [84, 52, 114] : [150, 146, 132], RAG = dk ? [44, 28, 60] : [70, 72, 78];
     for (const sx of [-1, 1]) { part(m, boxG(0.5, 6.4, 0.5), BONE, { p: [sx * 0.8, 0, 0] }); part(m, boxG(0.9, 0.5, 1.3), DB, { p: [sx * 0.8, 0, 0.2] }); }
     part(m, boxG(2.2, 1.4, 1.4, 1.1), RAG, { p: [0, 6.2, 0] });
     for (let i = 0; i < 4; i++) part(m, boxG(2.6 - i * 0.2, 0.35, 1.5), BONE, { p: [0, 8 + i * 1.0, 0] });
@@ -2450,7 +2450,7 @@
     part(m, boxG(1.6, 1.7, 1.6), BONE, { p: [0, 12.4, 0.05] }); part(m, boxG(1.1, 0.5, 0.3), [30, 40, 60], { p: [0, 13.3, 0.82], bias: 2 });
     const rH = arm(m, [-1.6, 11.6, 0], [-0.5, 0, 0.2], [-1.2, 0, 0.2], BONE, BONE, 3, 2.6);
     arm(m, [1.6, 11.6, 0], [-0.3, 0, -0.2], [-0.6, 0, -0.3], BONE, BONE, 3, 2.6);
-    part(m, boxG(0.4, 6, 0.15, 0.3), [130, 120, 100], { o: [0, 0.4, 0], r: [0.9, 0, 0], p: rH });
+    part(m, boxG(0.4, 6, 0.15, 0.3), dk ? [96, 70, 120] : [130, 120, 100], { o: [0, 0.4, 0], r: [0.9, 0, 0], p: rH });
     return m;
   }
   function buildMammoth(team) {
@@ -4477,7 +4477,7 @@
         ctx.strokeStyle = 'rgba(255,210,58,0.95)'; ctx.lineWidth = 4; ctx.setLineDash([9, 6]); ctx.lineDashOffset = -t * 30;
         ctx.beginPath(); ctx.ellipse(bx, by, U * 0.85 * pr, U * 0.85 * SQ * pr, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
       }
-      { const tk = u.team + ':' + (TEAM[u.team] || TEAM.blue).join(); if (u.meshTeam !== tk) { u.meshTeam = tk; if (u.type === 'warrior') u.meshKey = null; else u.mesh = meshFor(u.type, u.team); } }   // a unit made before its faction colour was known (load, sync) would stay blue: rebuild it in the right colour
+      { const tk = u.team + ':' + (TEAM[u.team] || TEAM.blue).join(); if (u.meshTeam !== tk) { u.meshTeam = tk; if (u.type === 'warrior') u.meshKey = null; else u.mesh = meshFor(u.type, u.team, u.spot && u.type === 'skeleton' ? 'spot' : ''); } }   // a unit made before its faction colour was known (load, sync) would stay blue: rebuild it in the right colour
       if (u.type === 'warrior') { const w = weaponOf(u); if (u.meshKey !== w) { u.mesh = meshFor('warrior', u.team, w); u.meshKey = w; } }
       const icy = u.type === 'uking' || u.type === 'uqueen';
       if (icy && !R3.on) { const pu = 0.5 + 0.5 * Math.sin(t * 2.2 + u.col);   // 2D: the cold aura under the King / Queen
