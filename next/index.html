@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.64-preview</div>
+  <div class="t">Medieval Cities 3D · v3.65-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2858,11 +2858,9 @@
           if (best && !(best.t[0] === u.col && best.t[1] === u.row) && Math.abs(nearFoe(best.t) - ty.range) < Math.abs(nearFoe(here) - ty.range)) { aiGo({ type: 'move', id: u.id, path: pathTo(b, best.t) }); return; } }
         done(); return; }
       if (ty.ranged === 'mark') {                        // trebuchets: the mammoths first, then the King / Queen, then the thickest crowd
-        if (!u.moved && !u.attacked) { let best = null;
-          for (const o of real) { const h = [o.col, o.row], d = hexDist(here, h); if (d > ty.range || d < 2) continue;
-            const crowd = real.filter(q => hexDist([q.col, q.row], h) <= 1).length, mine2 = units.filter(q => q.team === team && q.dying === null && hexDist([q.col, q.row], h) <= 1).length;
-            const sc = (o.type === 'mammoth' ? 12 : o.type === 'uking' || o.type === 'uqueen' ? 7 : 0) + crowd - mine2 * 4; if (!best || sc > best.sc) best = { sc, h }; }
-          if (best && best.sc > 0) { aiGo({ type: 'mark', id: u.id, col: best.h[0], row: best.h[1] }); return; } }
+        if (!u.moved && !u.attacked) {   // aimed where they will be when it lands
+          const g = trebGuess(u, team, o => o.type === 'mammoth' ? 12 : o.type === 'uking' || o.type === 'uqueen' ? 7 : 1);
+          if (g) { aiGo({ type: 'mark', id: u.id, col: g[0], row: g[1] }); return; } }
         done(); return; }
       if (!ty.ranged && !ty.magic) {                     // melee: horsemen hold the broken tiles, halberds stand behind them and reach over
         const r = ty.reach || 1, inReach = real.filter(o => hexDist(here, [o.col, o.row]) <= r && meleeOk(here, o) && okAt(here, o));
@@ -2971,6 +2969,9 @@
         if (far) { const fp = farPath(u, far.t); if (fp && fp.length) { let k = Math.min(fp.length, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--; if (k > 0) { aiGo({ type: 'move', id: u.id, path: fp.slice(0, k) }); return; } } } }
       if (walkToward()) return;
     } else if (ty.ranged === 'mark') {
+      if (!easy && !u.moved && !u.attacked) {   // MEDIUM+: aim where the enemy will probably be when the boulder lands (Hard weighs the targets that matter more)
+        const g = trebGuess(u, team, o => (hard ? hardVal(o) : 1 + (T(o).hero ? 1 : 0) + (SIEGE.includes(o.type) ? 1 : 0)) + (o.hp <= (u.dmg || 20) ? 1 : 0) + (o.id === (tgt && tgt.id) ? 0.5 : 0));
+        if (g) { aiGo({ type: 'mark', id: u.id, col: g[0], row: g[1] }); return; } }
       if (!u.moved && !u.attacked && dT <= ty.range) { aiGo({ type: 'mark', id: u.id, col: tgt.col, row: tgt.row }); return; }
       if (walkToward()) return;
     } else if (!u.attacked) {                                       // melee
@@ -4251,6 +4252,35 @@
     for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r], pj = projAt(h, s2.th); if (pj < s2.W || pj >= s2.W + 1.15 || blockedTile(h)) continue;
       const p = wallAt(h), o = liveUnitAt(h); if ((!p || (p.kind === 'gate' && s2.gateOpen)) && !(o && T(o).structure)) ops.push(h); }
     return ops; }
+  // AI TREBUCHETS (Medium+): the boulder lands at the start of the trebuchet's next turn, after the enemy has moved — so aim where each enemy will
+  // probably be by then: stunned units, towers and engines stay put; shooters with something in reach and fighters already in contact mostly stay;
+  // everyone else advances toward the nearest of its foes. Each tile is scored by (chance a unit ends there) × (what hitting it is worth).
+  function trebPredict(o) {
+    const cur = [o.col, o.row], to = o => [o.col, o.row];
+    if (o.stun > 0 || o.stunActive || T(o).structure || moveOf(o) <= 0 || o.watch) return [[cur, 1]];
+    const foesOf = units.filter(q => q.dying === null && q.hp > 0 && hostile(q.team, o.team) && !q.placing && !T(q).structure);
+    if (!foesOf.length) return [[cur, 1]];
+    const nf = foesOf.slice().sort((x, y) => gapTo(cur, T(o).big, x) - gapTo(cur, T(o).big, y))[0], reachO = T(o).reach || 1;
+    const shooter = T(o).ranged || T(o).magic, inRange = shooter && foesOf.some(q => hexDist(cur, to(q)) <= (T(o).range || 1));
+    if (SIEGE.includes(o.type) || (inRange && noMoveShoot(o))) return [[cur, 0.85]];
+    if (inRange || gapTo(cur, T(o).big, nf) <= reachO || isWallTop(cur)) return [[cur, 0.75]];
+    let p = cur; for (let k = 0; k < moveOf(o); k++) {   // its likely march: step by step toward the nearest foe, stopping in reach
+      if (gapTo(p, T(o).big, nf) <= reachO) break;
+      const n = neighbors(...p).filter(h => onBoard(h) && !blockedTile(h) && !wallAt(h) && !(liveUnitAt(h) && liveUnitAt(h) !== o)).sort((x, y) => gapTo(x, T(o).big, nf) - gapTo(y, T(o).big, nf))[0];
+      if (!n || gapTo(n, T(o).big, nf) >= gapTo(p, T(o).big, nf)) break; p = n; }
+    if (p[0] === cur[0] && p[1] === cur[1]) return [[cur, 0.6]];
+    const side = neighbors(...p).filter(h => onBoard(h) && !blockedTile(h) && !wallAt(h) && !(liveUnitAt(h) && liveUnitAt(h) !== o) && !(h[0] === cur[0] && h[1] === cur[1]));
+    return [[p, 0.55], [cur, 0.15], ...side.map(h => [h, 0.3 / Math.max(1, side.length)])];
+  }
+  function trebGuess(u, team, worth) {               // the tile to mark (or null): the most expected worth in range, none of our own units standing on it
+    const here = [u.col, u.row], rng = T(u).range || 8, score = new Map();
+    for (const o of units) { if (o.dying !== null || o.hp <= 0 || !hostile(o.team, team) || o.placing || (o.enter > game.round) || o.invis || !sees(team, [o.col, o.row])) continue;
+      const w = worth(o); if (w <= 0) continue;
+      for (const [h, pr] of trebPredict(o)) for (const t of footprint(h, o)) { const k = key(...t); score.set(k, (score.get(k) || 0) + pr * w); } }
+    let best = null; for (const [k, v] of score) { const t = k.split(',').map(Number), d = hexDist(here, t); if (d > rng || d < 1) continue;
+      const own = liveUnitAt(t); const sc = v - (own && !hostile(own.team, team) ? 3 : 0);   // the boulder hits that one tile only
+      if (!best || sc > best.sc) best = { t, sc }; }
+    return best && best.sc > 0.05 ? best.t : null; }
   function trebuchetVolley(team) {
     const groups = new Map();
     for (const u of units) if (u.team === team && u.type === 'trebuchet' && u.mark && u.dying === null && u.hp > 0) {
