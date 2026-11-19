@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.84-preview</div>
+  <div class="t">Medieval Cities 3D · v3.85-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2027,13 +2027,14 @@
     const keys = Object.keys(sides); if (!keys.length) return { sides, keys, val: {}, sc };
     const val = {};
     for (const k of keys) { const mine = sides[k], foes = keys.filter(o => o !== k).flatMap(o => sides[o]);
+      const more = Math.max(0, mine.length - Math.max(0, ...keys.filter(o => o !== k).map(o => sides[o].length))), crowd = 1 + 0.1 * more;   // the bigger army: +10% for every unit it has more than the biggest enemy side
       const { bonus } = arCounters(mine, foes);
       let v = 0; mine.forEach((e, i) => { let x = arBase(e.type) * (e.t && e.t.strong ? 5 : 1) + bonus[i];
         if (e.type === 'trebuchet' && walled && !e.def) x = Math.min(500, x + 300);              // a trebuchet against walls / towers
         if (e.human) x *= 1.15;                                                                    // players' units count 15% more
         if (e.def && sc && (sc.buildings || []).includes('walls')) x *= 1.15;                      // defending behind walls
         if (!e.army && sc && sc.wall && (sc.buildings || []).includes('nightswatch') && keys.some(o => o !== k && sides[o].some(q => q.fid === 'undead'))) x *= 2;
-        e.val = x; v += x; });
+        x *= crowd; e.val = x; v += x; });
       val[k] = v * (luck ? 0.92 + Math.random() * 0.16 : 1); }                                   // a little luck, never the main thing
     return { sides, keys, val, sc };
   }
@@ -5617,7 +5618,7 @@
     modalEl.dataset.ar = b.id;
     showModal(`<div class="mbox"><div class="t">⚔ ${tr('Balance of power')}</div><div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin:6px 0 8px">${bar}</div>${lines}
       ${mate ? `<div class="k" style="margin-top:6px">🤝 ${tr('Your teammate is in this battle')}: ${[...new Set(b.joined.filter(j => sideOf(j.fid) === mySide).map(j => j.fid))].map(teamName).join(', ')}</div>
-      <div class="row"><button data-ar="ok">✔ OK</button></div></div>` : `<div class="k" style="margin-top:6px">${tr('Auto resolve settles it at once by unit values and counters, with a little luck. Your units count 15% more.')}${arHumans(b).length > 1 && mode !== 'local' ? ' ' + tr('Every player in this battle has to choose it.') : ''}</div>
+      <div class="row"><button data-ar="ok">✔ OK</button></div></div>` : `<div class="k" style="margin-top:6px">${tr('Auto resolve settles it at once by unit values and counters, with a little luck. Your units count 15% more.')} ${tr('The bigger army gets +10% for each unit it has more than the other side.')}${arHumans(b).length > 1 && mode !== 'local' ? ' ' + tr('Every player in this battle has to choose it.') : ''}</div>
       <div class="row"><button data-ar="fight">⚔ ${tr('Fight it out')}</button><button data-ar="auto">⚡ ${tr('Auto resolve')}</button></div></div>`}`);
     return true;
   }
