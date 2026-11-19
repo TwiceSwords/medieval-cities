@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.83-preview</div>
+  <div class="t">Medieval Cities 3D · v3.84-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1436,6 +1436,7 @@
     const want = camp ? 'c' + h : field ? 'b' + h : 'battle';
     if (camp) setDims(CCOLS, CROWS); else if (field) setDims(BCOLS, BROWS); else setDims(22, 22);
     if (layerKey === want) return;
+    if (field && arPending()) return;                 // the fight-or-auto-resolve choice is still open: don't build the battle board yet (phones froze here)
     if (!layerCache[want]) { if (src) { for (const k of Object.keys(layerCache)) if (k[0] === want[0]) delete layerCache[k]; buildCampaignLayers(src); } else buildLayers(); layerCache[want] = { boardCv, gridCv }; }
     ({ boardCv, gridCv } = layerCache[want]); layerKey = want;
   }
@@ -4851,6 +4852,8 @@
 
   let nightA = 0;
   function render(t) {
+    if (arPending()) return;                          // the choice is open: keep the campaign map on screen, the battle board is drawn only once you fight
+    if (localView() === 'battle' && !String(layerKey || '').startsWith('b') && game.bt && game.bt.grid) ensureLayers();   // the board put off above: build it now
     try { placeGoldHud(); } catch (e) {}
     ctx = ctxBase;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -5595,6 +5598,11 @@
   });
   // the pre-battle choice (like Total War): balance of power, then fight it out or auto resolve
   const arSeen = new Set();
+  function arPending() {                              // this player still has to pick fight / auto resolve (or OK as a teammate) for the battle that just started
+    try { const b = bt(), me = viewer(); if (!b || game.view !== 'battle' || b.phase !== 'place' || !me || undeadFight(b) || (game.opts && game.opts.god)) return false;
+      const mate = mode !== 'local' && !arHumans(b).includes(me) && faction(me) && !faction(me).ai && b.joined.some(j => sideOf(j.fid) === sideOf(me));
+      if (!arHumans(b).includes(me) && !mate) return false;
+      return !(b.arVote || {})[me] && !arSeen.has(b.id + me); } catch (e) { return false; } }
   function renderArPrompt() {
     const b = bt(), me = viewer();
     if (modalEl.dataset.ar && !(b && game.view === 'battle' && b.phase === 'place' && b.id === modalEl.dataset.ar)) { modalEl.dataset.ar = ''; hideModal(); return false; }
@@ -5614,7 +5622,7 @@
     return true;
   }
   modalEl.addEventListener('click', e => { const x = e.target.closest('button[data-ar]'); if (!x) return; const b = bt(), me = viewer(); if (!b) return;
-    arSeen.add(b.id + me); modalEl.dataset.ar = ''; hideModal(); if (x.dataset.ar === 'auto') requestOp({ op: 'autores', fid: me }); refreshUI(); });
+    arSeen.add(b.id + me); modalEl.dataset.ar = ''; hideModal(); if (x.dataset.ar === 'auto') requestOp({ op: 'autores', fid: me }); else { toast(tr('Loading the battle…')); setTimeout(() => { try { ensureLayers(); centerOnUnits(); } catch (e) {} }, 30); } refreshUI(); });
   const arReadLocal = new Set();
   function renderArReport() {
     const r = game.arReport, me = viewer();
