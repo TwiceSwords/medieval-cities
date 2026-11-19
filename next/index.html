@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.74-preview</div>
+  <div class="t">Medieval Cities 3D · v3.75-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2719,9 +2719,17 @@
     const tk = game.turn + ':' + game.round + ':' + (game.campaign ? game.campaign.att : ''); if (!aiState || aiState.kind !== 'battle' || aiState.turn !== tk) aiState = { kind: 'battle', turn: tk, skip: new Set() };
     const team = game.turn, allFoes = units.filter(o => hostile(o.team, team) && o.dying === null && o.hp > 0 && !o.invis && !o.placing && !(o.enter > game.round));
     let foes = allFoes.filter(o => sees(team, [o.col, o.row]));
-    if (!foes.length && allFoes.length) {              // nothing in sight: scout towards where the enemy lined up
+    const seenB = game.bt.aiSeen = game.bt.aiSeen || {};
+    if (foes.length) seenB[team] = { r: game.round, at: [foes[0].col, foes[0].row] };
+    if (!foes.length && allFoes.length) {              // nothing in sight: first where it last saw them, else where the enemy lined up
+      const ls = seenB[team], lost = game.round - (ls ? ls.r : 1), mine0 = units.filter(o => o.team === team && o.dying === null && !T(o).structure);
       const zs = Object.entries(game.bt.zones || {}).filter(([fid]) => fid !== team && allFoes.some(o => o.team === fid)).map(([, z]) => z.a);
-      const goal = zs[0] || BMID(); foes = [{ col: goal[0], row: goal[1], hp: 99, id: null, ghost: true }]; }
+      let goal = zs[0] || BMID(), scout = false;
+      if (ls && ls.at && lost < 4 && !mine0.some(o => hexDist([o.col, o.row], ls.at) <= 1)) goal = ls.at;
+      if (lost >= 4 && mine0.length) {                 // 4 rounds without a sight of them: the scouts report where the nearest enemy really is (no endless wandering in the fog)
+        const cx = mine0.reduce((a, o) => a + o.col, 0) / mine0.length, cy = mine0.reduce((a, o) => a + o.row, 0) / mine0.length;
+        const n = allFoes.slice().sort((x, y) => Math.hypot(x.col - cx, x.row - cy) - Math.hypot(y.col - cx, y.row - cy))[0]; goal = [n.col, n.row]; scout = true; }
+      foes = [{ col: goal[0], row: goal[1], hp: 99, id: null, ghost: true, scout }]; }
     if (!aiState.noted) { aiState.noted = true; const fa = faction(team), by = {}; for (const o of allFoes) if (sees(team, [o.col, o.row])) (by[o.team] = by[o.team] || []).push(o.type); for (const k in by) aiNote(fa, by[k]); }   // remember what the enemy fields
     const mine = units.filter(u => u.team === team && u.dying === null && u.hp > 0 && !unitDone(u) && !aiState.skip.has(u.id) && !isStunned(u));
     if (aiState.walkers && aiState.walkers.length && (!mine.length || !foes.length)) {   // the walkers that had nothing to hit move together now
@@ -2770,7 +2778,7 @@
       if (!easy || so.length < 2) return so[0];
       const d0 = hexDist(from, [so[0].col, so[0].row]), pool = so.filter(o => hexDist(from, [o.col, o.row]) <= d0 + 1); return pool[(Math.random() * pool.length) | 0]; };   // easy AI: charges at any of the nearest, no thinking
     let tgt = near(here);
-    if (tgt.ghost && (sg() || hexDist(here, [tgt.col, tgt.row]) <= 3)) {   // nobody in sight and the guess was wrong (or a siege: defenders hide on the walls): search the nearest tiles it can't see
+    if (tgt.ghost && !tgt.scout && (sg() || hexDist(here, [tgt.col, tgt.row]) <= 3)) {   // nobody in sight and the guess was wrong (or a siege: defenders hide on the walls): search the nearest tiles it can't see
       if (!aiState.unseen) { aiState.unseen = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) if (!sees(team, [c, r]) && !blockedTile([c, r])) aiState.unseen.push([c, r]); }
       const sk = h => hexDist(here, h) - (sg() && hostile(team, sg().def) && isWallTop(h) ? 8 : 0);   // a siege: hidden defenders are most likely up on the walls
       const us = aiState.unseen.filter(h => !(h[0] === u.col && h[1] === u.row)).sort((x, y) => sk(x) - sk(y))[0];
