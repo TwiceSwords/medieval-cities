@@ -118,7 +118,7 @@
 <canvas id="gl"></canvas>
 <canvas id="c2"></canvas>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.68-preview</div>
+  <div class="t">Medieval Cities 3D · v3.69-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -2124,21 +2124,28 @@
   const ladderAt = g => (sg() ? sg().ladders : []).find(l => l.g[0] === g[0] && l.g[1] === g[1]) || null;
   function projAt(h, th) { const mid = center(...BMID()), m = center(...h); return ((m.x - mid.x) * Math.cos(th) + ((m.y - mid.y) / SQ) * Math.sin(th)) / (SQ3 * S); }
   function perpAt(h, th) { const mid = center(...BMID()), m = center(...h); return (-(m.x - mid.x) * Math.sin(th) + ((m.y - mid.y) / SQ) * Math.cos(th)) / (SQ3 * S); }
+  // the wall line: since v3.69 only its outer layer is wall (where the band of the wall caught two tiles back to back, the back one is inside the city)
+  const sgBandSet = new WeakMap();
+  const inWallLine = (h, s2) => { const p = projAt(h, s2.th); if (p < s2.W || p >= s2.W + 1.15) return false; if (!s2.band) return true;
+    let st = sgBandSet.get(s2); if (!st || st.src !== s2.band) { st = { src: s2.band, set: new Set(s2.band) }; sgBandSet.set(s2, st); } return st.set.has(key(...h)); };
+  const insideW = (h, s2) => { const p = projAt(h, s2.th); return p >= s2.W + 1.15 || (!!s2.band && p >= s2.W && !inWallLine(h, s2)); };
   function buildSiege(b, fid, city) {                  // a straight wall across the board in front of the defender, a 3-tile gate in the middle
     const z = b.zones[fid], mid = center(...BMID()), za = center(...z.a), th = Math.atan2((za.y - mid.y) / SQ, za.x - mid.x), W = 4;
     const all = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) all.push([c, r]);
-    const band = all.filter(h => { const p = projAt(h, th); return p >= W && p < W + 1.15; });
+    const band0 = all.filter(h => { const p = projAt(h, th); return p >= W && p < W + 1.15; });
+    const band = band0.filter(h => nbIn(h[0], h[1], BCOLS, BROWS).some(n => projAt(n, th) < W));   // one tile thick: the outer layer alone already closes the city off
+    const bandK = new Set(band.map(h => key(...h))), insideB = h => { const p = projAt(h, th); return p >= W + 1.15 || (p >= W && !bandK.has(key(...h))); };
     const g = b.grid.split(''); for (const h of all) if (projAt(h, th) >= W - 1) g[h[1] * BCOLS + h[0]] = b.base;   // clear rocks at and behind the wall
     b.grid = g.join('');
     const pieces = {}; for (const h of band) pieces[key(...h)] = { kind: 'wall', hp: WALL_HP };
     const gate = band.slice().sort((x, y) => Math.abs(perpAt(x, th)) - Math.abs(perpAt(y, th))).slice(0, 3);
     for (const h of gate) pieces[key(...h)] = { kind: 'gate' };
-    const inner = all.filter(h => { const p = projAt(h, th); return p >= W + 1.15 && p < W + 2.2 && !pieces[key(...h)]; });
+    const inner = all.filter(h => insideB(h) && projAt(h, th) < W + 2.2 && !pieces[key(...h)] && nbIn(h[0], h[1], BCOLS, BROWS).some(n => bandK.has(key(...n))));   // stairs: right behind the wall
     const gp = gate.map(h => perpAt(h, th)), gmin = Math.min(...gp), gmax = Math.max(...gp), byPerp = inner.slice().sort((x, y) => perpAt(x, th) - perpAt(y, th));
     const stairs = [byPerp[0], byPerp[byPerp.length - 1], byPerp.filter(h => perpAt(h, th) > gmax + 0.4)[0], byPerp.filter(h => perpAt(h, th) < gmin - 0.4).slice(-1)[0]].filter(Boolean);
     for (const h of stairs) pieces[key(...h)] = { kind: 'stair' };
     b.heights = b.heights && b.heights.split('').map((v, i) => projAt([i % BCOLS, (i / BCOLS) | 0], th) >= W - 1 ? '1' : v).join('');   // the city stands on level ground
-    b.siege = { th, W, pieces, gateOpen: false, gateHp: GATE_HP, gateChanged: '', ladders: [], city: city.id };
+    b.siege = { th, W, band: [...bandK], pieces, gateOpen: false, gateHp: GATE_HP, gateChanged: '', ladders: [], city: city.id };
     b.zones[fid] = { a: z.a, r: 99, siege: { th, W } };
   }
   // AI city defence on the siege board (Medium+): shooters up on the walls by the gate; a ballista a little back aimed through one gate tile kept empty,
@@ -2157,7 +2164,7 @@
     const balls = mine.filter(u => u.type === 'ballista'), tanks = mine.filter(u => TANK.includes(u.type)).sort((x, y) => (vsDead ? (y.type === 'horseman') - (x.type === 'horseman') : 0) || y.maxHp - x.maxHp);
     const keepEmpty = new Set(), used = new Set();
     // the gate's mouth: inside tiles next to the gate, which every attacker must step on to get in
-    const mouth = []; for (const g of gate) for (const h of nbIn(g[0], g[1], BCOLS, BROWS)) if (okTile(h) && !isPiece(h) && projAt(h, th) >= W + 1.15 && !mouth.some(m => m[0] === h[0] && m[1] === h[1])) mouth.push(h);
+    const mouth = []; for (const g of gate) for (const h of nbIn(g[0], g[1], BCOLS, BROWS)) if (okTile(h) && !isPiece(h) && insideW(h, s2) && !mouth.some(m => m[0] === h[0] && m[1] === h[1])) mouth.push(h);
     mouth.sort((x, y) => Math.abs(perpAt(x, th)) - Math.abs(perpAt(y, th)));
     const laneFor = m => { let best = null; for (const k of [2, 3, 4]) for (let d = 0; d < 6; d++) { const t = step(m, d, k); if (!okTile(t) || isPiece(t) || taken.has(key(...t)) || keepEmpty.has(key(...t)) || projAt(t, th) <= projAt(m, th) + 0.5) continue;
         const between = lineTiles(t, (d + 3) % 6, k - 1); if (between.some(h => isPiece(h) || !okTile(h) || taken.has(key(...h)) || mouth.some(q => q[0] === h[0] && q[1] === h[1] && !(h[0] === m[0] && h[1] === m[1])))) continue;
@@ -2171,14 +2178,14 @@
     const walls = Object.entries(P).filter(([, p]) => p.kind === 'wall').map(([k]) => k.split(',').map(Number)).sort((x, y) => Math.abs(perpAt(x, th)) - Math.abs(perpAt(y, th)));
     for (const u of mine.filter(u => SHOOT.includes(u.type) && !used.has(u))) { const h = walls.find(w => !taken.has(key(...w))); if (h) { put(u, h); used.add(u); } }
     if (vsDead) {                                       // archers right behind the walls (they shoot over them), then any crossbow that found no wall top; the trebuchets far back
-      const behind = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r], pj = projAt(h, th); if (okTile(h) && !isPiece(h) && pj >= W + 1.15 && pj < W + 2.6) behind.push(h); }
+      const behind = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r], pj = projAt(h, th); if (okTile(h) && !isPiece(h) && insideW(h, s2) && pj < W + 2.6) behind.push(h); }
       behind.sort((x, y) => Math.abs(perpAt(x, th)) - Math.abs(perpAt(y, th)));
       for (const u of mine.filter(u => (u.type === 'archer' || u.type === 'crossbow') && !used.has(u))) { const h = behind.find(q => !taken.has(key(...q)) && !keepEmpty.has(key(...q))) || walls.find(w => !taken.has(key(...w))); if (h) { put(u, h); used.add(u); } }
       const back = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r]; if (okTile(h) && !isPiece(h) && projAt(h, th) >= W + 3) back.push(h); }
       back.sort((x, y) => (projAt(x, th) - Math.abs(perpAt(x, th)) * 0.2) - (projAt(y, th) - Math.abs(perpAt(y, th)) * 0.2));
       for (const u of mine.filter(u => u.type === 'trebuchet' && !used.has(u))) { const h = back.find(q => !taken.has(key(...q)) && !keepEmpty.has(key(...q)) && projAt(q, th) >= W + 4); if (h) { put(u, h); used.add(u); } } }
     // everyone else inside, behind the gate area, off the ballista lanes
-    const inside = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r]; if (okTile(h) && !isPiece(h) && projAt(h, th) >= W + 1.15) inside.push(h); }
+    const inside = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r]; if (okTile(h) && !isPiece(h) && insideW(h, s2)) inside.push(h); }
     inside.sort((x, y) => (projAt(x, th) + Math.abs(perpAt(x, th)) * 0.6) - (projAt(y, th) + Math.abs(perpAt(y, th)) * 0.6));
     for (const u of mine.filter(u => !used.has(u))) { const h = inside.find(q => !taken.has(key(...q)) && !keepEmpty.has(key(...q)) && !(T(u).big && !nbIn(q[0], q[1], BCOLS, BROWS).every(n => !taken.has(key(...n))))); if (h) put(u, h); }
     for (const u of mine) if (u.col < 0) { const h = inside.find(q => !taken.has(key(...q))); if (h) put(u, h); else { u.col = 0; u.row = 0; } }
@@ -2712,7 +2719,19 @@
       const ws = aiState.walkers.map(w => units.find(x => x.id === w.id)).filter(x => x && x.dying === null && !x.moved), g = new Map(aiState.walkers.map(w => [w.id, w.goal])); aiState.walkers = null;
       const plan = planMarch(ws, x => g.get(x.id), false), moves = []; for (const x of ws) { const p = plan.get(x.id); if (p && p.length) moves.push({ id: x.id, path: p }); }
       if (moves.length) { aiGo({ type: 'gmove', moves }); return; } }
-    if (!mine.length || !foes.length) { aiBusyUntil = Date.now() + (400) / aiPace(); commit({ type: 'end' }); return; }
+    if (!mine.length || !foes.length) {                // SAFETY NET before the turn ends: a melee unit that moved and still has its attack hits whatever is in its reach
+      aiState.safe = aiState.safe || new Set(); const s2 = sg();
+      for (const x of units) { if (x.team !== team || x.dying !== null || x.hp <= 0 || !x.moved || x.attacked || isStunned(x) || x.climb || x.placing || aiState.safe.has(x.id)) continue;
+        const tx = T(x); if (tx.ranged || tx.magic || tx.structure || moveOf(x) === undefined) continue; aiState.safe.add(x.id);
+        const at = [x.col, x.row], r = x.type === 'warrior' ? (hasPassive(x, 'halberd') ? 2 : 1) : (tx.reach || 1);
+        const o = allFoes.filter(q => !q.ghost && q.dying === null && q.hp > 0 && gapTo(at, tx.big, q) <= r && meleeOk(at, q) && tauntOk(x, at, q)).sort((p, q) => gapTo(at, tx.big, p) - gapTo(at, tx.big, q) || p.hp - q.hp)[0];
+        if (o) { const aim = footprint([o.col, o.row], o).sort((p, q) => hexDist(at, p) - hexDist(at, q))[0], d = x.type === 'warrior' ? warriorAim(x, at, aim) : undefined;
+          if (x.type !== 'warrior' || d !== null) { aiGo({ type: 'attack', id: x.id, path: [], target: o.id, targets: [o.id], dir: d }); return; } }
+        if (s2 && hostile(team, s2.def) && !isWallTop(at) && projAt(at, s2.th) < s2.W) {   // an attacker standing at the walls: hit the wall or the gate next to it
+          const ring = tx.big ? [...new Set([at, ...neighbors(...at)].flatMap(h => neighbors(...h)).map(h => key(...h)))].map(k => k.split(',').map(Number)).filter(h => onBoard(h) && hexDist(h, at) >= 1) : neighbors(...at);
+          const w = ring.filter(n => { const p = wallAt(n), on = liveUnitAt(n); return p && p.kind !== 'stair' && !(p.kind === 'gate' && s2.gateOpen) && !(on && !hostile(on.team, team)); }).sort((p, q) => (wallAt(q).kind === 'gate') - (wallAt(p).kind === 'gate'))[0];
+          if (w) { aiGo({ type: 'hitwall', id: x.id, col: w[0], row: w[1] }); return; } } }
+      aiBusyUntil = Date.now() + (400) / aiPace(); commit({ type: 'end' }); return; }
     const trebHold = (() => { const s2 = sg(), fa = faction(team) || {}; if (!s2 || !hostile(team, s2.def) || fa.diff === 'easy' || isUndeadFid(team)) return false;   // guarding its trebuchets: no marching off as a horde
       return units.some(x => x.team === team && x.type === 'trebuchet' && x.dying === null && x.hp > 0 && (x.trebIdle || 0) < 3) && !sgOpenings(s2).length; })();
     if (trebHold) { aiState.horde = true; aiState.horde2 = true; }
@@ -2754,15 +2773,15 @@
       const b0 = reach(u), safe = [...b0.dist.keys()].map(k => k.split(',').map(Number)).filter(t => !unitAt(t) && !darkDmg(t)).sort((x, y) => b0.dist.get(key(...x)) - b0.dist.get(key(...y)) || ringOf(y) - ringOf(x))[0];
       if (safe) { relook(); aiGo({ type: 'move', id: u.id, path: pathTo(b0, safe) }); return; } }
     const breachStep = () => {                                  // attackers: a broken wall piece / broken or open gate is a way in; up to 3 a turn head for each one
-      const s2 = sg(); if (!s2 || !hostile(team, s2.def) || u.moved || u.climb || projAt(here, s2.th) >= s2.W + 1.15 || isWallTop(here)) return false;   // (a unit standing in the gap keeps going in)
-      const ops = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r], pj = projAt(h, s2.th); if (pj < s2.W || pj >= s2.W + 1.15 || blockedTile(h)) continue;
+      const s2 = sg(); if (!s2 || !hostile(team, s2.def) || u.moved || u.climb || insideW(here, s2) || isWallTop(here)) return false;   // (a unit standing in the gap keeps going in)
+      const ops = []; for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r]; if (!inWallLine(h, s2) || blockedTile(h)) continue;
         const p = wallAt(h), o = liveUnitAt(h); if ((!p || (p.kind === 'gate' && s2.gateOpen)) && !(o && T(o).structure)) ops.push(h); }
       if (!ops.length) return false;
       const used = aiState.breachN = aiState.breachN || {};
       for (const op of ops.filter(o => (used[key(...o)] || 0) < 3).sort((a, b) => hexDist(here, a) - hexDist(here, b)).slice(0, 3)) {
         if (hexDist(here, op) > moveOf(u) * 4 + 2) continue;          // too far away: help break the wall nearby instead
         if (liveUnitAt(op) && liveUnitAt(op) !== u) continue;          // the gap is taken (an enemy holding it, or a friend already in it): break the wall instead of milling around it
-        const inner = neighbors(...op).filter(n => onBoard(n) && !blockedTile(n) && projAt(n, s2.th) >= s2.W + 1.15 && !wallAt(n)).sort((a, b) => hexDist(here, a) - hexDist(here, b))[0] || op;
+        const inner = neighbors(...op).filter(n => onBoard(n) && !blockedTile(n) && insideW(n, s2) && !wallAt(n)).sort((a, b) => hexDist(here, a) - hexDist(here, b))[0] || op;
         const fp = farPath(u, inner); if (!fp || !fp.length) continue;
         let k = Math.min(fp.length, moveOf(u)); while (k > 0 && unitAt(fp[k - 1])) k--; if (k <= 0) continue;
         if (hexDist(fp[k - 1], inner) >= hexDist(here, inner)) continue;   // that move would not get it any closer: no circling around the gap
@@ -2852,7 +2871,7 @@
           if (!u.moved && b.dist.has(key(...op))) { relook(); aiGo({ type: 'move', id: u.id, path: pathTo(b, op) }); return; } } }
     }
     if (udDef) {                                        // HOLDING A CITY AGAINST THE DEAD: nobody goes out to meet the horde; walls and gaps are held and everything shoots
-      const s2 = sg(), real = foes.filter(o => !o.ghost && o.dying === null), pj = h => projAt(h, s2.th), inside = h => pj(h) >= s2.W + 1.15, done = () => { aiBusyUntil = Date.now() + (40) / aiPace(); };
+      const s2 = sg(), real = foes.filter(o => !o.ghost && o.dying === null), pj = h => projAt(h, s2.th), inside = h => insideW(h, s2), done = () => { aiBusyUntil = Date.now() + (40) / aiPace(); };
       const worth = o => (o.type === 'mammoth' ? 3 : o.type === 'uking' || o.type === 'uqueen' ? 2.5 : 1) + (o.hp <= baseDmg(u) ? 2 : 0) - hexDist(here, [o.col, o.row]) * 0.05;
       const mams = real.filter(o => o.type === 'mammoth'), mamD = t => Math.min(99, ...mams.map(o => hexDist(t, [o.col, o.row])));
       if (isWallTop(here) && !u.moved && mams.length && mamD(here) <= 3) {   // a mammoth is coming: it brings the wall down with whoever stands on it — step down first
@@ -2886,7 +2905,7 @@
           for (const t of tiles) { if (!inside(t)) continue; const o = intruders.find(q => hexDist(t, [q.col, q.row]) <= r && meleeOk(t, q) && okAt(t, q)); if (!o) continue; const d = b.dist.get(key(...t)); if (!best || d < best.d) best = { t, d, o }; }
           if (best) { aiGo({ type: 'attack', id: u.id, path: pathTo(b, best.t), target: best.o.id, targets: [best.o.id] }); return; } }
         if (!u.moved) {
-          const gaps = []; for (let c = 0; c < BCOLS; c++) for (let rr = 0; rr < BROWS; rr++) { const h = [c, rr], p0 = pj(h); if (p0 < s2.W || p0 >= s2.W + 1.15 || blockedTile(h)) continue; const p = wallAt(h); if (!p || (p.kind === 'gate' && s2.gateOpen)) gaps.push(h); }
+          const gaps = []; for (let c = 0; c < BCOLS; c++) for (let rr = 0; rr < BROWS; rr++) { const h = [c, rr]; if (!inWallLine(h, s2) || blockedTile(h)) continue; const p = wallAt(h); if (!p || (p.kind === 'gate' && s2.gateOpen)) gaps.push(h); }
           const reachable = h => tiles.some(t => t[0] === h[0] && t[1] === h[1]), near1 = h => hexDist(here, h);
           if (u.type !== 'halberdier' && u.type !== 'spearman') {   // a holder: into the nearest open gap
             const g = gaps.filter(h => !liveUnitAt(h) && reachable(h)).sort((x, y) => near1(x) - near1(y))[0];
@@ -4264,7 +4283,7 @@
   // trebuchet boulders for the side whose turn is starting
   function sgOpenings(s2 = sg()) {                     // the ways in: broken wall pieces and a broken / open gate
     if (!s2) return []; const ops = [];
-    for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r], pj = projAt(h, s2.th); if (pj < s2.W || pj >= s2.W + 1.15 || blockedTile(h)) continue;
+    for (let c = 0; c < BCOLS; c++) for (let r = 0; r < BROWS; r++) { const h = [c, r]; if (!inWallLine(h, s2) || blockedTile(h)) continue;
       const p = wallAt(h), o = liveUnitAt(h); if ((!p || (p.kind === 'gate' && s2.gateOpen)) && !(o && T(o).structure)) ops.push(h); }
     return ops; }
   // AI TREBUCHETS (Medium+): the boulder lands at the start of the trebuchet's next turn, after the enemy has moved — so aim where each enemy will
