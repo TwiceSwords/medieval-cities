@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v3.92-preview</div>
+  <div class="t">Medieval Cities 3D · v3.93-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -4675,6 +4675,24 @@
     ctx.strokeStyle = stroke; ctx.lineWidth = 2.5 / Math.max(z, 0.5); ctx.setLineDash([8, 6]); ctx.stroke(); ctx.setLineDash([]);
     if (dots) { ctx.fillStyle = stroke; for (const k of set) { const [c, r] = k.split(',').map(Number), m = center(c, r); ctx.beginPath(); ctx.arc(m.x + OX, m.y + OY, 2.6, 0, 7); ctx.fill(); } }
   }
+  function drawMoveZone(set) {
+    if (!set.size) return;
+    ctx.beginPath(); for (const k of set) { const [c, r] = k.split(',').map(Number); hexPath(c, r, ctx); }
+    ctx.fillStyle = 'rgba(40,140,255,0.30)'; ctx.fill();
+    ctx.lineWidth = 1 / Math.max(z, 0.5); ctx.strokeStyle = 'rgba(150,210,255,0.45)'; ctx.stroke();   // faint lines between its tiles
+    ctx.beginPath();
+    for (const k of set) {                         // the outer edge of the area
+      const [c, r] = k.split(',').map(Number), m = center(c, r), p = corners(m.x, m.y);
+      for (let i = 0; i < 6; i++) {
+        const a = p[i], b = p[(i + 1) % 6], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, nb = worldHex(2 * mx - m.x, 2 * my - m.y);
+        if (!set.has(key(...nb))) { ctx.moveTo(a[0] + OX, a[1] + OY); ctx.lineTo(b[0] + OX, b[1] + OY); }
+      }
+    }
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(5,20,60,0.85)'; ctx.lineWidth = 6 / Math.max(z, 0.5); ctx.stroke();
+    ctx.strokeStyle = 'rgba(110,200,255,1)'; ctx.lineWidth = 2.6 / Math.max(z, 0.5); ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
   const outlineHex = (h, col, w = 3) => { ctx.beginPath(); hexPath(h[0], h[1], ctx); ctx.strokeStyle = col; ctx.lineWidth = w / Math.max(z, 0.5); ctx.stroke(); };
   const tintHex = (h, col) => { ctx.beginPath(); hexPath(h[0], h[1], ctx); ctx.fillStyle = col; ctx.fill(); };
   let previewLabels = [];
@@ -4887,9 +4905,7 @@
     if (localView() === 'campaign') { drawWater(t); drawCampaignGround(t); drawFog(t); } else if (game.bt) { drawBattleZones(t); drawLadders(); if (game.bt.phase === 'fight') drawFog(t); }
 
     if (sel) {
-      ctx.beginPath();
-      if (selUnit && !busy() && canCommand(selUnit) && !selUnit.moved) for (const [k, d] of reach(selUnit).dist) if (d > 0) { const [c, r] = k.split(',').map(Number); hexPath(c, r, ctx); }
-      ctx.fillStyle = 'rgba(214,196,120,0.13)'; ctx.fill();
+      if (selUnit && !busy() && canCommand(selUnit) && !selUnit.moved) { const mv = new Set(); for (const [k, d] of reach(selUnit).dist) if (d > 0) mv.add(k); drawMoveZone(mv); }   // where it can walk: a clear blue area with a dark + bright edge (readable on sand and snow too)
       ctx.beginPath(); hexPath(sel[0], sel[1], ctx);
       ctx.fillStyle = 'rgba(226,206,130,0.18)'; ctx.fill();
       ctx.strokeStyle = 'rgba(232,212,140,0.85)'; ctx.lineWidth = 2 / Math.max(z, 0.6); ctx.stroke();
