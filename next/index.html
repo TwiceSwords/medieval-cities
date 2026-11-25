@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v4.02-preview</div>
+  <div class="t">Medieval Cities 3D · v4.03-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · Shift+click: also every unit between the selected one and this one · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -1150,7 +1150,7 @@
     uqueen:      { name: 'Undead Queen', maxHp: 20, dmg: 0, move: 2, h: 18, ranged: 'arc', range: 5, noMoveShoot: true, turner: true, build: buildUndeadQueen },
     tower:       { name: 'Tower', maxHp: 24, dmg: 3, move: 0, h: 24, ranged: 'arc', range: 5, noMoveShoot: true, structure: true, build: buildTower },
     army:        { name: 'Army', army: true, maxHp: 1, staMax: 0, manaMax: 0, dmg: 0, move: 3, build: buildFlag },
-    ballista:    { name: 'Ballista',     maxHp: 4,  dmg: 12, move: 1, h: 9, ranged: 'pierce', range: 7, noMoveShoot: true, build: buildBallista },
+    ballista:    { name: 'Ballista',     maxHp: 6,  dmg: 12, move: 1, h: 9, ranged: 'pierce', range: 6, noMoveShoot: true, build: buildBallista },
   };
   const WALL_RANGE = {};
   const T = u => { const t = UNIT_TYPES[u.type] || UNIT_TYPES.swordsman;      // standing on a wall: +1 range
