@@ -120,7 +120,7 @@
 <canvas id="c2"></canvas>
 <div id="vertag"></div>
 <div id="hud">
-  <div class="t">Medieval Cities 3D · v4.00-preview</div>
+  <div class="t">Medieval Cities 3D · v4.01-preview</div>
   <div>Hex: <span id="hov">–</span> &nbsp; Selected: <span id="sel">–</span></div>
   <div id="info" style="color:#e2d6a6"></div>
   <div class="k">WASD / arrow keys / hold the mouse's front side button or the wheel (or left-drag on the campaign map): move camera · Wheel: zoom · Left-click: select · Left-drag in battle: box-select · Ctrl+click: add/drop a unit · a group right-clicking an enemy attacks it all at once · Esc: deselect</div>
@@ -4752,8 +4752,8 @@
   function drawMoveZone(set) {
     if (!set.size) return;
     ctx.beginPath(); for (const k of set) { const [c, r] = k.split(',').map(Number); hexPath(c, r, ctx); }
-    ctx.fillStyle = 'rgba(40,140,255,0.30)'; ctx.fill();
-    ctx.lineWidth = 1 / Math.max(z, 0.5); ctx.strokeStyle = 'rgba(150,210,255,0.45)'; ctx.stroke();   // faint lines between its tiles
+    ctx.fillStyle = 'rgba(40,140,255,0.15)'; ctx.fill();   // (half as strong since v4.01)
+    ctx.lineWidth = 1 / Math.max(z, 0.5); ctx.strokeStyle = 'rgba(150,210,255,0.22)'; ctx.stroke();   // faint lines between its tiles
     ctx.beginPath();
     for (const k of set) {                         // the outer edge of the area
       const [c, r] = k.split(',').map(Number), m = center(c, r), p = corners(m.x, m.y);
@@ -4763,8 +4763,8 @@
       }
     }
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(5,20,60,0.85)'; ctx.lineWidth = 6 / Math.max(z, 0.5); ctx.stroke();
-    ctx.strokeStyle = 'rgba(110,200,255,1)'; ctx.lineWidth = 2.6 / Math.max(z, 0.5); ctx.stroke();
+    ctx.strokeStyle = 'rgba(5,20,60,0.42)'; ctx.lineWidth = 6 / Math.max(z, 0.5); ctx.stroke();
+    ctx.strokeStyle = 'rgba(110,200,255,0.5)'; ctx.lineWidth = 2.6 / Math.max(z, 0.5); ctx.stroke();
     ctx.lineCap = 'butt';
   }
   const outlineHex = (h, col, w = 3) => { ctx.beginPath(); hexPath(h[0], h[1], ctx); ctx.strokeStyle = col; ctx.lineWidth = w / Math.max(z, 0.5); ctx.stroke(); };
